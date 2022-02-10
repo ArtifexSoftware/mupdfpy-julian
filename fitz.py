@@ -9,12 +9,25 @@ import inspect
 import math
 import sys
 import textwrap
+import traceback
 import typing
 import warnings
 import weakref
 
 import mupdf
-import jlib
+
+try:
+    import jlib # This is .../mupdf/scripts/jlib.py
+except ImportError:
+    # Provide basic implementations of the jlib functions that we use.
+    class jlib:
+        @staticmethod
+        def log( text):
+            print( text, file=sys.stderr)
+        @staticmethod
+        def exception_info():
+            return traceback.format_exc()
+    jlib.log( 'Failed to import jlib; using basic logging etc.')
 
 
 # Names required by class method typing annotations.
@@ -17095,7 +17108,7 @@ class TOOLS:
 # We cannot import utils earlier because it imports this fitz.py file itself
 # and uses some fitz.* types in function typing.
 #
-import utils
+import fitz_utils as utils
 
 mupdf.set_warning_callback(JM_mupdf_warning)
 mupdf.set_error_callback(JM_mupdf_error)
