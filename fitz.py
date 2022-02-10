@@ -13,10 +13,9 @@ import typing
 import warnings
 import weakref
 
-sys.path.append('scripts')
+import mupdf
 import jlib
 
-import mupdf
 
 # Names required by class method typing annotations.
 OptBytes = typing.Optional[typing.ByteString]
