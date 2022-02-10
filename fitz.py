@@ -1,5 +1,10 @@
-# PyMuPDF implemented on top of auto-generated MuPDF python bindings
-#
+'''
+PyMuPDF implemented on top of auto-generated MuPDF python bindings.]
+
+License:
+
+    SPDX-License-Identifier: GPL-3.0-only
+'''
 
 import base64
 import binascii
@@ -17479,80 +17484,3 @@ def restore_aliases():
     _alias( utils.Shape, 'insert_textbox')
 
 restore_aliases()
-
-if 0:
-    # Aliases
-    #
-    #Annot.getText        = Annot.get_text
-    Annot.getTextbox    = Annot.get_textbox
-
-    Document.getCharWidths = Document.get_char_widths
-    Document.getPagePixmap = Document.get_page_pixmap
-    Document.getPageText = Document.get_page_text
-    Document.getSigFlags = Document.get_sigflags
-    Document.getToC = Document.get_toc
-    Document.insertPage = Document.insert_page
-    Document.needsPass = Document.needs_pass
-    Document.newPage = Document.new_page
-    Document.searchPageFor = Document.search_page_for
-    Document.setMetadata = Document.set_metadata
-    Document.setToC = Document.set_toc
-
-    IRect.getArea           = IRect.get_area
-    IRect.getRectArea       = IRect.get_area
-
-    Page.deleteWidget = Page.delete_widget
-    Page.drawBezier = Page.draw_bezier
-    Page.drawCircle = Page.draw_circle
-    Page.drawCurve = Page.draw_curve
-    Page.drawLine = Page.draw_line
-    Page.drawOval = Page.draw_oval
-    Page.drawPolyline = Page.draw_polyline
-    Page.drawQuad = Page.draw_quad
-    Page.drawRect = Page.draw_rect
-    Page.drawSector = Page.draw_sector
-    Page.drawSquiggle = Page.draw_squiggle
-    Page.drawZigzag = Page.draw_zigzag
-    Page.getImageBbox = Page.get_image_bbox
-    Page.getLinks = Page.get_links
-    Page.getPixmap = Page.get_pixmap
-    Page.getSVGimage = Page.get_svg_image
-    Page.getText = Page.get_text
-    Page.getTextBlocks = utils.get_text_blocks
-    Page.getTextPage = Page.get_textpage
-    Page.getTextWords = Page.get_text_words
-    Page.getTextbox = utils.get_textbox
-    Page.insertImage = Page.insert_image
-    Page.insertLink = Page.insert_link
-    Page.insertText = Page.insert_text
-    Page.insertTextbox = Page.insert_textbox
-    Page.loadLinks = Page.load_links
-    Page.newShape = Page.new_shape
-    Page.searchFor = Page.search_for
-    Page.setCropBox = Page.set_cropbox
-    Page.setMediaBox = Page.set_mediabox
-    Page.setRotation = Page.set_rotation
-    Page.showPDFpage = Page.show_pdf_page
-    Page.updateLink = Page.update_link
-    Page.writeText = Page.write_text
-
-
-    Pixmap.clearWith = Pixmap.clear_with
-    Pixmap.gammaWith = Pixmap.gamma_with
-    Pixmap.getImageData = Pixmap.tobytes
-    Pixmap.getPNGData = Pixmap.tobytes
-    Pixmap.getPNGdata = Pixmap.tobytes
-    Pixmap.invertIRect = Pixmap.invert_irect
-    Pixmap.tintWith = Pixmap.tint_with
-
-    Quad.isConvex = Quad.is_convex
-    Quad.isEmpty = Quad.is_empty
-    Quad.isRectangular = Quad.is_rectangular
-
-    Rect.getArea = Rect.get_area
-    Rect.getRectArea = utils.get_area
-    Rect.includeRect = Rect.include_rect
-    Rect.isEmpty = Rect.is_empty
-
-    TextWriter.fillTextbox = TextWriter.fill_textbox
-    TextWriter.writeText = TextWriter.write_text
