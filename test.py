@@ -4,10 +4,10 @@
 Test script for mupdfpy.
 
 Usage:
-    --d-mupdf <dir>
+    --mupdf <dir>
         Specify location of MuPDF library and Python files, for example:
             ../mupdf/build/shared-debug
-    --d-pymupdf <dir>
+    --pymupdf <dir>
         Specify location of PyMuPDF directory, for example:
             ../PyMuPDF
     --tests
@@ -38,7 +38,7 @@ def run_pymupdf_tests( state):
     '''
     Run all tests in PyMuPDF/tests, using mupdfpy.
     '''
-    command = f'cd {state.dir_pymupdf}/tests && {state.env_vars()} py.test -s'
+    command = f'cd {state.pymupdf}/tests && {state.env_vars()} py.test -s'
     print( f'Running: {command}', file=sys.stderr)
     subprocess.run( command, check=True, shell=1)
 
@@ -54,9 +54,9 @@ def main():
             break
         if arg in ( '-h', '--help'):
             print( __doc__)
-        elif arg == '--d-mupdf':
+        elif arg == '--mupdf':
             state.mupdf = next( args)
-        elif arg == '--d-pymupdf':
+        elif arg == '--pymupdf':
             state.pymupdf = next( args)
         elif arg == '--tests':
             run_pymupdf_tests( state)
