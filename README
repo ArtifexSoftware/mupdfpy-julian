@@ -1,0 +1,4 @@
+Overview
+
+    This is a pure-python implementation of PyMuPDF, using MuPDF's native
+    Python bindings.
