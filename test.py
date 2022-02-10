@@ -1,23 +1,67 @@
 #! /usr/bin/env python3
 
+'''
+Test script for mupdfpy.
+
+Usage:
+    --d-mupdf <dir>
+        Specify location of MuPDF library and Python files, for example:
+            ../mupdf/build/shared-debug
+    --d-pymupdf <dir>
+        Specify location of PyMuPDF directory, for example:
+            ../PyMuPDF
+    --tests
+        Run PyMuPDF's tests.
+'''
+
 import os
 import subprocess
 import sys
 
-dir_self        = os.path.abspath( f'{__file__}/..')
-dir_pymupdf     = os.path.abspath( f'{dir_self}/../PyMuPDF')
-dir_mupdf       = os.path.abspath( f'{dir_self}/../mupdf')
-dir_mupdf_build = os.path.abspath( f'{dir_mupdf}/build/shared-debug')
 
-env_vars = f'PYTHONPATH={dir_mupdf_build}:{dir_self}:{dir_mupdf}/scripts LD_LIBRARY_PATH={dir_mupdf_build}'
+class State:
+    def __init__( self):
+        self.mupdfpy    = f'{__file__}/..'
+        self.mupdf      = f'{self.mupdfpy}/../mupdf/build/shared-debug'
+        self.pymupdf    = f'{self.mupdfpy}/../PyMuPDF'
+    def env_vars( self):
+        
+        return (''
+                + f' PYTHONPATH='
+                    + f'{os.path.abspath(self.mupdfpy)}'
+                    + f':{os.path.abspath(self.mupdf)}'
+                + f' LD_LIBRARY_PATH={os.path.abspath(self.mupdf)}'
+                )
 
-def run_pymupdf_tests():
-    command = f'cd {dir_pymupdf}/tests && {env_vars} py.test -s'
+
+def run_pymupdf_tests( state):
+    '''
+    Run all tests in PyMuPDF/tests, using mupdfpy.
+    '''
+    command = f'cd {state.dir_pymupdf}/tests && {state.env_vars()} py.test -s'
     print( f'Running: {command}', file=sys.stderr)
     subprocess.run( command, check=True, shell=1)
-    
+
+
+
 def main():
-    run_pymupdf_tests()
+    state = State()
+    args = iter( sys.argv[1:])
+    while 1:
+        try:
+            arg = next( args)
+        except StopIteration:
+            break
+        if arg in ( '-h', '--help'):
+            print( __doc__)
+        elif arg == '--d-mupdf':
+            state.mupdf = next( args)
+        elif arg == '--d-pymupdf':
+            state.pymupdf = next( args)
+        elif arg == '--tests':
+            run_pymupdf_tests( state)
+        else:
+            raise Exception( f'Unrecognised arg: {arg!r}')
 
 if __name__ == '__main__':
     main()
