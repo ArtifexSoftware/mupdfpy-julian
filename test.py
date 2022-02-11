@@ -42,8 +42,8 @@ class State:
         return (''
                 + f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath(self.mupdf)}'
                 + f' PYTHONPATH=$PYTHONPATH'
-                    + f':{os.path.relpath(self.mupdfpy)}'
-                    + f':{os.path.relpath(self.mupdf)}'
+                    + f':{os.path.abspath(self.mupdfpy)}'
+                    + f':{os.path.abspath(self.mupdf)}'
                 + f' '
                 )
 
