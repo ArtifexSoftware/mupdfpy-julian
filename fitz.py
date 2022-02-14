@@ -6487,7 +6487,7 @@ class Page:
         return val
 
     def _other_box(self, boxtype):
-        fz_rect rect = muodf.Rect( mupdf.Rect.Fixed_INFINITE)
+        rect = muodf.Rect( mupdf.Rect.Fixed_INFINITE)
         page = self._pdf_page()
         if page.m_internal:
             obj = muodf.mpdf_dict_gets( page.obj(), boxtype)
@@ -6720,7 +6720,7 @@ class Page:
             page = mupdf.Page(page)
         assert isinstance(page, mupdf.Page), f'self.this={self.this}'
         rc = []
-        trace_device.linewidth = 0
+        trace_device.dev_linewidth = 0
         prect = mupdf.mfz_bound_page(page)
         trace_device.ptm = mupdf.mfz_make_matrix(1, 0, 0, -1, 0, prect.y1)
         dev = JM_new_tracedraw_device(rc)
@@ -6796,14 +6796,14 @@ class Page:
             for item in items:
                 cmd = item[0]
                 rest = item[1:]
-                if  cmd == "re":
-                    item = ("re", Rect(rest[0]), rest[1])
-                elif cmd == "qu":
-                    item = ("qu", Quad(rest[0]))
+                if  cmd == 're':
+                    item = ('re', Rect(rest[0]), rest[1])
+                elif cmd == 'qu':
+                    item = ('qu', Quad(rest[0]))
                 else:
                     item = tuple([cmd] + [Point(i) for i in rest])
                 newitems.append(item)
-            npath["items"] = newitems
+            npath['items'] = newitems
             for k, v in allkeys:
                 npath[k] = npath.get(k, v)
             paths.append(npath)
@@ -6825,7 +6825,7 @@ class Page:
         CheckParent(self)
         doc = self.parent
         if doc.is_closed or doc.is_encrypted:
-            raise ValueError("document closed or encrypted")
+            raise ValueError('document closed or encrypted')
 
         inf_rect = Rect(1, 1, -1, -1)
         null_mat = Matrix()
@@ -6836,14 +6836,14 @@ class Page:
 
         if type(name) in (list, tuple):
             if not type(name[-1]) is int:
-                raise ValueError("need item of full page image list")
+                raise ValueError('need item of full page image list')
             item = name
         else:
             imglist = [i for i in doc.get_page_images(self.number, True) if name == i[7]]
             if len(imglist) == 1:
                 item = imglist[0]
             elif imglist == []:
-                raise ValueError("bad image name")
+                raise ValueError('bad image name')
             else:
                 raise ValueError("found multiple images named '%s'." % name)
         xref = item[-1]
@@ -7162,7 +7162,8 @@ class Page:
             rect = mupdf.mfz_bound_page( self.this)
         else:
             rect = JM_mediabox( page.obj())
-        return JM_py_from_rect(rect);
+        #return JM_py_from_rect(rect)
+        return rect
 
     @property
     def parent( self):
@@ -7359,7 +7360,7 @@ class Pixmap:
                     THROWMSG( "source pixmap has no alpha channel")
             else:
                 dst = mupdf.mfz_new_pixmap_from_color_and_mask( spm, mpm)
-            return self.this = dst
+            return dst
 
         elif args_match(args, (Pixmap, mupdf.Pixmap), (float, int), (float, int), None):
             # create pixmap as scaled copy of another one
@@ -7580,9 +7581,9 @@ class Pixmap:
         Return count of each color.
         '''
         pm = self.this
-        rc = = JM_color_count( pm, clip)    # fixme: check this is written.
-            if not r:
-                THROWMSG( "color count failed")
+        rc = JM_color_count( pm, clip)
+        if not r:
+            THROWMSG( "color count failed")
         if not colors:
             return len( rc)
         return rc
@@ -7865,7 +7866,7 @@ class Pixmap:
             for i in range(n):
                 colors[i] = opaque[i]
             zero_out = 1
-        if matte and isinstance( matte, (tuple, list) and len(matte) == n:
+        if matte and isinstance( matte, (tuple, list)) and len(matte) == n:
             for i in range(n):
                 bgcolor[i] = matte[i]
             bground = 1
@@ -8008,7 +8009,7 @@ class Pixmap:
         EnsureOwnership(self)
         if not quad.is_convex: raise ValueError("quad must be convex")
         #return _fitz.Pixmap_warp(self, quad, width, height)
-        fz_quad q = JM_quad_from_py(quad)
+        q = JM_quad_from_py(quad)
         points = [ q.ul, q.ur, q.lr, q.ll]
         dst = mupdf.mfz_warp_pixmap( self.this, points, width, height)
         return Pixmap( dst)
@@ -10508,6 +10509,7 @@ TEXT_PRESERVE_IMAGES = 4
 TEXT_INHIBIT_SPACES = 8
 TEXT_DEHYPHENATE = 16
 TEXT_PRESERVE_SPANS = 32
+TEXT_MEDIABOX_CLIP = 64
 
 TEXT_ENCODING_LATIN = 0
 TEXT_ENCODING_GREEK = 1
@@ -11575,7 +11577,7 @@ def JM_char_quad(line, ch):
     dsc = JM_font_descender(font)
     fsize = ch.size;
     asc_dsc = asc - dsc + FLT_EPSILON
-    if asc_dsc >= 1 and small_glyph_heights == 0:   no problem
+    if asc_dsc >= 1 and small_glyph_heights == 0:   # no problem
         return mupdf.Quad(ch.m_internal.quad)
 
     # Re-compute quad with adjusted ascender / descender values:
@@ -12842,11 +12844,12 @@ def JM_image_profile( imagedata, keep_image):
     #    Py_RETURN_NONE;
     #}
     len = len( imagedata)
-    if (len < 8) {
+    if len < 8:
         sys.stderr.write( "bad image data\n")
         return None
+    jlib.log( 'calling mfz_recognize_image_format with {c!r=}')
     type = mupdf.mfz_recognize_image_format( c)
-    if (type == mupdf.FZ_IMAGE_UNKNOWN:
+    if type == mupdf.FZ_IMAGE_UNKNOWN:
         return None
 
     if keep_image:
@@ -12858,18 +12861,17 @@ def JM_image_profile( imagedata, keep_image):
     xres, yres = mupdf.mfz_image_resolution(image)
     orientation = mupdf.mfz_image_orientation( image)
     cs_name = mupdf.mfz_colorspace_name( image.colorspace())
-    result = dict(
-            dictkey_width: image.w(),
-            dictkey_height: image.h(),
-            "orientation": orientation,
-            dictkey_matrix: JM_py_from_matrix(ctm),
-            dictkey_xres: xres,
-            dictkey_yres: yres,
-            dictkey_colorspace: image.n(),
-            dictkey_bpc: image.bpc(),
-            dictkey_ext: JM_image_extension(type),
-            dictkey_cs_name: cs_name,
-            )
+    result = dict()
+    result[ dictkey_width] = image.w()
+    result[ dictkey_height] = image.h()
+    result[ "orientation"] = orientation
+    result[ dictkey_matrix] = JM_py_from_matrix(ctm)
+    result[ dictkey_xres] = xres
+    result[ dictkey_yres] = yres
+    result[ dictkey_colorspace] = image.n()
+    result[ dictkey_bpc] = image.bpc()
+    result[ dictkey_ext] = JM_image_extension(type)
+    result[ dictkey_cs_name] = cs_name
 
     if keep_image:
         result[ dictkey_image] = image
@@ -13036,10 +13038,10 @@ def JM_irect_from_py(r):
         f[i] = JM_FLOAT_ITEM(r, i)
         if f[i] is None:
             return mupdf.Rect(mupdf.fz_infinite_irect)
-        if f[i] < mupdf.FZ_MIN_INF_RECT:
-            f[i] = mupdf.FZ_MIN_INF_RECT
-        if f[i] > mupdf.FZ_MAX_INF_RECT:
-            f[i] = mupdf.FZ_MAX_INF_RECT
+        if f[i] < FZ_MIN_INF_RECT:
+            f[i] = FZ_MIN_INF_RECT
+        if f[i] > FZ_MAX_INF_RECT:
+            f[i] = FZ_MAX_INF_RECT
     return mupdf.mfz_make_irect(f[0], f[1], f[2], f[3])
 
 
@@ -13062,7 +13064,7 @@ def JM_listbox_value( annot):
     # may be single value or array
     annot_obj = mupdf.mpdf_annot_obj( annot)
     optarr = mupdf.mpdf_dict_get( annot_obj, PDF_NAME('V'))
-    if mupdf.mpdf_is_string( optarr)    # a single string
+    if mupdf.mpdf_is_string( optarr):   # a single string
         return mupdf.mpdf_to_text_string( optarr)
 
     # value is an array (may have len 0)
@@ -13692,10 +13694,10 @@ def JM_point_from_py(p):
     y = JM_FLOAT_ITEM(p, 1)
     if x is None or y is None:
         return p0
-    x = max( x, mupdf.FZ_MIN_INF_RECT)
-    y = max( y, mupdf.FZ_MIN_INF_RECT)
-    x = min( x, mupdf.FZ_MAX_INF_RECT)
-    y = min( y, mupdf.FZ_MAX_INF_RECT)
+    x = max( x, FZ_MIN_INF_RECT)
+    y = max( y, FZ_MIN_INF_RECT)
+    x = min( x, FZ_MAX_INF_RECT)
+    y = min( y, FZ_MAX_INF_RECT)
     return mupdf.Point(x, y)
 
 
@@ -13810,10 +13812,10 @@ def JM_quad_from_py(r):
         p[i].y = JM_FLOAT_ITEM(obj, 1)
         if p[i].x is None or p[i].y is None:
             return q
-        x = max( x, mupdf.FZ_MIN_INF_RECT)
-        y = max( y, mupdf.FZ_MIN_INF_RECT)
-        x = min( x, mupdf.FZ_MAX_INF_RECT)
-        y = min( y, mupdf.FZ_MAX_INF_RECT)
+        x = max( x, FZ_MIN_INF_RECT)
+        y = max( y, FZ_MIN_INF_RECT)
+        x = min( x, FZ_MAX_INF_RECT)
+        y = min( y, FZ_MAX_INF_RECT)
     q.ul = p[0]
     q.ur = p[1]
     q.ll = p[2]
@@ -13850,10 +13852,10 @@ def JM_rect_from_py(r):
         f[i] = JM_FLOAT_ITEM(r, i)
         if f[i] is None:
             return mupdf.Rect(mupdf.Rect.Fixed_INFINITE)
-        if f[i] < mupdf.FZ_MIN_INF_RECT:
-            f[i] = mupdf.FZ_MIN_INF_RECT
-        if f[i] > mupdf.FZ_MAX_INF_RECT:
-            f[i] = mupdf.FZ_MAX_INF_RECT
+        if f[i] < FZ_MIN_INF_RECT:
+            f[i] = FZ_MIN_INF_RECT
+        if f[i] > FZ_MAX_INF_RECT:
+            f[i] = FZ_MAX_INF_RECT
     return mupdf.mfz_make_rect(f[0], f[1], f[2], f[3])
 
 
@@ -14876,31 +14878,31 @@ def jm_append_merge(out):
     assert isinstance(out, list)
     len_ = len(out)
     if len_ == 0:   # 1st path
-        out.append(trace_device.pathdict)
-        trace_device.pathdict = dict()
+        out.append(trace_device.dev_pathdict)
+        trace_device.dev_pathdict = dict()
         return
-    thistype = trace_device.pathdict[ dictkey_type]
+    thistype = trace_device.dev_pathdict[ dictkey_type]
     if thistype != "f" and thistype != "s":
-        out.append(trace_device.pathdict)
-        trace_device.pathdict = None
+        out.append(trace_device.dev_pathdict)
+        trace_device.dev_pathdict = None
         return
     prev = out[ len_ - 1]    # get prev path
     prevtype = prev[ dictkey_type]
     if prevtype != "f" and prevtype != "s" or prevtype == thistype:
-        out.append(trace_device.pathdict)
-        trace_device.pathdict = None
+        out.append(trace_device.dev_pathdict)
+        trace_device.dev_pathdict = None
         return
     previtems = prev[ dictkey_items]
-    thisitems = trace_device.pathdict[ dictkey_items]
+    thisitems = trace_device.dev_pathdict[ dictkey_items]
     if previtems != thisitems:
-        out.append(trace_device.pathdict)
-        trace_device.pathdict = None
+        out.append(trace_device.dev_pathdict)
+        trace_device.dev_pathdict = None
         return
-    #rc = PyDict_Merge(trace_device.pathdict, prev, 0);  // merge, do not override
+    #rc = PyDict_Merge(trace_device.dev_pathdict, prev, 0);  // merge, do not override
     try:
         for k, v in prev.items():
-            if k not in trace_device.pathdict:
-                trace_device.pathdict[k] = v
+            if k not in trace_device.dev_pathdict:
+                trace_device.dev_pathdict[k] = v
         rc = 0
     except Exception as e:
         jlib.log('=' * 40)
@@ -14908,14 +14910,14 @@ def jm_append_merge(out):
         raise
         rc = -1
     if rc == 0:
-        trace_device.pathdict[ dictkey_type] = "fs"
-        out[ len_ - 1] = trace_device.pathdict
+        trace_device.dev_pathdict[ dictkey_type] = "fs"
+        out[ len_ - 1] = trace_device.dev_pathdict
         return
     else:
         print("could not merge stroke and fill path", file=sys.stderr)
     #append:;
-    out.append( trace_device.pathdict)
-    trace_device.pathdict = None
+    out.append( trace_device.dev_pathdict)
+    trace_device.dev_pathdict = None
 
 
 def jm_bbox_add_rect(dev, rect, code):
@@ -14988,7 +14990,7 @@ def jm_checkquad():
     If not true, we reduce dev_linecount by 1 and return.
     If lines 1 / 3 resp 2 / 4 are parallel to the axes, we have a rect.
     '''
-    items = dev_pathdict[ dictkey_items]
+    items = trace_device.dev_pathdict[ dictkey_items]
     len_ = len(items)
     f = [0] * 8
     for i in range( 4): # store line start points
@@ -14999,10 +15001,9 @@ def jm_checkquad():
         lp = JM_point_from_py( line[ 2])
     if lp.x != f[0] or lp.y != f[1]:
         # not a polygon!
-        dev_linecount -= 1
+        trace_device.dev_linecount -= 1
         return 0
-    }
-    dev_linecount = 0   # reset this
+    trace_device.dev_linecount = 0   # reset this
     if (0
             or f[1] != f[3]
             or f[2] != f[4]
@@ -15014,7 +15015,7 @@ def jm_checkquad():
         #make_quad:;
         # relationship of float array to quad points:
         # (0, 1) = ul, (2, 3) = ll, (6, 7) = ur, (4, 5) = lr
-        fz_quad q = mupdf.mfz_make_quad(f[0], f[1], f[6], f[7], f[2], f[3], f[4], f[5])
+        q = mupdf.mfz_make_quad(f[0], f[1], f[6], f[7], f[2], f[3], f[4], f[5])
         rect = ( 'qu', JM_py_from_quad(q))
     else:
         # Have a rect, check orientation
@@ -15051,9 +15052,9 @@ def jm_checkrect():
     If all is true, modify the path accordngly.
     If the lines are not parallel to axes, generate a quad.
     '''
-    dev_linecount = 0   # reset line count
+    trace_device.dev_linecount = 0   # reset line count
     orientation = 0;
-    items = dev_pathdict[ dictkey_items]
+    items = trace_device.dev_pathdict[ dictkey_items]
     len_ = len(items)
 
     line0 = items[ len_ - 3]
@@ -15133,8 +15134,8 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     ctm_rot = mupdf.mfz_concat(ctm, trace_device.rot)
     mat = mupdf.mfz_concat(mat, ctm_rot)
 
-    if trace_device.linewidth > 0L
-        linewidth = trace_device.linewidth
+    if trace_device.dev_linewidth > 0:
+        linewidth = trace_device.dev_linewidth
     else:
         linewidth = fsize * 0.05
     last_adv = 0
@@ -15177,13 +15178,13 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
                     (
                         char_orig.x,
                         char_orig.y,
-                    )
+                    ),
                     (
                         char_bbox.x0,
                         char_bbox.y0,
                         char_bbox.x1,
                         char_bbox.y,
-                    )
+                    ),
                 )
                 )
         if i > 0:
@@ -15206,9 +15207,9 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
 
     # make the span dictionary
     span_dict = dict()
-    span_dict[ 'dir' = JM_py_from_point(dir)
+    span_dict[ 'dir'] = JM_py_from_point(dir)
     span_dict[ dictkey_font] =fontname
-    span_dict[ dictkey_wmode = span.m_internal.wmode
+    span_dict[ dictkey_wmode] = span.m_internal.wmode
     span_dict[ dictkey_flags] =fflags
     span_dict[ "bidi_lvl"] =span.m_internal.bidi_level
     span_dict[ "bidi_dir"] = span.m_internal.markup_dir
@@ -15258,22 +15259,23 @@ def jm_tracedraw_color(colorspace, color):
 def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, color_params):
     even_odd = True if even_odd else False
     try:
+        assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
-        trace_device.ctm = ctm  # fz_concat(ctm, trace_device_ptm);
+        trace_device.ctm = mupdf.Matrix( ctm)  # fz_concat(ctm, trace_device_ptm);
         path_type = trace_device.FILL_PATH
         jm_tracedraw_path( dev, path)
-        if trace_device.pathdict is None:
+        if trace_device.dev_pathdict is None:
             return
-        item_count = len(trace_device.pathdict[ dictkey_items])
+        item_count = len(trace_device.dev_pathdict[ dictkey_items])
         if item_count == 0:
             return
-        trace_device.pathdict[ dictkey_type] ="f"
-        trace_device.pathdict[ "even_odd"] = even_odd
-        trace_device.pathdict[ "fill_opacity"] = alpha
-        trace_device.pathdict[ "closePath"] = False
-        trace_device.pathdict[ "fill"] = jm_tracedraw_color( colorspace, color)
-        trace_device.pathdict[ dictkey_rect] = JM_py_from_rect(trace_device.pathrect)
-        trace_device.pathdict[ "seqno"] = dev.seqno
+        trace_device.dev_pathdict[ dictkey_type] ="f"
+        trace_device.dev_pathdict[ "even_odd"] = even_odd
+        trace_device.dev_pathdict[ "fill_opacity"] = alpha
+        trace_device.dev_pathdict[ "closePath"] = False
+        trace_device.dev_pathdict[ "fill"] = jm_tracedraw_color( colorspace, color)
+        trace_device.dev_pathdict[ dictkey_rect] = JM_py_from_rect(trace_device.dev_pathrect)
+        trace_device.dev_pathdict[ "seqno"] = dev.seqno
         jm_append_merge(out)
         dev.seqno += 1
     except Exception as e:
@@ -15311,16 +15313,17 @@ def jm_tracedraw_path(dev, path):
 
         def moveto(self, x, y):   # trace_moveto().
             try:
-                trace_device.lastpoint = mupdf.mfz_transform_point(
+                #jlib.log( '{=trace_device.ctm type(trace_device.ctm)}')
+                trace_device.dev_lastpoint = mupdf.mfz_transform_point(
                         mupdf.mfz_make_point(x, y),
                         trace_device.ctm,
                         )
-                if mupdf.mfz_is_infinite_rect( trace_device.pathrect):
-                    trace_device.pathrect = mupdf.mfz_make_rect(
-                            trace_device.lastpoint.x,
-                            trace_device.lastpoint.y,
-                            trace_device.lastpoint.x,
-                            trace_device.lastpoint.y,
+                if mupdf.mfz_is_infinite_rect( trace_device.dev_pathrect):
+                    trace_device.dev_pathrect = mupdf.mfz_make_rect(
+                            trace_device.dev_lastpoint.x,
+                            trace_device.dev_lastpoint.y,
+                            trace_device.dev_lastpoint.x,
+                            trace_device.dev_lastpoint.y,
                             )
                 trace_device.dev_linecount = 0  # reset # of consec. lines
             except Exception as e:
@@ -15330,17 +15333,17 @@ def jm_tracedraw_path(dev, path):
         def lineto(self, x, y):   # trace_lineto().
             try:
                 p1 = mupdf.mfz_transform_point( mupdf.mfz_make_point(x, y), trace_device.ctm)
-                trace_device.pathrect = mupdf.mfz_include_point_in_rect( trace_device.pathrect, p1)
+                trace_device.dev_pathrect = mupdf.mfz_include_point_in_rect( trace_device.dev_pathrect, p1)
                 list_ = (
                         'l',
-                        JM_py_from_point( trace_device.lastpoint),
-                        JM_py_from_point(p1).
+                        JM_py_from_point( trace_device.dev_lastpoint),
+                        JM_py_from_point(p1),
                         )
                 dev_lastpoint = p1
-                items = dev_pathdict[ dictkey_items]
+                items = trace_device.dev_pathdict[ dictkey_items]
                 items.append( list_)
-                trace_device.linecount += 1 # counts consecutive lines
-                if trace_device.linecount >= 4 and path_type != trace_device.FILL_PATH:
+                trace_device.dev_linecount += 1 # counts consecutive lines
+                if trace_device.dev_linecount >= 4 and trace_device.path_type != trace_device.FILL_PATH:
                     # shrink to "re" or "qu" item
                     jm_checkquad()
             except Exception as e:
@@ -15349,51 +15352,51 @@ def jm_tracedraw_path(dev, path):
 
         def curveto(self, x1, y1, x2, y2, x3, y3):   # trace_curveto().
             try:
-                trace_device.linecount = 0  # reset # of consec. lines
+                trace_device.dev_linecount = 0  # reset # of consec. lines
                 p1 = mupdf.mfz_make_point(x1, y1)
                 p2 = mupdf.mfz_make_point(x2, y2)
                 p3 = mupdf.mfz_make_point(x3, y3)
-                p1 = mupdf.mfz_transform_point(p1, mupdf.Matrix(trace_device.ctm))
-                p2 = mupdf.mfz_transform_point(p2, mupdf.Matrix(trace_device.ctm))
-                p3 = mupdf.mfz_transform_point(p3, mupdf.Matrix(trace_device.ctm))
-                trace_device.pathrect = mupdf.mfz_include_point_in_rect(trace_device.pathrect, p1)
-                trace_device.pathrect = mupdf.mfz_include_point_in_rect(trace_device.pathrect, p2)
-                trace_device.pathrect = mupdf.mfz_include_point_in_rect(trace_device.pathrect, p3)
+                p1 = mupdf.mfz_transform_point(p1, trace_device.ctm)
+                p2 = mupdf.mfz_transform_point(p2, trace_device.ctm)
+                p3 = mupdf.mfz_transform_point(p3, trace_device.ctm)
+                trace_device.dev_pathrect = mupdf.mfz_include_point_in_rect(trace_device.dev_pathrect, p1)
+                trace_device.dev_pathrect = mupdf.mfz_include_point_in_rect(trace_device.dev_pathrect, p2)
+                trace_device.dev_pathrect = mupdf.mfz_include_point_in_rect(trace_device.dev_pathrect, p3)
 
                 list_ = (
                         "c",
-                        JM_py_from_point(trace_device.lastpoint),
+                        JM_py_from_point(trace_device.dev_lastpoint),
                         JM_py_from_point(p1),
                         JM_py_from_point(p2),
                         JM_py_from_point(p3),
                         )
-                trace_device.lastpoint = p3
-                trace_device.pathdict[ dictkey_items].append( list_)
+                trace_device.dev_lastpoint = p3
+                trace_device.dev_pathdict[ dictkey_items].append( list_)
             except Exception as e:
                 jlib.log( jlib.exception_info())
                 raise
 
         def closepath(self):    # trace_close().
             try:
-                if trace_device.linecount == 3:
+                if trace_device.dev_linecount == 3:
                     jm_checkrect()
                 else:
-                    trace_device.pathdict[ "closePath"] = True
+                    trace_device.dev_pathdict[ "closePath"] = True
             except Exception as e:
                 jlib.log( jlib.exception_info())
                 raise
 
     try:
-        trace_device.pathrect = mupdf.Rect( mupdf.Rect.Fixed_INFINITE)
-        trace_device.linecount = 0
-        trace_device.lastpoint = mupdf.Point( 0, 0)
-        trace_device.pathdict = dict()
-        trace_device.pathdict[ dictkey_items] = []
+        trace_device.dev_pathrect = mupdf.Rect( mupdf.Rect.Fixed_INFINITE)
+        trace_device.dev_linecount = 0
+        trace_device.dev_lastpoint = mupdf.Point( 0, 0)
+        trace_device.dev_pathdict = dict()
+        trace_device.dev_pathdict[ dictkey_items] = []
         walker = Walker()
         mupdf.mfz_walk_path( mupdf.Path(mupdf.keep_path(path)), walker, walker.m_internal)
         # Check if any items were added ...
-        if not trace_device.pathdict[ dictkey_items]:
-            trace_device.pathdict.clear()
+        if not trace_device.dev_pathdict[ dictkey_items]:
+            trace_device.dev_pathdict.clear()
     except Exception:
         jlib.log(jlib.exception_info())
         raise
@@ -15401,39 +15404,40 @@ def jm_tracedraw_path(dev, path):
 
 def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, color_params):
     try:
+        assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
         dev.pathfactor = 1
         if abs(ctm.a) == abs(ctm.d):
             trace_device.pathfactor = abs(ctm.a)
-        trace_device.ctm = ctm  # fz_concat(ctm, trace_device_ptm);
+        trace_device.ctm = mupdf.Matrix( ctm)  # fz_concat(ctm, trace_device_ptm);
         path_type = trace_device.STROKE_PATH;
 
         jm_tracedraw_path( dev, path)
-        if not trace_device.pathdict:
+        if not trace_device.dev_pathdict:
             return
-        dev_pathdict[ dictkey_type] = 's'
-        dev_pathdict[ 'stroke_opacity' = alpha
-        dev_pathdict[ 'color', jm_tracedraw_color( colorspace, color)
-        dev_pathdict[ dictkey_width] = dev_pathfactor * stroke.linewidth
-        dev_pathdict[ 'lineCap'] = (
-                stroke.m_internal.start_cap,
-                stroke.m_internal.dash_cap,
-                stroke.m_internal.end_cap,
+        trace_device.dev_pathdict[ dictkey_type] = 's'
+        trace_device.dev_pathdict[ 'stroke_opacity'] = alpha
+        trace_device.dev_pathdict[ 'color'] = jm_tracedraw_color( colorspace, color)
+        trace_device.dev_pathdict[ dictkey_width] = trace_device.dev_pathfactor * stroke.linewidth
+        trace_device.dev_pathdict[ 'lineCap'] = (
+                stroke.start_cap,
+                stroke.dash_cap,
+                stroke.end_cap,
                 )
-        dev_pathdict[ 'lineJoin'] = trace_device.pathfactor * stroke.m_internal.linejoin
-        dev_pathdict[ 'closePath'] = False
+        trace_device.dev_pathdict[ 'lineJoin'] = trace_device.pathfactor * stroke.linejoin
+        trace_device.dev_pathdict[ 'closePath'] = False
 
-        if (stroke.m_inernal.dash_len:
+        if stroke.dash_len:
             buff = mupdf.mfz_new_buffer( 50)
             mupdf.mfz_append_string( buff, "[ ")
-            for i in range( stroke.m_internal.dash_len):
-                mupdf.mfz_append_printf( buff, '%g ', dev_pathfactor * stroke.m_internal.dash_list[i])
-            mupdf.mfz_append_printf( buff, '] %g', dev_pathfactor * stroke.m_internal.dash_phase)
-            dev_pathdict[ 'dashes'] = buff
-        else
-            dev_pathdict[ 'dashes'] = '[] 0'
-        dev_pathdict[ dictkey_rect] = JM_py_from_rect(dev_pathrect)
-        dev_pathdict[ 'seqno'] = dev.seqno
+            for i in range( stroke.dash_len):
+                mupdf.mfz_append_printf( buff, '%g ', trace_device.dev_pathfactor * stroke.dash_list[i])
+            mupdf.mfz_append_printf( buff, '] %g', trace_device.dev_pathfactor * stroke.dash_phase)
+            trace_device.dev_pathdict[ 'dashes'] = buff
+        else:
+            trace_device.dev_pathdict[ 'dashes'] = '[] 0'
+        trace_device.dev_pathdict[ dictkey_rect] = JM_py_from_rect(trace_device.dev_pathrect)
+        trace_device.dev_pathdict[ 'seqno'] = dev.seqno
         jm_append_merge(out)
         dev.seqno += 1
     
@@ -15449,7 +15453,7 @@ def jm_tracedraw_stroke_text(dev, text, stroke, ctm, colorspace, color, alpha, c
 
 
 def jm_dev_linewidth(dev, path, stroke, matrix, colorspace, color, alpha, color_params):
-    trace_device.linewidth = stroke.m_internal.linewidth
+    trace_device.dev_linewidth = stroke.linewidth
     jm_increase_seqno(dev)
 
 
@@ -17044,14 +17048,15 @@ def strip_outlines(doc, outlines, page_count, page_object_nums, names_list):
 class TraceDeviceGlobals:
     pass
 trace_device = TraceDeviceGlobals()
-trace_device.linewidth = 0
+trace_device.dev_pathdict = None
+trace_device.dev_linewidth = 0
 trace_device.ptm = mupdf.Matrix()
 trace_device.ctm = mupdf.Matrix()
 trace_device.rot = mupdf.Matrix()
-trace_device.lastpoint = mupdf.Point(0, 0)
-trace_device.pathrect = mupdf.Rect(0, 0, 0, 0)
-trace_device.pathfactor = 0
-trace_device.linecount = 0
+trace_device.dev_lastpoint = mupdf.Point(0, 0)
+trace_device.dev_pathrect = mupdf.Rect(0, 0, 0, 0)
+trace_device.dev_pathfactor = 0
+trace_device.dev_linecount = 0
 trace_device.path_type = 0
 trace_device.FILL_PATH = 1
 trace_device.STROKE_PATH = 2
@@ -17931,7 +17936,7 @@ def restore_aliases():
     _alias( None, 'get_pdf_str',            'getPDFstr')
     _alias( None, 'get_text_length')
     _alias( None, 'get_text_length',        'getTextlength')
-    _alias( None, 'image_properties',       'ImageProperties')
+    _alias( None, 'image_profile',          'ImageProperties')
     _alias( None, 'paper_rect',             'PaperRect')
     _alias( None, 'paper_size',             'PaperSize')
     _alias( None, 'paper_sizes')
