@@ -7701,15 +7701,9 @@ class Pixmap:
         pm = self.this
         n = pm.n()
         count = pm.w() * pm.h() * n
-        def read_sample( offset):
-            # fixme: need to be able to get a sample in one call, as a Python
-            # bytes or similar.
-            ret = []
-            for i in range( n):
-                ret.append( pm.samples_get( offset + i))
-        sample0 = read_sample( 0)
+        sample0 = _pixmap_read_samples( pm, 0, n)
         for offset in range( n, count, n):
-            sample = read_sample( offset)
+            sample = _pixmap_read_samples( pm, offset, n)
             if sample != sample0:
                 return False
         return True
@@ -11153,6 +11147,15 @@ zapf_glyphs = ( # Glyph list for the built-in font 'ZapfDingbats'
 # Functions
 #
 
+def _read_samples( pixmap, offset, n):
+    # fixme: need to be able to get a sample in one call, as a Python
+    # bytes or similar.
+    ret = []
+    for i in range( n):
+        ret.append( pm.samples_get( offset + i))
+    return bytes( ret)
+
+
 def _INRANGE(v, low, high):
     return low <= v and v <= high
 
@@ -11458,7 +11461,7 @@ def JM_append_rune(buff, ch):
     '''
     APPEND non-ascii runes in unicode escape format to fz_buffer
     '''
-    if (ch >= 32 and ch <= 127) or ch == 10:
+    if (ch >= 32 and ch <= 255) or ch == 10:
         mupdf.mfz_append_byte(buff, ch)
     elif ch <= 0xffff:  # 4 hex digits
         mupdf.mfz_append_printf(buff, "\\u%04x", ch)
@@ -11570,7 +11573,9 @@ def JM_char_quad(line, ch):
     font = mupdf.Font(mupdf.keep_font(ch.m_internal.font))
     asc = JM_font_ascender(font)
     dsc = JM_font_descender(font)
-    if asc - dsc >= 1 and small_glyph_heights == 0: # no problem
+    fsize = ch.size;
+    asc_dsc = asc - dsc + FLT_EPSILON
+    if asc_dsc >= 1 and small_glyph_heights == 0:   no problem
         return mupdf.Quad(ch.m_internal.quad)
 
     # Re-compute quad with adjusted ascender / descender values:
@@ -11581,35 +11586,58 @@ def JM_char_quad(line, ch):
     fwidth = bbox.x1 - bbox.x0
     if asc < 1e-3:  # probably Tesseract glyphless font
         dsc = -0.1
-
-    # Re-compute asc, dsc if there are problems.
-    # In that case, we also do not trust dsc and try correcting it.
-    if asc - dsc < 1:
-        if bbox.y0 < dsc:
-            dsc = bbox.y0
-        asc = 1 + dsc
-
+        asc = 0.9
+        asc_dsc = 1.0
+    
+    if small_glyph_heights or asc_dsc < 1:
+        dsc = dsc / asc_dsc
+        asc = asc / asc_dsc
+    asc_dsc = asc - dsc
+    asc = asc * fsize / asc_dsc
+    dsc = dsc * fsize / asc_dsc
+    
+    # Re-compute quad with the adjusted ascender / descender values:
+    # Move ch->origin to (0,0) and de-rotate quad, then adjust the corners,
+    # re-rotate and move back to ch->origin location.
     c = line.m_internal.dir.x  # cosine
     s = line.m_internal.dir.y  # sine
     trm1 = mupdf.mfz_make_matrix(c, -s, s, c, 0, 0) # derotate
     trm2 = mupdf.mfz_make_matrix(c, s, -s, c, 0, 0) # rotate
+    if (c == -1):   # left-right flip
+        trm1.d = 1;
+        trm2.d = 1;
     xlate1 = mupdf.mfz_make_matrix(1, 0, 0, 1, -ch.m_internal.origin.x, -ch.m_internal.origin.y)
     xlate2 = mupdf.mfz_make_matrix(1, 0, 0, 1, ch.m_internal.origin.x, ch.m_internal.origin.y)
 
     quad = mupdf.mfz_transform_quad(mupdf.Quad(ch.m_internal.quad), xlate1)    # move origin to (0,0)
     quad = mupdf.mfz_transform_quad(quad, trm1) # de-rotate corners
+    
+    # adjust vertical coordinates
+    if c == 1 and quad.ul.y > 0:    # up-down flip
+        quad.ul.y = asc
+        quad.ur.y = asc
+        quad.ll.y = dsc
+        quad.lr.y = dsc
+    else:
+        quad.ul.y = -asc
+        quad.ur.y = -asc
+        quad.ll.y = -dsc
+        quad.lr.y = -dsc
 
-    # adjust vertical coordinates if meaningful
-    if quad.ll.y - quad.ul.y > fsize:
-        quad.ll.y = -fsize * dsc / (asc - dsc)
-        quad.ul.y = quad.ll.y - fsize
-        quad.lr.y = quad.ll.y
-        quad.ur.y = quad.ul.y
-
-    # adjust crazy horizontal coordinates
-    if quad.lr.x - quad.ll.x < FLT_EPSILON:
-        quad.lr.x = quad.ll.x + fwidth * fsize
-        quad.ur.x = quad.lr.x
+    # adjust horizontal coordinates that are too crazy:
+    # (1) left x must be >= 0
+    # (2) if bbox width is 0, lookup char advance in font.
+    if quad.ll.x < 0:
+        quad.ll.x = 0
+        quad.ul.x = 0
+    
+    cwidth = quad.lr.x - quad.ll.x
+    if cwidth < FLT_EPSILON:
+        glyph = mupdf.mfz_encode_character( font, ch.m_internal.c())
+        if glyph:
+            fwidth = mupdf.mfz_advance_glyph(ctx, font, glyph, line.mm_internal.wmode)
+            quad.lr.x = quad.ll.x + fwidth * fsize
+            quad.ur.x = quad.lr.x
 
     quad = mupdf.mfz_transform_quad(quad, trm2) # rotate back
     quad = mupdf.mfz_transform_quad(quad, xlate2)   # translate back
@@ -11719,6 +11747,43 @@ def JM_color_FromSequence(color, col):
     for i in range(len_):
         col[i] = mcol[i]
     return len_
+
+
+def JM_color_count( pm, clip):
+    rc = dict()
+    cnt = 0
+    irect = mupdf.mfz_pixmap_bbox( pm)
+    irect = mupdf.mfz_intersect_irect(irect, mupdf.mfz_round_rect(JM_rect_from_py(clip)))
+    stride = pm.stride()
+    width = irect.x1() - irect.x0()
+    height = irect.y1() - irect.y0()
+    n = pm.n()
+    substride = width * n
+    s = stride * (irect.y0 - pm.y()) + (irect.x0 - pm.x()) * n
+    oldpix = _read_samples( pm, s, n)
+    cnt = 0;
+    if mupdf.mfz_is_empty_irect(irect):
+        return rc
+    for i in range( height):
+        for j in range( 0, substride, n):
+            newpix = _read_samples( pm, s + j, n)
+            if newpix != oldpix:
+                pixel = oldpix
+                c = rc.get( pixel, None)
+                if c is not None:
+                    cnt += c
+                rc[ pixel] = cnt
+                cnt = 1
+                oldpix = newpix
+            else:
+                cnt += 1
+        s += stride
+    pixel = oldpix
+    c = rc.get( pixel)
+    if c is not None:
+        cnt += c
+    rc[ pixel] = cnt
+    return rc
 
 
 def JM_compress_buffer(inbuffer):
@@ -12756,6 +12821,59 @@ def JM_image_filter(opaque, ctm, name, image):
     q = mupdf.mfz_transform_quad( mupdf.mfz_quad_from_rect(r), ctm)
     temp = name, JM_py_from_quad(q)
     img_info.append(temp)
+
+
+def JM_image_profile( imagedata, keep_image):
+    '''
+    Return basic properties of an image provided as bytes or bytearray
+    The function creates an fz_image and optionally returns it.
+    '''
+    if not imagedata:
+        return None # nothing given
+    
+    #if (PyBytes_Check(imagedata)) {
+    #    c = PyBytes_AS_STRING(imagedata);
+    #    len = PyBytes_GET_SIZE(imagedata);
+    #} else if (PyByteArray_Check(imagedata)) {
+    #    c = PyByteArray_AS_STRING(imagedata);
+    #    len = PyByteArray_GET_SIZE(imagedata);
+    #} else {
+    #    PySys_WriteStderr("bad image data\n");
+    #    Py_RETURN_NONE;
+    #}
+    len = len( imagedata)
+    if (len < 8) {
+        sys.stderr.write( "bad image data\n")
+        return None
+    type = mupdf.mfz_recognize_image_format( c)
+    if (type == mupdf.FZ_IMAGE_UNKNOWN:
+        return None
+
+    if keep_image:
+        res = mupdf.mfz_new_buffer_from_copied_data( c, len)
+    else:
+        res = mupdf.mfz_new_buffer_from_shared_data( c, len)
+    image = mupdf.mfz_new_image_from_buffer( res)
+    ctm = mupdf.mfz_image_orientation_matrix( image)
+    xres, yres = mupdf.mfz_image_resolution(image)
+    orientation = mupdf.mfz_image_orientation( image)
+    cs_name = mupdf.mfz_colorspace_name( image.colorspace())
+    result = dict(
+            dictkey_width: image.w(),
+            dictkey_height: image.h(),
+            "orientation": orientation,
+            dictkey_matrix: JM_py_from_matrix(ctm),
+            dictkey_xres: xres,
+            dictkey_yres: yres,
+            dictkey_colorspace: image.n(),
+            dictkey_bpc: image.bpc(),
+            dictkey_ext: JM_image_extension(type),
+            dictkey_cs_name: cs_name,
+            )
+
+    if keep_image:
+        result[ dictkey_image] = image
+    return result
 
 
 def JM_image_reporter(page):
@@ -14732,7 +14850,7 @@ def get_text_length(text: str, fontname: str ="helv", fontsize: float =11, encod
     raise ValueError("Font '%s' is unsupported" % fontname)
 
 
-def image_properties(img: typing.ByteString) -> dict:
+def image_profile(img: typing.ByteString) -> dict:
     """ Return basic properties of an image.
 
     Args:
