@@ -8360,6 +8360,11 @@ class Quad:
         return True
 
     @property
+    def is_infinite(self):
+        """Check whether this is the infinite quad."""
+        return self.rect.is_infinite
+
+    @property
     def is_rectangular(self):
         """Check if quad is rectangular.
 
@@ -8388,7 +8393,8 @@ class Quad:
         """Morph the quad with matrix-like 'm' and point-like 'p'.
 
         Return a new quad."""
-
+        if self.is_infinite:
+            return INFINITE_QUAD()
         delta = Matrix(1, 1).preTranslate(p.x, p.y)
         q = self * ~delta * m * delta
         return q
@@ -8401,6 +8407,18 @@ class Quad:
         r.x1 = max(self.ul.x, self.ur.x, self.lr.x, self.ll.x)
         r.y1 = max(self.ul.y, self.ur.y, self.lr.y, self.ll.y)
         return r
+
+    def torect(self, r):
+        """Return matrix that converts to target rect."""
+
+        r = Rect(r)
+        if self.is_infinite or self.is_empty or r.is_infinite or r.is_empty:
+            raise ValueError("rectangles must be finite and not empty")
+        return (
+                Matrix(1, 0, 0, 1, -self.x0, -self.y0)
+                * Matrix(r.width / self.width, r.height / self.height)
+                * Matrix(1, 0, 0, 1, r.x0, r.y0)
+                )
 
     def transform(self, m):
         """Replace quad by its transformation with matrix m."""
@@ -8455,20 +8473,15 @@ class Rect:
         if hasattr(x, "__float__"):
             return x in tuple(self)
         l = len(x)
-        r = Rect(self).normalize()
         if l == 4:
-            if r.is_empty: return False
-            xr = Rect(x).normalize()
-            if xr.is_empty: return True
-            if r.x0 <= xr.x0 and r.y0 <= xr.y0 and r.x1 >= xr.x1 and r.y1 >= xr.y1:
-               return True
-            return False
+            r = Rect(x)
+            return self.x0 <= r.x0 <= r.x1 <= self.x1 and self.y0 <= r.y0 <= r.y1 <= self.y1
+
         if l == 2:
-            if r.x0 <= x[0] < r.x1 and r.y0 <= x[1] < r.y1:
-               return True
-            return False
+            return TOOLS._is_point_in_rect(x, self)
+
         msg = "bad type or sequence: '%s'" % repr(x)
-        raise ValueError("bad type or sequence: '%s'" % repr(x))
+        raise ValueError(msg)
 
     def __eq__(self, rect):
         if not hasattr(rect, "__len__"):
@@ -8570,7 +8583,7 @@ class Rect:
 
     @property
     def is_infinite(self):
-        """True if rectangle is infinite."""
+        """True if this is the infinite rectangle."""
         return self.x0 > self.x1 or self.y0 > self.y1
 
     @property
@@ -8613,6 +8626,8 @@ class Rect:
         """Morph with matrix-like m and point-like p.
 
         Returns a new quad."""
+        if self.is_infinite:
+            return INFINITE_QUAD()
         return self.quad.morph(p, m)
 
     def norm(self):
@@ -10177,6 +10192,20 @@ class IRect:
     def __and__(self, x):
         return Rect.__and__(self, x).round()
 
+    def __contains__(self, x):
+        if hasattr(x, "__float__"):
+            return x in tuple(self)
+        l = len(x)
+        if l == 4:
+            r = Rect(x)
+            return self.x0 <= r.x0 <= r.x1 <= self.x1 and self.y0 <= r.y0 <= r.y1 <= self.y1
+
+        if l == 2:
+            return TOOLS._is_point_in_rect(x, self)
+
+        msg = "bad type or sequence: '%s'" % repr(x)
+        raise ValueError(msg)
+
     def __eq__(self, r):
         if not hasattr(r, "__len__"):
             return False
@@ -10302,6 +10331,8 @@ class IRect:
         """Morph with matrix-like m and point-like p.
 
         Returns a new quad."""
+        if self.is_infinite:
+            return INFINITE_QUAD()
         return self.quad.morph(p, m)
 
     @property
@@ -10320,6 +10351,17 @@ class IRect:
 
     tl = top_left
     tr = top_right
+
+    def torect(self, r):
+        """Return matrix that converts to target rect."""
+        r = Rect(r)
+        if self.is_infinite or self.is_empty or r.is_infinite or r.is_empty:
+            raise ValueError("rectangles must be finite and not empty")
+        return (
+                Matrix(1, 0, 0, 1, -self.x0, -self.y0)
+                * Matrix(r.width / self.width, r.height / self.height)
+                * Matrix(1, 0, 0, 1, r.x0, r.y0)
+                )
 
     def transform(self, m):
         return Rect.transform(self, m).round()
@@ -11574,35 +11616,79 @@ def JM_char_quad(line, ch):
     return quad
 
 
+def JM_checkbox_state( annot):
+    '''
+    CheckBox get state
+    '''
+    annot_obj = mupdf.mpdf_annot_obj( annot)
+    leafv = mupdf.mpdf_dict_get_inheritable( annot_obj, PDF_NAME('V'))
+    leafas = mupdf.mpdf_dict_get_inheritable( annot_obj, PDF_NAME('AS'))
+    if not leafv.m_internal:
+        return False
+    if leafv == PDF_NAME('Off'):
+        return False
+    if leafv == mupdf.mpdf_new_name( "Yes"):
+        return True
+    if mupdf.mpdf_is_string( leafv) and mupdf.mpdf_to_text_string( leafv) == "Off":
+        return False;
+    if mupdf.mpdf_is_string( leafv) and mupdf.mpdf_to_text_string( leafv) == "Yes":
+        return True;
+    if leafas.m_internal and leafas == PDF_NAME('Off'):
+        return False
+    return True
+
+
 def JM_choice_options(annot):
     '''
     return list of choices for list or combo boxes
     '''
-    annot_obj = mupdf.mpdf_annot_obj(annot)
-    pdf = mupdf.mpdf_get_bound_document(annot_obj)
-
+    annot_obj = mupdf.mpdf_annot_obj( annot)
+    pdf = mupdf.mpdf_get_bound_document( annot_obj)
+    
     # pdf_choice_widget_options() is not usable from python, so we implement it
     # ourselves here.
     #
-    #n = mupdf.mpdf_choice_widget_options(annot, 0, 0)
-    optarr = mupdf.mpdf_dict_get_inheritable(annot.this.annot_obj(), PDF_NAME('Opt'))
-    n = mupdf.mpdf_array_len(optarr)
+    # fixme: put this in mupdf python bindings.
+    #
+    def pdf_choice_widget_options( annot, exportval):
+        optarr = mupdf.mpdf_dict_get_inheritable(annot.this.annot_obj(), PDF_NAME('Opt'))
+        n = mupdf.mpdf_array_len(optarr)
+        opts = []
+        if not n:
+            return opts
+        optarr = mupdf.mpdf_dict_get(annot_obj, PDF_NAME('Opt'))
+        for i in range(n):
+            m = mupdf.mpdf_array_len(mupdf.mpdf_array_get(optarr, i))
+            if m == 2:
+                val = (
+                        mupdf.mpdf_to_text_string(mupdf.mpdf_array_get(mupdf.mpdf_array_get(optarr, i), 0)),
+                        mupdf.mpdf_to_text_string(mupdf.mpdf_array_get(mupdf.mpdf_array_get(optarr, i), 1)),
+                        )
+                opts.append(val)
+            else:
+                val = JM_UnicodeFromStr(mupdf.mpdf_to_text_string(mupdf.mpdf_array_get(optarr, i)));
+                opts.append(val)
+        return opts
 
+    opts = mupdf.mpdf_choice_widget_options( annot, 0)
+    n = len( opts)
     if n == 0:
         return  # wrong widget type
-    optarr = mupdf.mpdf_dict_get(annot_obj, PDF_NAME('Opt'))
+
+    optarr = mupdf.mpdf_dict_get( annot_obj, PDF_NAME('Opt'))
     liste = []
-    for i in range(n):
-        m = mupdf.mpdf_array_len(mupdf.mpdf_array_get(optarr, i))
+
+    for i in range( n):
+        m = mupdf.mpdf_array_len( mupdf.mpdf_array_get( optarr, i))
         if m == 2:
             val = (
-                    mupdf.mpdf_to_text_string(mupdf.mpdf_array_get(mupdf.mpdf_array_get(optarr, i), 0)),
-                    mupdf.mpdf_to_text_string(mupdf.mpdf_array_get(mupdf.mpdf_array_get(optarr, i), 1)),
+                    mupdf.mpdf_to_text_string( mupdf.mpdf_array_get( mupdf.mpdf_array_get( optarr, i), 0)),
+                    mupdf.mpdf_to_text_string( mupdf.mpdf_array_get( mupdf.mpdf_array_get( optarr, i), 1)),
                     )
-            liste.append(val)
+            liste.append( val)
         else:
-            val = JM_UnicodeFromStr(mupdf.mpdf_to_text_string(mupdf.mpdf_array_get(optarr, i)));
-            liste.append(val)
+            val = mupdf.mpdf_to_text_string( mupdf.mpdf_array_get( optarr, i))
+            liste.append( val)
     return liste
 
 
@@ -12832,6 +12918,10 @@ def JM_irect_from_py(r):
         f[i] = JM_FLOAT_ITEM(r, i)
         if f[i] is None:
             return mupdf.Rect(mupdf.fz_infinite_irect)
+        if f[i] < mupdf.FZ_MIN_INF_RECT:
+            f[i] = mupdf.FZ_MIN_INF_RECT
+        if f[i] > mupdf.FZ_MAX_INF_RECT:
+            f[i] = mupdf.FZ_MAX_INF_RECT
     return mupdf.mfz_make_irect(f[0], f[1], f[2], f[3])
 
 
@@ -12845,6 +12935,30 @@ def JM_is_jbig2_image(dict_):
     #    if (pdf_name_eq(ctx, pdf_array_get(ctx, filter_, i), PDF_NAME(JBIG2Decode)))
     #        return 1;
     #return 0;
+
+
+def JM_listbox_value( annot):
+    '''
+    ListBox retrieve value
+    '''
+    # may be single value or array
+    annot_obj = mupdf.mpdf_annot_obj( annot)
+    optarr = mupdf.mpdf_dict_get( annot_obj, PDF_NAME('V'))
+    if mupdf.mpdf_is_string( optarr)    # a single string
+        return mupdf.mpdf_to_text_string( optarr)
+
+    # value is an array (may have len 0)
+    n = mupdf.mpdf_array_len( optarr)
+    liste = []
+
+    # extract a list of strings
+    # each entry may again be an array: take second entry then
+    for i in range( n):
+        elem = mupdf.mpdf_array_get( optarr, i)
+        if mupdf.mpdf_is_array( elem):
+            elem = mupdf.mpdf_array_get( elem, 1)
+        liste.append( JM_UnicodeFromStr( mupdf.mpdf_to_text_string( elem)))
+    return liste
 
 
 def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
@@ -13461,6 +13575,10 @@ def JM_point_from_py(p):
     y = JM_FLOAT_ITEM(p, 1)
     if x is None or y is None:
         return p0
+    x = max( x, mupdf.FZ_MIN_INF_RECT)
+    y = max( y, mupdf.FZ_MIN_INF_RECT)
+    x = min( x, mupdf.FZ_MAX_INF_RECT)
+    y = min( y, mupdf.FZ_MAX_INF_RECT)
     return mupdf.Point(x, y)
 
 
@@ -13577,6 +13695,10 @@ def JM_quad_from_py(r):
         p[i].y = JM_FLOAT_ITEM(obj, 1)
         if p[i].x is None or p[i].y is None:
             return q
+        x = max( x, mupdf.FZ_MIN_INF_RECT)
+        y = max( y, mupdf.FZ_MIN_INF_RECT)
+        x = min( x, mupdf.FZ_MAX_INF_RECT)
+        y = min( y, mupdf.FZ_MAX_INF_RECT)
     q.ul = p[0]
     q.ur = p[1]
     q.ll = p[2]
@@ -13613,6 +13735,10 @@ def JM_rect_from_py(r):
         f[i] = JM_FLOAT_ITEM(r, i)
         if f[i] is None:
             return mupdf.Rect(mupdf.Rect.Fixed_INFINITE)
+        if f[i] < mupdf.FZ_MIN_INF_RECT:
+            f[i] = mupdf.FZ_MIN_INF_RECT
+        if f[i] > mupdf.FZ_MAX_INF_RECT:
+            f[i] = mupdf.FZ_MAX_INF_RECT
     return mupdf.mfz_make_rect(f[0], f[1], f[2], f[3])
 
 
@@ -14641,19 +14767,19 @@ def jm_append_merge(out):
     thistype = trace_device.pathdict[ dictkey_type]
     if thistype != "f" and thistype != "s":
         out.append(trace_device.pathdict)
-        trace_device.pathdict = dict()
+        trace_device.pathdict = None
         return
     prev = out[ len_ - 1]    # get prev path
     prevtype = prev[ dictkey_type]
     if prevtype != "f" and prevtype != "s" or prevtype == thistype:
         out.append(trace_device.pathdict)
-        trace_device.pathdict = dict()
+        trace_device.pathdict = None
         return
     previtems = prev[ dictkey_items]
     thisitems = trace_device.pathdict[ dictkey_items]
     if previtems != thisitems:
         out.append(trace_device.pathdict)
-        trace_device.pathdict = dict()
+        trace_device.pathdict = None
         return
     #rc = PyDict_Merge(trace_device.pathdict, prev, 0);  // merge, do not override
     try:
@@ -14674,7 +14800,7 @@ def jm_append_merge(out):
         print("could not merge stroke and fill path", file=sys.stderr)
     #append:;
     out.append( trace_device.pathdict)
-    trace_device.pathdict = dict()
+    trace_device.pathdict = None
 
 
 def jm_bbox_add_rect(dev, rect, code):
@@ -14862,6 +14988,135 @@ def jm_checkrect():
     return 1;
 
 
+def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
+    '''
+    jm_trace_text_span(fz_context *ctx, PyObject *out, fz_text_span *span, int type, fz_matrix ctm, fz_colorspace *colorspace, const float *color, float alpha, size_t seqno)
+    '''
+    out_font = None
+    fontname = JM_font_name( span.font)
+    #float rgb[3];
+    #PyObject *chars = PyTuple_New(span->len);
+    join = mupdf.mfz_concat(span.m_internal.trm, ctm)
+    dir = mupdf.mfz_transform_vector( mupdf.mfz_make_point(1, 0), join)
+    fsize = math.sqrt( dir.x * dir.x + dir.y * dir.y)
+    space_adv = 0;
+    asc = JM_font_ascender( span.m_internal.font)
+    dsc = JM_font_descender( span.m_internal.font)
+    if asc < 1e-3:  # probably Tesseract font
+        dsc = -0.1
+        asc = 0.9
+
+    ascsize = asc * fsize / (asc - dsc)
+    dscsize = dsc * fsize / (asc - dsc)
+    fflags = 0;
+    mono = mupdf.font_is_monospaced( span.m_internal.font)
+    fflags += mono * mupdf.TEXT_FONT_MONOSPACED
+    fflags += mupdf.font_is_italic( span.m_internal.font) * mupdf.TEXT_FONT_ITALIC
+    fflags += mupdf.font_is_serif( span.m_internal.font) * mupdf.TEXT_FONT_SERIFED
+    fflags += mupdf.font_is_bold( span.m_internal.font) * mupdf.TEXT_FONT_BOLD
+    mat = trace_device.ptm
+    ctm_rot = mupdf.mfz_concat(ctm, trace_device.rot)
+    mat = mupdf.mfz_concat(mat, ctm_rot)
+
+    if trace_device.linewidth > 0L
+        linewidth = trace_device.linewidth
+    else:
+        linewidth = fsize * 0.05
+    last_adv = 0
+
+    # walk through characters of span
+    dir = mupdf.mfz_normalize_vector(dir)
+    rot = mupdf.mfz_make_matrix(dir.x, dir.y, -dir.y, dir.x, 0, 0)
+    if dir.x == -1: # left-right flip
+        rot.d = 1
+
+    chars = []
+    for i in range( span.m_internal.len):
+        adv = 0
+        if span.m_internal.items[i].gid >= 0:
+            adv = mupdf.advance_glyph( span.m_internal.font, span.m_internal.items[i].gid, span.m_internal.wmode)
+        adv *= fsize
+        last_adv = adv
+        if span.m_internal.items[i].ucs == 32:
+            space_adv = adv
+        char_orig = mupdf.mfz_make_point(span.m_internal.items[i].x, span.m_internal.items[i].y)
+        char_orig.y = trace_device.ptm.f - char_orig.y
+        char_orig = mupdf.mfz_transform_point(char_orig, mat)
+        m1 = mupdf.mfz_make_matrix(1, 0, 0, 1, -char_orig.x, -char_orig.y)
+        m1 = mupdf.mfz_concat(m1, rot)
+        m1 = mupdf.mfz_concat(m1, mupdf.Matrix(1, 0, 0, 1, char_orig.x, char_orig.y))
+        x0 = char_orig.x
+        x1 = x0 + adv
+        if dir.x == 1 and span.m_internal.trm.d < 0:    # up-down flip
+            y0 = char_orig.y + dscsize
+            y1 = char_orig.y + ascsize
+        else:
+            y0 = char_orig.y - ascsize
+            y1 = char_orig.y - dscsize
+        char_bbox = mupdf.mfz_make_rect(x0, y0, x1, y1)
+        char_bbox = mupdf.mfz_transform_rect(char_bbox, m1)
+        chars.append(
+                (
+                    span.m_internal.items[i].ucs,
+                    span.m_internal.items[i].gid,
+                    (
+                        char_orig.x,
+                        char_orig.y,
+                    )
+                    (
+                        char_bbox.x0,
+                        char_bbox.y0,
+                        char_bbox.x1,
+                        char_bbox.y,
+                    )
+                )
+                )
+        if i > 0:
+            span_bbox = mupdf.mfz_union_rect(span_bbox, char_bbox)
+        else:
+            span_bbox = char_bbox
+    if not space_adv:
+        if not mono:
+            c, out_font = mupdf.mfz_encode_character_with_fallback( span.m_internal.font, 32, 0, 0)
+            space_adv = mupdf.advance_glyph(
+                    span.m_internal.font,
+                    c,
+                    span.m_internal.wmode,
+                    )
+            space_adv *= fsize
+            if not space_adv:
+                space_adv = last_adv
+        else:
+            space_adv = last_adv    # for mono fonts this suffices
+
+    # make the span dictionary
+    span_dict = dict()
+    span_dict[ 'dir' = JM_py_from_point(dir)
+    span_dict[ dictkey_font] =fontname
+    span_dict[ dictkey_wmode = span.m_internal.wmode
+    span_dict[ dictkey_flags] =fflags
+    span_dict[ "bidi_lvl"] =span.m_internal.bidi_level
+    span_dict[ "bidi_dir"] = span.m_internal.markup_dir
+    span_dict[ dictkey_ascender] = asc
+    span_dict[ dictkey_descender] = dsc
+    if colorspace.m_internal:
+            mupdf.mfz_convert_color( colorspace, color, mupdf.mfz_device_rgb(), rgb, None, fz_default_color_params)
+            span_dict[ dictkey_colorspace] = 3
+            span_dict[ dictkey_color] = rgb[0], rgb[1], rgb[2]
+    else:
+            span_dict[ dictkey_colorspace] = 1
+            span_dict[ dictkey_color] =1
+    span_dict[ dictkey_size] = fsize
+    span_dict[ "opacity"] = alpha
+    span_dict[ "linewidth"] =linewidth
+    span_dict[ "spacewidth"] = space_adv
+    span_dict[ dictkey_type] =type
+    span_dict[ dictkey_chars] = chars
+    span_dict[ dictkey_bbox] = JM_py_from_rect(span_bbox)
+    span_dict[ "seqno"] = seqno
+    out.append( span_dict)
+
+
 def jm_tracedraw_color(colorspace, color):
     if colorspace:
         #mupdf.mfz_convert_color( colorspace, color, fz_device_rgb(ctx),
@@ -14889,26 +15144,23 @@ def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, c
     even_odd = True if even_odd else False
     try:
         out = dev.out
-        trace_device.pathdict = dict()
-        trace_device.pathrect = mupdf.Rect(mupdf.Rect.Fixed_INFINITE)
-        trace_device.pathfactor = 1
-        if abs(ctm.a) == abs(ctm.d):
-            trace_device.pathfactor = abs(ctm.a)
         trace_device.ctm = ctm  # fz_concat(ctm, trace_device_ptm);
-        trace_device.pathdict[ dictkey_items] = []
+        path_type = trace_device.FILL_PATH
+        jm_tracedraw_path( dev, path)
+        if trace_device.pathdict is None:
+            return
+        item_count = len(trace_device.pathdict[ dictkey_items])
+        if item_count == 0:
+            return
         trace_device.pathdict[ dictkey_type] ="f"
         trace_device.pathdict[ "even_odd"] = even_odd
         trace_device.pathdict[ "fill_opacity"] = alpha
         trace_device.pathdict[ "closePath"] = False
         trace_device.pathdict[ "fill"] = jm_tracedraw_color( colorspace, color)
-        jm_tracedraw_path( dev, path)
         trace_device.pathdict[ dictkey_rect] = JM_py_from_rect(trace_device.pathrect)
-        item_count = len(trace_device.pathdict[ dictkey_items])
-        if item_count == 0:
-            return
         trace_device.pathdict[ "seqno"] = dev.seqno
-        dev.seqno += 1
         jm_append_merge(out)
+        dev.seqno += 1
     except Exception as e:
         jlib.log(jlib.exception_info())
         raise
@@ -15008,15 +15260,25 @@ def jm_tracedraw_path(dev, path):
 
         def closepath(self):    # trace_close().
             try:
-                if not jm_checkrect():
+                if trace_device.linecount == 3:
+                    jm_checkrect()
+                else:
                     trace_device.pathdict[ "closePath"] = True
             except Exception as e:
                 jlib.log( jlib.exception_info())
                 raise
 
     try:
+        trace_device.pathrect = mupdf.Rect( mupdf.Rect.Fixed_INFINITE)
+        trace_device.linecount = 0
+        trace_device.lastpoint = mupdf.Point( 0, 0)
+        trace_device.pathdict = dict()
+        trace_device.pathdict[ dictkey_items] = []
         walker = Walker()
         mupdf.mfz_walk_path( mupdf.Path(mupdf.keep_path(path)), walker, walker.m_internal)
+        # Check if any items were added ...
+        if not trace_device.pathdict[ dictkey_items]:
+            trace_device.pathdict.clear()
     except Exception:
         jlib.log(jlib.exception_info())
         raise
@@ -15025,38 +15287,41 @@ def jm_tracedraw_path(dev, path):
 def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, color_params):
     try:
         out = dev.out
-        trace_device.pathdict = dict()
-        trace_device.pathrect = mupdf.Rect(mupdf.Rect.Fixed_INFINITE)
-        trace_device.pathfactor = 1
+        dev.pathfactor = 1
         if abs(ctm.a) == abs(ctm.d):
             trace_device.pathfactor = abs(ctm.a)
-        trace_device.device_ctm = ctm  # fz_concat(ctm, trace_device_ptm);
-        trace_device.pathdict[ dictkey_items] = []
-        trace_device.pathdict[ dictkey_type] = "s"
-        trace_device.pathdict[ "stroke_opacity"] = alpha
-        trace_device.pathdict[ "color"] = jm_tracedraw_color( colorspace, color)
-        trace_device.pathdict[ dictkey_width] = trace_device.pathfactor * stroke.linewidth
-        trace_device.pathdict[ "lineCap"] = (stroke.start_cap, stroke.dash_cap, stroke.end_cap)
-        trace_device.pathdict[ "lineJoin"] = trace_device.pathfactor * stroke.linejoin
-        trace_device.pathdict[ "closePath"] = False
+        trace_device.ctm = ctm  # fz_concat(ctm, trace_device_ptm);
+        path_type = trace_device.STROKE_PATH;
 
-        if stroke.dash_len:
+        jm_tracedraw_path( dev, path)
+        if not trace_device.pathdict:
+            return
+        dev_pathdict[ dictkey_type] = 's'
+        dev_pathdict[ 'stroke_opacity' = alpha
+        dev_pathdict[ 'color', jm_tracedraw_color( colorspace, color)
+        dev_pathdict[ dictkey_width] = dev_pathfactor * stroke.linewidth
+        dev_pathdict[ 'lineCap'] = (
+                stroke.m_internal.start_cap,
+                stroke.m_internal.dash_cap,
+                stroke.m_internal.end_cap,
+                )
+        dev_pathdict[ 'lineJoin'] = trace_device.pathfactor * stroke.m_internal.linejoin
+        dev_pathdict[ 'closePath'] = False
+
+        if (stroke.m_inernal.dash_len:
             buff = mupdf.mfz_new_buffer( 50)
             mupdf.mfz_append_string( buff, "[ ")
-            for i in range( stroke.dash_len):
-                mupdf.mfz_append_printf( buff, "%g ", trace_device.pathfactor * stroke.dash_list[i])
-            mupdf.mfz_append_printf( buff, "] %g", trace_device.pathfactor * stroke.dash_phase)
-            trace_device.pathdict[ "dashes"] = JM_EscapeStrFromBuffer( buff)
-        else:
-            trace_device.pathdict[ "dashes"] =  "[] 0"
-        jm_tracedraw_path( dev, path)
-        trace_device.pathdict[ dictkey_rect] = JM_py_from_rect(trace_device.pathrect)
-        item_count = len( trace_device.pathdict[ dictkey_items])
-        if item_count == 0:
-            return
-        trace_device.pathdict[ "seqno"] = dev.seqno
-        dev.seqno += 1
+            for i in range( stroke.m_internal.dash_len):
+                mupdf.mfz_append_printf( buff, '%g ', dev_pathfactor * stroke.m_internal.dash_list[i])
+            mupdf.mfz_append_printf( buff, '] %g', dev_pathfactor * stroke.m_internal.dash_phase)
+            dev_pathdict[ 'dashes'] = buff
+        else
+            dev_pathdict[ 'dashes'] = '[] 0'
+        dev_pathdict[ dictkey_rect] = JM_py_from_rect(dev_pathrect)
+        dev_pathdict[ 'seqno'] = dev.seqno
         jm_append_merge(out)
+        dev.seqno += 1
+    
     except Exception:
         jlib.log(jlib.exception_info())
         raise
@@ -15068,8 +15333,8 @@ def jm_tracedraw_stroke_text(dev, text, stroke, ctm, colorspace, color, alpha, c
     dev.seqno += 1
 
 
-def jm_trace_device_linewidth(dev, path, stroke_state, matrix, colorspace, color, alpha, color_params):
-    trace.linewidth = stroke.linewidth
+def jm_dev_linewidth(dev, path, stroke, matrix, colorspace, color, alpha, color_params):
+    trace_device.linewidth = stroke.m_internal.linewidth
     jm_increase_seqno(dev)
 
 
