@@ -18,6 +18,7 @@ import tempfile
 
 import fitz
 
+TESSDATA_PREFIX = os.environ.get("TESSDATA_PREFIX")
 point_like = "point_like"
 rect_like = "rect_like"
 matrix_like = "matrix_like"
@@ -33,6 +34,30 @@ OptSeq = typing.Optional[typing.Sequence]
 """
 This is a collection of functions to extend PyMupdf.
 """
+
+# some special geometry objects
+def EMPTY_RECT():
+    return Rect(mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT)
+
+
+def INFINITE_RECT():
+    return Rect(mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT)
+
+
+def EMPTY_IRECT():
+    return IRect(mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT)
+
+
+def INFINITE_IRECT():
+    return IRect(mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT)
+
+
+def INFINITE_QUAD():
+    return INFINITE_RECT().quad
+
+
+def EMPTY_QUAD():
+    return EMPTY_RECT().quad
 
 
 def write_text(page: fitz.Page, **kwargs) -> None:
@@ -132,7 +157,6 @@ def show_pdf_page(*args, **kwargs) -> int:
     keep_proportion = bool(kwargs.get("keep_proportion", True))
     rotate = float(kwargs.get("rotate", 0))
     oc = int(kwargs.get("oc", 0))
-    reuse_xref = int(kwargs.get("reuse_xref", 0))
     clip = kwargs.get("clip")
 
     def calc_matrix(sr, tr, keep=True, rotate=0):
@@ -175,12 +199,8 @@ def show_pdf_page(*args, **kwargs) -> int:
     if not doc.is_pdf or not src.is_pdf:
         raise ValueError("not a PDF")
 
-    rect = page.rect & rect  # intersect with page rectangle
     if rect.is_empty or rect.is_infinite:
         raise ValueError("rect must be finite and not empty")
-
-    if reuse_xref > 0:
-        warnings.warn("ignoring 'reuse_xref'", DeprecationWarning)
 
     while pno < 0:  # support negative page numbers
         pno += src.page_count
@@ -396,8 +416,12 @@ def search_for(*args, **kwargs) -> list:
     if clip != None:
         clip = fitz.Rect(clip)
     flags = kwargs.get(
-        "flags", fitz.TEXT_DEHYPHENATE | fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES
-    )
+            "flags",
+            fitz.TEXT_DEHYPHENATE
+                | fitz.TEXT_PRESERVE_WHITESPACE
+                | fitz.TEXT_PRESERVE_LIGATURES
+                | TEXT_MEDIABOX_CLIP,
+            )
 
     fitz.CheckParent(page)
     tp = textpage
@@ -417,7 +441,11 @@ def search_page_for(
     text: str,
     quads: bool = False,
     clip: rect_like = None,
-    flags: int = fitz.TEXT_DEHYPHENATE | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_PRESERVE_WHITESPACE,
+    flags: int = fitz.TEXT_DEHYPHENATE
+            | fitz.TEXT_PRESERVE_LIGATURES
+            | fitz.TEXT_PRESERVE_WHITESPACE
+            | TEXT_MEDIABOX_CLIP
+            ,
     textpage: fitz.TextPage = None,
 ) -> list:
     """Search for a string on a page.
@@ -462,8 +490,11 @@ def get_text_blocks(
     fitz.CheckParent(page)
     if flags is None:
         flags = (
-            fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_IMAGES | fitz.TEXT_PRESERVE_LIGATURES
-        )
+                fitz.TEXT_PRESERVE_WHITESPACE
+                    | fitz.TEXT_PRESERVE_IMAGES
+                    | fitz.TEXT_PRESERVE_LIGATURES
+                    | fitz.TEXT_MEDIABOX_CLIP
+                )
     tp = textpage
     if tp is None:
         tp = page.get_textpage(clip=clip, flags=flags)
@@ -492,7 +523,7 @@ def get_text_words(
     """
     fitz.CheckParent(page)
     if flags is None:
-        flags = fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES
+        flags = fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_MEDIABOX_CLIP
     tp = textpage
     if tp is None:
         tp = page.get_textpage(clip=clip, flags=flags)
@@ -557,8 +588,10 @@ def get_textpage_ocr(
         full: (bool) whether to OCR the full page image, or only its images (default)
     """
     fitz.CheckParent(page)
-    # if OCR for the full page, OCR its pixmap @ desired dpi
-    if full is True:
+    if not TESSDATA_PREFIX:
+        raise RuntimeError("No OCR support: TESSDATA_PREFIX not set")
+
+    def full_ocr(page, dpi, language, flags):
         zoom = dpi / 72
         mat = fitz.Matrix(zoom, zoom)
         pix = page.get_pixmap(matrix=mat)
@@ -572,22 +605,41 @@ def get_textpage_ocr(
         tpage.parent = weakref.proxy(page)
         return tpage
 
-    # for partial OCR, make a normal textpage, then extend it with text that
+    # if OCR for the full page, OCR its pixmap @ desired dpi
+    if full is True:
+        return full_ocr(page, dpi, language, flags)
+
+    # For partial OCR, make a normal textpage, then extend it with text that
     # is OCRed from each image.
+    # Because of this, we need the images flag bit set ON.
     tpage = page.get_textpage(flags=flags)
-    for block in page.get_text("dict")["blocks"]:
-        if block["type"] != 1:
+    for block in page.get_text("dict", flags=fitz.TEXT_PRESERVE_IMAGES)["blocks"]:
+        if block["type"] != 1:  # only look at images
             continue
-        pix = fitz.Pixmap(block["image"])  # get image pixmap
-        imgdoc = fitz.Document("pdf", pix.pdfocr_tobytes())  # pdf with OCRed page
-        imgpage = imgdoc.load_page(0)  # read image as a page
-        pix = None
-        # compute matrix to transform coordinates back to that of 'page'
-        imgrect = imgpage.rect  # page size of image PDF
-        shrink = fitz.Matrix(1 / imgrect.width, 1 / imgrect.height)
-        mat = shrink * block["transform"]
-        imgpage.extend_textpage(tpage, flags=0, matrix=mat)
-        imgdoc.close()
+        bbox = fitz.Rect(block["bbox"])
+        if bbox.width <= 3 or bbox.height <= 3:  # ignore tiny stuff
+            continue
+        try:
+            pix = fitz.Pixmap(block["image"])  # get image pixmap
+            if pix.n - pix.alpha != 3:  # we need to convert this to RGB!
+                pix = fitz.Pixmap(csRGB, pix)
+            if pix.alpha:  # must remove alpha channel
+                pix = fitz.Pixmap(pix, 0)
+            imgdoc = fitz.Document(
+                "pdf", pix.pdfocr_tobytes(language=language)
+            )  # pdf with OCRed page
+            imgpage = imgdoc.load_page(0)  # read image as a page
+            pix = None
+            # compute matrix to transform coordinates back to that of 'page'
+            imgrect = imgpage.rect  # page size of image PDF
+            shrink = fitz.Matrix(1 / imgrect.width, 1 / imgrect.height)
+            mat = shrink * block["transform"]
+            imgpage.extend_textpage(tpage, flags=0, matrix=mat)
+            imgdoc.close()
+        except RuntimeError:
+            tpage = None
+            print("Falling back to full page OCR")
+            return full_ocr(page, dpi, language, flags)
 
     return tpage
 
@@ -708,7 +760,7 @@ def get_text(
     if option not in formats:
         option = "text"
     if flags is None:
-        flags = fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES
+        flags = fitz.TEXT_PRESERVE_WHITESPACE | fitz.TEXT_PRESERVE_LIGATURES | fitz.TEXT_MEDIABOX_CLIP
         if formats[option] == 1:
             flags |= fitz.TEXT_PRESERVE_IMAGES
 
@@ -779,18 +831,25 @@ def get_page_text(
     """
     return doc[pno].get_text(option, clip=clip, flags=flags, sort=sort)
 
-def get_pixmap(page: fitz.Page, **kw) -> fitz.Pixmap:
+def get_pixmap(page: fitz.Page, *args, **kw) -> fitz.Pixmap:
     """Create pixmap of page.
 
-    Args:
+    Keyword args:
         matrix: fitz.Matrix for transformation (default: fitz.Identity).
+        dpi: desired dots per inch. If given, matrix is ignored.
         colorspace: (str/fitz.Colorspace) cmyk, rgb, gray - case ignored, default fitz.csRGB.
         clip: (irect-like) restrict rendering to this area.
         alpha: (bool) whether to include alpha channel
         annots: (bool) whether to also render annotations
     """
+    if args:
+        raise ValueError("method accepts keywords only")
     fitz.CheckParent(page)
     matrix = kw.get("matrix", fitz.Identity)
+    dpi = kw.get("dpi", None)
+    if dpi:
+        zoom = dpi / 72
+        matrix = fitz.Matrix(zoom, zoom)
     colorspace = kw.get("colorspace", fitz.csRGB)
     clip = kw.get("clip")
     alpha = bool(kw.get("alpha", False))
@@ -809,6 +868,8 @@ def get_pixmap(page: fitz.Page, **kw) -> fitz.Pixmap:
     dl = page.get_displaylist(annots=annots)
     pix = dl.get_pixmap(matrix=matrix, colorspace=colorspace, alpha=alpha, clip=clip)
     dl = None
+    if dpi:
+        pix.set_dpi(dpi, dpi)
     return pix
 
 
@@ -1119,26 +1180,21 @@ def set_metadata(doc: fitz.Document, m: dict) -> None:
         info_xref = 0
     else:
         info_xref = int(temp.replace("0 R", ""))
-    if m == {} and info_xref == 0:
+    
+    if m == {} and info_xref == 0:  # nothing to do
         return
 
-    if info_xref == 0:
-        info_xref = doc.get_new_xref()  # get a new xref
+    if info_xref == 0:  # no prev metadata: get new xref
+        info_xref = doc.get_new_xref()
         doc.update_object(info_xref, "<<>>")  # fill it with empty object
         doc.xref_set_key(-1, "Info", "%i 0 R" % info_xref)
-    elif m == {}:
+    elif m == {}:  # remove existing metadata
         doc.xref_set_key(-1, "Info", "null")
+        return
 
-    for v in keymap.values():
-        if v == None:
-            continue
-        doc.xref_set_key(info_xref, v, "null")
-    for k in m.keys():
-        if keymap[k] == None:
-            continue
-        pdf_key = keymap[k]
-        val = m[k]
-        if not bool(val) or not type(val) is str or val == "none":
+    for key, val in [(k, v) for k, v in m.items() if keymap[k] != None]:
+        pdf_key = keymap[key]
+        if not bool(val) or val in ("none", "null"):
             val = "null"
         else:
             val = fitz.get_pdf_str(val)
@@ -4166,8 +4222,8 @@ def fill_textbox(
         right_to_left: (bool) indicate right-to-left language.
     """
     rect = fitz.Rect(rect)
-    if rect.is_empty or rect.is_infinite:
-        raise ValueError("fill rect must be finite and not empty.")
+    if rect.is_empty:
+        raise ValueError("fill rect must not empty.")
     if type(font) is not fitz.Font:
         font = fitz.Font("helv")
 
@@ -4272,7 +4328,7 @@ def fill_textbox(
         for line in text:
             textlines.extend(line.splitlines())
 
-    max_lines = int((rect.y1 - pos.y) / LINEHEIGHT)
+    max_lines = int((rect.y1 - pos.y) / LINEHEIGHT) + 1
 
     new_lines = []  # the final list of textbox lines
     no_justify = []  # no justify for these line numbers
@@ -4331,8 +4387,11 @@ def fill_textbox(
             raise ValueError(msg)
 
     start = fitz.Point()
-    for i, (line, tl) in enumerate(new_lines):
-        if i > max_lines:  # do not exceed space
+    no_justify += [len(new_lines) - 1]  # no justifying of last line
+    for i in range(max_lines):
+        try:
+            line, tl = new_lines.pop(0)
+        except IndexError:
             break
 
         if right_to_left:  # Arabic, Hebrew
@@ -4341,11 +4400,7 @@ def fill_textbox(
         if i == 0:  # may have different start for first line
             start = pos
 
-        if (
-            align == fitz.TEXT_ALIGN_JUSTIFY
-            and i not in no_justify + [len(new_lines) - 1]
-            and tl < std_width
-        ):
+        if align == fitz.TEXT_ALIGN_JUSTIFY and i not in no_justify and tl < std_width:
             output_justify(start, line)
             start.x = std_start
             start.y += LINEHEIGHT
@@ -4358,7 +4413,7 @@ def fill_textbox(
         start.x = std_start
         start.y += LINEHEIGHT
 
-    return new_lines[i + 1 :]  # return non-written lines
+    return new_lines  # return non-written lines
 
 
 # ------------------------------------------------------------------------
@@ -4819,12 +4874,14 @@ def recover_bbox_quad(line_dir: tuple, span: dict, bbox: tuple) -> fitz.Quad:
     The bbox may be any of the resp. tuples occurring inside the given span.
 
     Args:
-        line_dir: (tuple) 'line["dir"]' of the owning line.
-        span: (dict) the span.
+        line_dir: (tuple) 'line["dir"]' of the owning line or None.
+        span: (dict) the span. May be from get_texttrace() method.
         bbox: (tuple) the bbox of the span or any of its characters.
     Returns:
         The quad which is wrapped by the bbox.
     """
+    if line_dir == None:
+        line_dir = span["dir"]
     cos, sin = line_dir
     bbox = fitz.Rect(bbox)  # make it a rect
     if fitz.TOOLS.set_small_glyph_heights():  # ==> just fontsize as height
@@ -4939,9 +4996,11 @@ def recover_span_quad(line_dir: tuple, span: dict, chars: list = None) -> fitz.Q
     Returns:
         fitz.Quad covering selected characters.
     """
+    if line_dir == None:  # must be a span from get_texttrace()
+        line_dir = span["dir"]
     if chars == None:  # no sub-selection
         return recover_quad(line_dir, span)
-    if not hasattr(span, "chars"):
+    if not "chars" in span.keys():
         raise ValueError("need 'rawdict' option to sub-select chars")
 
     q0 = recover_char_quad(line_dir, span, chars[0])  # quad of first char
@@ -4977,13 +5036,19 @@ def recover_char_quad(line_dir: tuple, span: dict, char: dict) -> fitz.Quad:
     Returns:
         The quadrilateral envelopping the character.
     """
+    if line_dir == None:
+        line_dir = span["dir"]
     if type(line_dir) is not tuple or len(line_dir) != 2:
         raise ValueError("bad line dir argument")
     if type(span) is not dict:
         raise ValueError("bad span argument")
-    if type(char) is not dict:
+    if type(char) is dict:
+        bbox = Rect(char["bbox"])
+    elif type(char) is tuple:
+        bbox = Rect(char[3])
+    else:
         raise ValueError("bad span argument")
-    bbox = fitz.Rect(char["bbox"])
+    
     return recover_bbox_quad(line_dir, span, bbox)
 
 
@@ -5196,7 +5261,7 @@ def subset_fonts(doc: fitz.Document) -> None:
                 font_ext = f[1]  # font file extension
                 basename = f[3]  # font basename
 
-                if font_ext not in (  # supported by fontTools
+                if font_ext not in (  # skip if not supported by fontTools
                     "otf",
                     "ttf",
                     "woff",
@@ -5290,3 +5355,43 @@ def subset_fonts(doc: fitz.Document) -> None:
         new_fontsize += len(new_buffer)
 
     return old_fontsize - new_fontsize
+
+
+# -------------------------------------------------------------------
+# Copy XREF object to another XREF
+# -------------------------------------------------------------------
+def xref_copy(doc: Document, source: int, target: int, *, keep: list = None) -> None:
+    """Copy a PDF dictionary object to another one given their xref numbers.
+
+    Args:
+        doc: PDF document object
+        source: source xref number
+        target: target xref number, the xref must already exist
+        keep: an optional list of 1st level keys in target that should not be
+              removed before copying.
+    Notes:
+        This works similar to the copy() method of dictionaries in Python. The
+        source may be a stream object.
+    """
+    if doc.xref_is_stream(source):
+        # read new xref stream, maintaining compression
+        stream = doc.xref_stream_raw(source)
+        doc.update_stream(
+            target,
+            stream,
+            compress=False,  # keeps source compression
+            new=True,  # in case target is no stream
+        )
+
+    # empty the target completely, observe exceptions
+    if keep is None:
+        keep = []
+    for key in doc.xref_get_keys(target):
+        if key in keep:
+            continue
+        doc.xref_set_key(target, key, "null")
+    # copy over all source dict items
+    for key in doc.xref_get_keys(source):
+        item = doc.xref_get_key(source, key)
+        doc.xref_set_key(target, key, item[1])
+    return None
