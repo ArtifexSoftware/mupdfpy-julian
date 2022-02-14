@@ -289,6 +289,8 @@ def insert_image(page, rect, **kwargs):
     Returns:
         xref (int) of inserted image. Re-use as argument for multiple insertions.
     """
+    import jlib
+    jlib.log( ' ')
     fitz.CheckParent(page)
     doc = page.parent
     if not doc.is_pdf:
@@ -308,6 +310,7 @@ def insert_image(page, rect, **kwargs):
         "width",
         "xref",
     }
+    jlib.log( ' ')
     s = set(kwargs.keys()).difference(valid_keys)
     if s != set():
         raise ValueError("bad key argument(s) %s" % s)
@@ -327,6 +330,7 @@ def insert_image(page, rect, **kwargs):
     if xref == 0 and (bool(filename) + bool(stream) + bool(pixmap) != 1):
         raise ValueError("xref=0 needs exactly one of filename, pixmap, stream")
 
+    jlib.log( ' ')
     if filename:
         if type(filename) is str:
             pass
@@ -337,6 +341,7 @@ def insert_image(page, rect, **kwargs):
         else:
             raise ValueError("bad filename")
 
+    jlib.log( ' ')
     if filename and not os.path.exists(filename):
         raise FileNotFoundError("No such file: '%s'" % filename)
     elif stream and type(stream) not in (bytes, bytearray, io.BytesIO):
@@ -360,6 +365,7 @@ def insert_image(page, rect, **kwargs):
     clip = r * ~page.transformation_matrix
 
     # Create a unique image reference name.
+    jlib.log( ' ')
     ilst = [i[7] for i in doc.get_page_images(page.number)]
     ilst += [i[1] for i in doc.get_page_xobjects(page.number)]
     ilst += [i[4] for i in doc.get_page_fonts(page.number)]
@@ -371,7 +377,7 @@ def insert_image(page, rect, **kwargs):
         _imgname = n + str(i)  # try new name
 
     digests = doc.InsertedImages
-
+    jlib.log( ' ')
     xref, digests = page._insert_image(
         filename=filename,
         pixmap=pixmap,
@@ -389,9 +395,11 @@ def insert_image(page, rect, **kwargs):
         _imgname=_imgname,
         digests=digests,
     )
+    jlib.log( ' ')
     if digests != None:
         doc.InsertedImages = digests
 
+    jlib.log( ' ')
     return xref
 
 
