@@ -1,5 +1,5 @@
 # ------------------------------------------------------------------------
-# Copyright 2020-2021, Harald Lieder, mailto:harald.lieder@outlook.com
+# Copyright 2020-2022, Harald Lieder, mailto:harald.lieder@outlook.com
 # License: GNU AFFERO GPL 3.0, https://www.gnu.org/licenses/agpl-3.0.html
 #
 # Part of "PyMuPDF", a Python binding for "MuPDF" (http://mupdf.com), a
@@ -444,7 +444,7 @@ def search_page_for(
     flags: int = fitz.TEXT_DEHYPHENATE
             | fitz.TEXT_PRESERVE_LIGATURES
             | fitz.TEXT_PRESERVE_WHITESPACE
-            | TEXT_MEDIABOX_CLIP
+            | fitz.TEXT_MEDIABOX_CLIP
             ,
     textpage: fitz.TextPage = None,
 ) -> list:
@@ -5360,7 +5360,7 @@ def subset_fonts(doc: fitz.Document) -> None:
 # -------------------------------------------------------------------
 # Copy XREF object to another XREF
 # -------------------------------------------------------------------
-def xref_copy(doc: Document, source: int, target: int, *, keep: list = None) -> None:
+def xref_copy(doc: fitz.Document, source: int, target: int, *, keep: list = None) -> None:
     """Copy a PDF dictionary object to another one given their xref numbers.
 
     Args:
