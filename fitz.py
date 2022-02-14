@@ -11871,7 +11871,7 @@ def JM_cropbox(page_obj):
                 mupdf.mpdf_dict_get_inheritable(page_obj, PDF_NAME('CropBox'))
                 )
     if mupdf.mfz_is_infinite_rect(cropbox) or mupdf.mfz_is_empty_rect(cropbox):
-        return mediabox
+        cropbox = mediabox
     y0 = mediabox.y1 - cropbox.y1
     y1 = mediabox.y1 - cropbox.y0
     cropbox.y0 = y0
@@ -13456,7 +13456,7 @@ def JM_new_tracetext_device(out):
 
 def JM_norm_rotation(rotate):
     '''
-    # return normalized /Rotate value
+    # return normalized /Rotate value:one of 0, 90, 180, 270
     '''
     while rotate < 0:
         rotate += 360
@@ -13483,14 +13483,18 @@ def JM_outline_xrefs(obj, xrefs):
         return xrefs
     thisobj = obj
     while thisobj.m_internal:
-        xrefs.append( mupdf.mpdf_to_num(thisobj))
-        first = mupdf.mpdf_dict_get(thisobj, PDF_NAME('First')) # try go down
-        if first.m_internal:
-            xrefs = JM_outline_xrefs(first, xrefs)
-        thisobj = mupdf.mpdf_dict_get(thisobj, PDF_NAME('Next'))    # try go next
-        parent = mupdf.mpdf_dict_get(thisobj, PDF_NAME('Parent'))   # get parent
-        if not thisobj.m_internal:
-            thisobj = parent    # goto parent if no next
+        newxref = mupdf.mpdf_to_num( thisobj)
+        if newxref in xrefs or mupdf.mpdf_dict_get( thisobj, PDF_NAME('Type')):
+            # circular ref or top of chain: terminate
+            break
+        xrefs.append( newxref)
+        first = mupdf.mpdf_dict_get( thisobj, PDF_NAME('First'))    # try go down
+        if mupdf.mpdf_is_dict( first):
+            xrefs = JM_outline_xrefs( first, xrefs)
+        thisobj = mupdf.mpdf_dict_get( thisobj, PDF_NAME('Next'))   # try go next
+        parent = mupdf.mpdf_dict_get( thisobj, PDF_NAME('Parent'))  # get parent
+        if not mupdf.mpdf_is_dict( thisobj):
+            thisobj = parent
     return xrefs
 
 
@@ -14536,7 +14540,7 @@ def args_match(args, *types):
 
 def calc_image_matrix(width, height, tr, rotate, keep):
     '''
-    # compute image isnertion matrix
+    # compute image insertion matrix
     '''
     trect = JM_rect_from_py(tr);
     rot = mupdf.mfz_rotate(rotate)
@@ -16409,17 +16413,15 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
         PDF_NAME('Rotate'),
         PDF_NAME('UserUnit'),
         ]
-    n = len(known_page_objs)  # number of list elements
     page_ref = mupdf.mpdf_lookup_page_obj(doc_src, page_from)
-    mupdf.mpdf_flatten_inheritable_page_items(page_ref)
 
     # make new page dict in dest doc
     page_dict = mupdf.mpdf_new_dict(doc_des, 4)
     mupdf.mpdf_dict_put(page_dict, PDF_NAME('Type'), PDF_NAME('Page'))
 
     # copy objects of source page into it
-    for i in range(n):
-        obj = mupdf.mpdf_dict_get(page_ref, known_page_objs[i])
+    for i in range( len(known_page_objs)):
+        obj = mupdf.mpdf_dict_get_inheritable( page_ref, known_page_objs[i])
         if obj.m_internal:
             mupdf.mpdf_dict_put( page_dict, known_page_objs[i], mupdf.mpdf_graft_mapped_object(graft_map, obj))
 
@@ -16438,6 +16440,9 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
                 if mupdf.mpdf_name_eq( subtype, PDF_NAME('Link')):
                     continue
                 if mupdf.mpdf_name_eq( subtype, PDF_NAME('Popup')):
+                    continue
+                if mupdf.mpdf_name_eq( subtype, PDF_NAME('Widget')):
+                    mupdf.mfz_warn( "skipping widget annotation")
                     continue
                 mupdf.mpdf_dict_del( o, PDF_NAME('Popup'))
                 mupdf.mpdf_dict_del( o, PDF_NAME('P'))
