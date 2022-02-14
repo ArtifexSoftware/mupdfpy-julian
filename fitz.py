@@ -13099,6 +13099,7 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
     char_list = None
     span_list = []
     mupdf.mfz_clear_buffer(buff)
+    span_rect = mupdf.Rect(mupdf.Rect.Fixed_EMPTY)
     line_rect = mupdf.Rect(mupdf.Rect.Fixed_EMPTY)
 
     class char_style:
@@ -13136,16 +13137,15 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
         style.size = ch.m_internal.size
         style.flags = flags
         style.font = JM_font_name(mupdf.Font(mupdf.keep_font(ch.m_internal.font)))
+        style.color = ch.m_internal.color
         style.asc = JM_font_ascender(mupdf.Font(mupdf.keep_font(ch.m_internal.font)))
         style.desc = JM_font_descender(mupdf.Font(mupdf.keep_font(ch.m_internal.font)))
-        style.color = ch.m_internal.color
 
         if (style.size != old_style.size
                 or style.flags != old_style.flags
                 or style.color != old_style.color
                 or style.font != old_style.font
                 ):
-            # style changed -> make new span
             if old_style.size >= 0:
                 # not first one, output previous
                 if raw:
@@ -13160,8 +13160,7 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
                 span[dictkey_origin] = JM_py_from_point(span_origin)
                 span[dictkey_bbox] = JM_py_from_rect(span_rect)
                 line_rect = mupdf.mfz_union_rect(line_rect, span_rect)
-                if not mupdf.mfz_is_empty_rect(span_rect):
-                    span_list.append(span)
+                span_list.append( span)
                 span = None
 
             span = dict()
@@ -13185,12 +13184,9 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
             span_origin = origin
 
         span_rect = mupdf.mfz_union_rect(span_rect, r)
-        if origin.y > span_origin.y:
-            span_origin.y = origin.y
 
         if raw: # make and append a char dict
             char_dict = dict()
-
             char_dict[dictkey_origin] = ch.m_internal.origin
             char_dict[dictkey_bbox] = JM_py_from_rect(r)
 
@@ -13221,7 +13217,6 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
         line_dict[dictkey_spans] = span_list
     else:
         line_dict[dictkey_spans] = span_list
-    # stop-trace
     return line_rect
 
 
@@ -13721,8 +13716,6 @@ def JM_print_stext_page_as_text(out, page):
                 last_char = 0
                 for ch in line:
                     chbbox = JM_char_bbox(line, ch)
-                    if mupdf.mfz_is_empty_rect(chbbox):
-                        continue
                     if (mupdf.mfz_is_infinite_rect(rect)
                             or mupdf.mfz_contains_rect(rect, chbbox)
                             ):
