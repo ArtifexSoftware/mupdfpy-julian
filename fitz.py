@@ -6720,7 +6720,6 @@ class Page:
             page = mupdf.Page(page)
         assert isinstance(page, mupdf.Page), f'self.this={self.this}'
         rc = []
-        trace_device.dev_linewidth = 0
         prect = mupdf.mfz_bound_page(page)
         trace_device.ptm = mupdf.mfz_make_matrix(1, 0, 0, -1, 0, prect.y1)
         dev = JM_new_tracedraw_device(rc)
@@ -6773,37 +6772,29 @@ class Page:
         It also adds default items that are missing in original path types.
         """
         allkeys = (
-                ("closePath", False),
-                ("fill", None),
-                ("color", None),
-                ("width", 0),
-                ("lineCap", [0]),
-                ("lineJoin", 0),
-                ("dashes", "[] 0"),
-                ("stroke_opacity", 1),
-                ("fill_opacity", 1),
-                ("even_odd", True),
-                )
+                ("closePath", False), ("fill", None),
+                ("color", None), ("width", 0), ("lineCap", [0]),
+                ("lineJoin", 0), ("dashes", "[] 0"), ("stroke_opacity", 1),
+                ("fill_opacity", 1), ("even_odd", True),
+            )
         val = self.get_cdrawings()
         paths = []
         for path in val:
             npath = path.copy()
             npath["rect"] = Rect(path["rect"])
-            if scissor:
-                npath["scissor"] = Rect(scissor)
             items = path["items"]
             newitems = []
             for item in items:
                 cmd = item[0]
                 rest = item[1:]
-                if  cmd == 're':
-                    item = ('re', Rect(rest[0]), rest[1])
-                elif cmd == 'qu':
-                    item = ('qu', Quad(rest[0]))
+                if  cmd == "re":
+                    item = ("re", Rect(rest[0]), rest[1])
+                elif cmd == "qu":
+                    item = ("qu", Quad(rest[0]))
                 else:
                     item = tuple([cmd] + [Point(i) for i in rest])
                 newitems.append(item)
-            npath['items'] = newitems
+            npath["items"] = newitems
             for k, v in allkeys:
                 npath[k] = npath.get(k, v)
             paths.append(npath)
@@ -11575,7 +11566,7 @@ def JM_char_quad(line, ch):
     font = mupdf.Font(mupdf.keep_font(ch.m_internal.font))
     asc = JM_font_ascender(font)
     dsc = JM_font_descender(font)
-    fsize = ch.size;
+    fsize = ch.m_internal.size;
     asc_dsc = asc - dsc + FLT_EPSILON
     if asc_dsc >= 1 and small_glyph_heights == 0:   # no problem
         return mupdf.Quad(ch.m_internal.quad)
@@ -11700,7 +11691,7 @@ def JM_choice_options(annot):
                 opts.append(val)
         return opts
 
-    opts = mupdf.mpdf_choice_widget_options( annot, 0)
+    opts = pdf_choice_widget_options( annot, 0)
     n = len( opts)
     if n == 0:
         return  # wrong widget type
@@ -17247,6 +17238,11 @@ class TOOLS:
 
         return 1, ()
 
+    @staticmethod
+    def _is_point_in_rect( p, r):
+        #return _fitz.Tools__is_point_in_rect(self, p, r)
+        return mupdf.mfz_is_point_inside_rect( JM_point_from_py(p), JM_rect_from_py(r))        
+    
     @staticmethod
     def _le_annot_parms(annot, p1, p2, fill_color):
         """Get common parameters for making annot line end symbols.
