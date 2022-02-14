@@ -420,7 +420,7 @@ def search_for(*args, **kwargs) -> list:
             fitz.TEXT_DEHYPHENATE
                 | fitz.TEXT_PRESERVE_WHITESPACE
                 | fitz.TEXT_PRESERVE_LIGATURES
-                | TEXT_MEDIABOX_CLIP,
+                | fitz.TEXT_MEDIABOX_CLIP,
             )
 
     fitz.CheckParent(page)
