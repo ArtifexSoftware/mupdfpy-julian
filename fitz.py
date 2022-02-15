@@ -5872,7 +5872,8 @@ class Page:
             overlay=1, rotate=0, keep_proportion=1, oc=0, width=0, height=0,
             xref=0, alpha=-1, _imgname=None, digests=None
             ):
-        jlib.log( ' ')
+        jlib.log( '{=filename pixmap stream imask clip overlay rotate keep_proportion oc width height xref alpha _imgname digests}')
+        maskbuf = mupdf.Buffer()
         page = self._pdf_page()
         # This will create an empty PdfDocument with a call to
         # pdf_new_document() then assign page.doc()'s return value to it (which
@@ -5916,6 +5917,7 @@ class Page:
 
         jlib.log( ' ')
         if do_process_pixmap:
+            jlib.log( 'do_process_pixmap')
             # process pixmap ---------------------------------
             arg_pix = pixmap.this
             w = arg_pix.w
@@ -5952,6 +5954,7 @@ class Page:
 
         jlib.log( ' ')
         if do_process_stream:
+            jlib.log( 'do_process_stream')
             # process stream ---------------------------------
             state = mupdf.Md5()
             mupdf.mfz_md5_update(state, imgbuf.m_internal.data, imgbuf.m_internal.len)
@@ -5961,6 +5964,7 @@ class Page:
             digest = state.md5_final2()
             md5_py = bytes(digest)
             temp = digests.get(md5_py, None)
+            jlib.log( '{temp=}')
             if temp is not None:
                 img_xref = temp
                 ref = mupdf.mpdf_new_indirect(page.doc(), img_xref, 0)
@@ -5975,14 +5979,14 @@ class Page:
                 h = image.h()
                 if not imask:
                     #goto have_image()
-                    do_have_image = 1
-                else:
-                    do_have_imask = 1
+                    do_have_imask = 0
 
         jlib.log( '{=do_have_imask}')
         if do_have_imask:
+            jlib.log( 'do_have_imask')
             jlib.log( ' ')
-            cbuf1 = mupdf.mfz_compressed_image_buffer(image)
+            #cbuf1 = mupdf.mfz_compressed_image_buffer(image)
+            cbuf1 = mupdf.CompressedBuffer( mupdf.compressed_image_buffer( image.m_internal))
             jlib.log( '{cbuf1.m_internal=}')
             if not cbuf1.m_internal:
                 THROWMSG("uncompressed image cannot have mask")
@@ -5992,6 +5996,7 @@ class Page:
             colorspace = image.colorspace()
             jlib.log( ' ')
             xres, yres = mupdf.mfz_image_resolution(image)
+            jlib.log( '{maskbuf.m_internal=}')
             mask = mupdf.mfz_new_image_from_buffer(maskbuf)
             jlib.log( ' ')
             zimg = mupdf.mfz_new_image_from_compressed_buffer(
@@ -6007,6 +6012,7 @@ class Page:
 
         jlib.log( ' ')
         if do_have_image:
+            jlib.log( 'do_have_image')
             ref =  mupdf.mpdf_add_image(pdf, image)
             if oc:
                 JM_add_oc_object(pdf, ref, oc)
@@ -6016,6 +6022,7 @@ class Page:
 
         jlib.log( ' ')
         if do_have_xref:
+            jlib.log( 'do_have_xref')
             resources = mupdf.mpdf_dict_get_inheritable(page.obj(), PDF_NAME('Resources'))
             if not resources.m_internal:
                 resources = mupdf.mpdf_dict_put_dict(page.obj(), PDF_NAME('Resources'), 2)
@@ -6032,7 +6039,7 @@ class Page:
             mupdf.mfz_append_string(nres, s)
             JM_insert_contents(pdf, page.obj(), nres, overlay)
 
-        jlib.log( ' ')
+        jlib.log( 'end')
         if rc_digest:
             return img_xref, digests
         else:
