@@ -5978,6 +5978,10 @@ class Page:
 
         if do_have_imask:
             #jlib.log( 'do_have_imask')
+            # mupdf.CompressedBuffer is not copyable, so
+            # mupdf.mfz_compressed_image_buffer() does not work - it cannot
+            # return by value. So we need to construct locally from a raw
+            # fz_compressed_buffer.
             #cbuf1 = mupdf.mfz_compressed_image_buffer(image)
             cbuf1 = mupdf.CompressedBuffer( mupdf.compressed_image_buffer( image.m_internal))
             if not cbuf1.m_internal:
