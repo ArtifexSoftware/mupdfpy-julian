@@ -6,6 +6,7 @@ License:
     SPDX-License-Identifier: GPL-3.0-only
 '''
 
+import atexit
 import base64
 import binascii
 import gzip
@@ -2550,8 +2551,7 @@ class Document:
             raise ValueError("bad page number(s)")
         frozen_numbers = frozenset(numbers)
         toc = self.get_toc()
-        xrefs = self.get_outline_xrefs()
-        for i, xref in enumerate(xrefs):
+        for i, xref in enumerate(self.get_outline_xrefs()):
             if toc[i][2] - 1 in frozen_numbers:
                 self._remove_toc_item(xref)  # remove target in PDF object
 
@@ -3707,10 +3707,8 @@ class Document:
         if page_id not in self:
             raise ValueError("page id not in document")
         #return _fitz.Document_page_number_from_location(self, page_id)
-        this_doc = self.this
-        page_n = -1
         loc = mupdf.mfz_make_location(page_id[0], page_id[1])
-        page_n = mupdf.mfz_page_number_from_location(this_doc, loc)
+        page_n = mupdf.mfz_page_number_from_location( self.this, loc)
         return page_n
 
     def page_xref(self, pno):
@@ -7523,12 +7521,14 @@ class Pixmap:
     def _getImageData(self, format):
         return _fitz.Pixmap__getImageData(self, format)
 
+    @property
     def samples_mv(self):
         #return _fitz.Pixmap__samples_mv(self)
         raw_data = self.this.samples()
         raw_len = self.this.stride() * self.this.h()
         return raw_data, raw_len
 
+    @property
     def samples_ptr(self):
         #return _fitz.Pixmap__samples_ptr(self)
         raw_data = self.this.samples()
@@ -13599,7 +13599,7 @@ def JM_outline_xrefs(obj, xrefs):
     thisobj = obj
     while thisobj.m_internal:
         newxref = mupdf.mpdf_to_num( thisobj)
-        if newxref in xrefs or mupdf.mpdf_dict_get( thisobj, PDF_NAME('Type')):
+        if newxref in xrefs or mupdf.mpdf_dict_get( thisobj, PDF_NAME('Type')).m_internal:
             # circular ref or top of chain: terminate
             break
         xrefs.append( newxref)
@@ -17697,6 +17697,29 @@ import fitz_utils as utils
 
 mupdf.set_warning_callback(JM_mupdf_warning)
 mupdf.set_error_callback(JM_mupdf_error)
+
+# If there are pending warnings when we exit, we end up in this sequence:
+#
+#   atexit()
+#   -> mupdf::internal_thread_state::~internal_thread_state()
+#   -> fz_drop_context()
+#   -> fz_flush_warnings()
+#   -> SWIG Director code
+#   -> Python calling JM_mupdf_warning().
+#
+# Unfortunately this causes a SEGV, seemingly because the SWIG Director code has
+# already been torn down.
+#
+# So we use a Python atexit handler to explicitly call fz_flush_warnings();
+# this appears to happen early enough for the Director machinery to still
+# work. So in the sequence above, fz_flush_warnings() will find that there are
+# no pending warnings and will not attempt to call JM_mupdf_warning().
+#
+def _atexit():
+    #jlib.log( '_atexit() called')
+    mupdf.flush_warnings()
+    #jlib.log( '_atexit() returning')
+atexit.register( _atexit)
 
 # Use utils.*() fns for some class methods.
 #
