@@ -7467,10 +7467,13 @@ class Pixmap:
                     THROWMSG("bad image data")
                 img = mupdf.mfz_new_image_from_buffer(res)
 
+            # Original code passed null for subarea and ctm, but that's not
+            # possible with MuPDF's python bindings. The equivalent is an
+            # infinite rect and identify matrix scaled by img.w() and img.h().
             pm, w, h = mupdf.mfz_get_pixmap_from_image(
                     img,
                     mupdf.Irect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT),
-                    mupdf.Matrix(),
+                    mupdf.Matrix( img.w(), 0, 0, img.h(), 0, 0),
                     )
             xres, yres = img.image_resolution()
             pm.xres = xres
@@ -7496,8 +7499,8 @@ class Pixmap:
                 THROWMSG("not an image");
             img = mupdf.mpdf_load_image(pdf, ref)
             # Original code passed null for subarea and ctm, but that's not
-            # possible with MuPDF's python bindings, so instead we pass an
-            # infinite rect and identify matrix.
+            # possible with MuPDF's python bindings. The equivalent is an
+            # infinite rect and identify matrix scaled by img.w() and img.h().
             pix, w, h = mupdf.mfz_get_pixmap_from_image(
                     img,
                     mupdf.Irect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT),
@@ -7807,18 +7810,10 @@ class Pixmap:
             output: (str) only use to overrule filename extension. Default is PNG.
                     Others are PNM, PGM, PPM, PBM, PAM, PSD, PS.
         """
-        valid_formats = {
-                "png": 1,
-                "pnm": 2,
-                "pgm": 2,
-                "ppm": 2,
-                "pbm": 2,
-                "pam": 3,
-                "tga": 4,
-                "tpic": 4,
-                "psd": 5,
-                "ps": 6,
-                }
+        jlib.log( '{=filename output}')
+        valid_formats = {"png": 1, "pnm": 2, "pgm": 2, "ppm": 2, "pbm": 2,
+                         "pam": 3, "tga": 4, "tpic": 4,
+                         "psd": 5, "ps": 6}
         if type(filename) is str:
             pass
         elif hasattr(filename, "absolute"):
@@ -7982,7 +7977,13 @@ class Pixmap:
     @property
     def size(self):
         """Pixmap size."""
-        return _fitz.Pixmap_size(self)
+        #return _fitz.Pixmap_size(self)
+        # fz_pixmap_size() is not publically visible, so we implement it
+        # ourselves. fixme: we don't add on sizeof(fz_pixmap).
+        #
+        #return mupdf.mfz_pixmap_size( self.this)
+        pm = self.this
+        return pm.n() * pm.w() * pm.h()
 
     @property
     def stride(self):
