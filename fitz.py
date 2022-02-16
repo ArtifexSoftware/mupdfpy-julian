@@ -4512,19 +4512,20 @@ class Font:
     def flags(self):
         #return _fitz.Font_flags(self)
         f = mupdf.mfz_font_flags(self.this)
-        if not f.m_internal:
+        if not f:
             return
+        assert isinstance( f, mupdf.fz_font_flags_t)
         return {
-                "mono":         f.m_internal.is_mono,
-                "serif":        f.m_internal.is_serif,
-                "bold":         f.m_internal.is_bold,
-                "italic":       f.m_internal.is_italic,
-                "substitute":   f.m_internal.ft_substitute,
-                "stretch":      f.m_internal.ft_stretch,
-                "fake-bold":    f.m_internal.fake_bold,
-                "fake-italic":  f.m_internal.fake_italic,
-                "opentype":     f.m_internal.has_opentype,
-                "invalid-bbox": f.m_internal.invalid_bbox,
+                "mono":         f.is_mono,
+                "serif":        f.is_serif,
+                "bold":         f.is_bold,
+                "italic":       f.is_italic,
+                "substitute":   f.ft_substitute,
+                "stretch":      f.ft_stretch,
+                "fake-bold":    f.fake_bold,
+                "fake-italic":  f.fake_italic,
+                "opentype":     f.has_opentype,
+                "invalid-bbox": f.invalid_bbox,
                 }
 
     def glyph_advance(self, chr_, language=None, script=0, wmode=0, small_caps=0):
@@ -4587,8 +4588,9 @@ class Font:
     def is_writable(self):
         #return _fitz.Font_is_writable(self)
         font = self.this
+        #jlib.log( '{=type(font)}')
         if ( mupdf.mfz_font_t3_procs(font)
-                or mupdf.mfz_font_flags(font).m_internal.ft_substitute
+                or mupdf.font_flags(font.m_internal).ft_substitute
                 or not mupdf.mpdf_font_writing_supported(font)
                 ):
             return False
@@ -6967,15 +6969,14 @@ class Page:
         rc = []
         dev = JM_new_tracetext_device(rc)
         prect = mupdf.mfz_bound_page(page)
-        trace_device_rot = mupdf.Matrix()
-        trace_device_ptm = mupdf.mfz_make_matrix(1, 0, 0, -1, 0, prect.y1)
+        trace_device.rot = mupdf.Matrix()
+        trace_device.ptm = mupdf.mfz_make_matrix(1, 0, 0, -1, 0, prect.y1)
         mupdf.mfz_run_page(page, dev, mupdf.Matrix(), mupdf.Cookie())
         mupdf.mfz_close_device(dev)
 
         if old_rotation != 0:
             self.set_rotation(old_rotation)
         return rc
-
 
     def get_xobjects(self):
         """List of xobjects defined in the page object."""
@@ -7810,7 +7811,6 @@ class Pixmap:
             output: (str) only use to overrule filename extension. Default is PNG.
                     Others are PNM, PGM, PPM, PBM, PAM, PSD, PS.
         """
-        jlib.log( '{=filename output}')
         valid_formats = {"png": 1, "pnm": 2, "pgm": 2, "ppm": 2, "pbm": 2,
                          "pam": 3, "tga": 4, "tpic": 4,
                          "psd": 5, "ps": 6}
@@ -13365,6 +13365,7 @@ def JM_merge_resources( page, temp_res):
     Returns the next available numbers n, m for objects /Alp<n>, /F<m>.
     '''
     # page objects /Resources, /Resources/ExtGState, /Resources/Font
+    jlib.log( '{=type(page.obj()) type(PDF_NAME("Resources"))}')
     resources = mupdf.mpdf_dict_get(page.obj(), PDF_NAME('Resources'))
     main_extg = mupdf.mpdf_dict_get(resources, PDF_NAME('ExtGState'))
     main_fonts = mupdf.mpdf_dict_get(resources, PDF_NAME('Font'))
