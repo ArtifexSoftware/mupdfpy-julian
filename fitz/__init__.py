@@ -5621,7 +5621,6 @@ class Page:
         annot = mupdf.mpdf_create_annot(page, mupdf.PDF_ANNOT_REDACT)
         q = JM_quad_from_py(quad)
         r = mupdf.mfz_rect_from_quad(q)
-
         # TODO calculate de-rotated rect
         mupdf.mpdf_set_annot_rect(annot, r)
         if fill:
@@ -13844,6 +13843,10 @@ def JM_py_from_rect(r):
 def JM_quad_from_py(r):
     if isinstance(r, mupdf.Quad):
         return r
+    if isinstance( r, Rect):
+        r = mupdf.Rect( r.x0, r.y0, r.x1, r.y1)
+    if isinstance( r, mupdf.Rect):
+        return mupdf.mfz_quad_from_rect( r)
     q = mupdf.mfz_make_quad(0, 0, 0, 0, 0, 0, 0, 0)
     p = [0,0,0,0]
     if not r or not isinstance(r, (tuple, list)) or len(r) != 4:
