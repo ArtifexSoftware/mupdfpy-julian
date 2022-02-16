@@ -13,6 +13,7 @@ import gzip
 import hashlib
 import inspect
 import math
+import os
 import sys
 import textwrap
 import traceback
@@ -135,7 +136,7 @@ class Annot:
         #return _fitz.Annot__setAP(self, ap, rect)
         try:
             annot = self.this
-            apobj = mupdf.mpdf_dict_getl(annot.obj(), PDF_NAME('AP'), PDF_NAME('N'))
+            apobj = mupdf.mpdf_dict_getl(annot.annot_obj(), PDF_NAME('AP'), PDF_NAME('N'))
             if not apobj.m_internal:
                 THROWMSG("annot has no AP/N object")
             if not mupdf.mpdf_is_stream(apobj):
@@ -143,9 +144,9 @@ class Annot:
             res = JM_BufferFromBytes(ap)
             if not res.m_internal:
                 THROWMSG("invalid /AP stream argument")
-            JM_update_stream(annot.page().doc(), apobj, res, 1)
+            JM_update_stream(annot.annot_page().doc(), apobj, res, 1)
             if rect:
-                bbox = mupdf.mpdf_dict_get_rect(annot.obj(), PDF_NAME('Rect'))
+                bbox = mupdf.mpdf_dict_get_rect(annot.annot_obj(), PDF_NAME('Rect'))
                 mupdf.mpdf_dict_put_rect(apobj, PDF_NAME('BBox'), bbox)
         except Exception:
             return
@@ -199,8 +200,8 @@ class Annot:
             return True
 
         try:    # create or update /ExtGState
-            ap = mupdf.pdf_dict_getl(
-                    annot.annot.obj(),
+            ap = mupdf.mpdf_dict_getl(
+                    annot.annot_obj(),
                     mupdf.PDF_ENUM_NAME_AP,
                     mupdf.PDF_ENUM_NAME_N
                     )
@@ -211,7 +212,7 @@ class Annot:
 
             if not resources.m_internal:    # no Resources yet: make one
                 resources = ap.dict_put_dict(mupdf.PDF_ENUM_NAME_Resources, 2)
-            alp0 = annot.page().doc().new_dict(3)
+            alp0 = annot.annot_page().doc().new_dict(3)
             if opacity >= 0 and opacity < 1:
                 alp0.dict_put_real(mupdf.PDF_ENUM_NAME_CA, opacity)
                 alp0.dict_put_real(mupdf.PDF_ENUM_NAME_ca, opacity)
@@ -229,6 +230,7 @@ class Annot:
 
         except Exception as e:
             print( f'could not set opacity or blend mode: {e}', file=sys.stderr)
+            raise
             return False
 
         return True
@@ -2692,7 +2694,7 @@ class Document:
         '''
         Get a font by xref.
         '''
-        jlib.log( '{=xref info_only}')
+        #jlib.log( '{=xref info_only}')
         pdf = self._this_as_pdf_document()
         ASSERT_PDF(pdf)
         len_ = 0;
@@ -6543,10 +6545,11 @@ class Page:
         valid_boxes = ("CropBox", "BleedBox", "TrimBox", "ArtBox")
         if boxtype not in valid_boxes:
             raise ValueError("bad boxtype")
-        mb = self.mediabox
+        mb = Rect( self.mediabox)
         rect = Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
         if rect.is_infinite or rect.is_empty:
             raise ValueError("rect must be finite and not empty")
+        jlib.log( '{=mb rect type(mb) type(rect)}')
         if rect not in mb:
             raise ValueError("rect not in mediabox")
         doc.xref_set_key(self.xref, boxtype, "[%g %g %g %g]" % tuple(rect))
@@ -17518,9 +17521,9 @@ class TOOLS:
             this_annot = annot.this
             assert isinstance(this_annot, mupdf.PdfAnnot)
             try:
-                da = mupdf.mpdf_dict_get_inheritable(this_annot.obj(), PDF_NAME('DA'))
+                da = mupdf.mpdf_dict_get_inheritable(this_annot.annot_obj(), PDF_NAME('DA'))
                 if not da.m_internal:
-                    trailer = mupdf.mpdf_trailer(this_annot.page().doc())
+                    trailer = mupdf.mpdf_trailer(this_annot.annot_page().doc())
                     da = mupdf.ppdf_dict_getl(trailer,
                             PDF_NAME('Root'),
                             PDF_NAME('AcroForm'),
@@ -17630,9 +17633,9 @@ class TOOLS:
         try:
             this_annot = annot.this
             assert isinstance(this_annot, mupdf.PdfAnnot)
-            mupdf.mpdf_dict_put_text_string(this_annot.obj(), PDF_NAME('DA'), da_str)
-            mupdf.mpdf_dict_del(this_annot.obj(), PDF_NAME('DS'))    # /* not supported */
-            mupdf.mpdf_dict_del(this_annot.obj(), PDF_NAME('RC'))    # /* not supported */
+            mupdf.mpdf_dict_put_text_string(this_annot.annot_obj(), PDF_NAME('DA'), da_str)
+            mupdf.mpdf_dict_del(this_annot.annot_obj(), PDF_NAME('DS'))    # /* not supported */
+            mupdf.mpdf_dict_del(this_annot.annot_obj(), PDF_NAME('RC'))    # /* not supported */
             mupdf.mpdf_dirty_annot(this_annot)
         except Exception:
             return
