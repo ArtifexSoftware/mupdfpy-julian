@@ -7325,9 +7325,10 @@ class Pixmap:
         if 0:
             pass
 
-        elif args_match(args, mupdf.Colorspace, mupdf.Rect, int):
+        elif args_match(args, (fitz.Colorspace, mupdf.Colorspace), (mupdf.Rect, tuple), (int, bool)):
             # create empty pixmap with colorspace and IRect
-            pm = mupdf.mfz_new_pixmap_with_bbox(args[0], JM_irect_from_py(args[1]), mupdf.Separations(0), args[2])
+            cs, rect, alpha = args
+            pm = mupdf.mfz_new_pixmap_with_bbox(cs, JM_irect_from_py(rect), mupdf.Separations(0), alpha)
             self.this = pm
 
         elif args_match(args, mupdf.Colorspace, mupdf.Pixmap):
@@ -7512,7 +7513,10 @@ class Pixmap:
             self.this = pix
 
         else:
-            raise Exception(f'Unrecognised args for constructing Pixmap: {args}')
+            text = 'Unrecognised args for constructing Pixmap:\n'
+            for arg in args:
+                text += f'    {type(arg)}: {arg}\n'
+            raise Exception( text)
 
     def __len__(self):
         return self.size
@@ -7938,13 +7942,13 @@ class Pixmap:
         """Set color of pixel (x, y)."""
         #return _fitz.Pixmap_set_pixel(self, x, y, color)
         pm = self.this
-        if not INRANGE(x, 0, pm.w() - 1) or not INRANGE(y, 0, pm.h() - 1):
+        if not _INRANGE(x, 0, pm.w() - 1) or not _INRANGE(y, 0, pm.h() - 1):
             THROWMSG("outside image")
         n = pm.n()
         c = list()
         for j in range(n):
             i = color[j]
-            if not INRANGE(i, 0, 255):
+            if not _INRANGE(i, 0, 255):
                 THROWMSG(gctx, "bad color sequence");
             c.append( ord(i))
         stride = mupdf.mfz_pixmap_stride( pm)
@@ -7960,10 +7964,13 @@ class Pixmap:
         c = []
         for j in range(n):
             i = color[j]
-            if not INRANGE(i, 0, 255):
+            #if isinstance( i, str):
+            #    i = ord( i)
+            if not _INRANGE(i, 0, 255):
                 THROWMSG("bad color component")
-            c.append( ord(i))
-        i = JM_fill_pixmap_rect_with_color(pm, c, JM_irect_from_py(bbox))
+            c.append(i)
+        bbox = JM_irect_from_py(bbox)
+        i = JM_fill_pixmap_rect_with_color(pm, c, bbox)
         rc = bool(i)
         return rc
 
@@ -13026,19 +13033,58 @@ def JM_insert_font(pdf, bfname, fontfile, fontbuffer, set_simple, idx, wmode, se
     return value
 
 
+def JM_invert_pixmap_rect( dest, b):
+    '''
+    invert a rectangle - also supports non-alpha pixmaps
+    '''
+    assert isinstance( dest, mupdf.Pixmap)
+    assert isinstance( b, mupdf.Irect)
+    b = mupdf.mfz_intersect_irect(b, mupdf.mfz_pixmap_bbox( dest))
+    w = b.x1 - b.x0
+    y = b.y1 - b.y0
+    if w <= 0 or y <= 0:
+        return 0
+
+    destspan = dest.stride()
+    destp = destspan * (b.y0 - dest.y()) + dest.n() * (b.x0 - dest.x())
+    n0 = dest.n() - dest.alpha()
+    alpha = dest.alpha()
+    while 1:
+        s = destp
+        for x in range( w):
+            for i in range( n0):
+                ss = dest.samples_get( s)
+                ss = 255 - ss
+                dest.samples_set( s, ss)
+                s += 1
+            if alpha:
+                ss = dest.samples_get( s)
+                ss += 1
+                dest.samples_set( s, ss)
+        destp += destspan
+        y -= 1
+        if y == 0:
+            break
+    return 1
+
+
 def JM_irect_from_py(r):
     '''
     PySequence to fz_irect. Default: infinite irect
     '''
-    if isinstance(r, (muopdf.IRect, mupdf.Rect)):
+    if isinstance(r, mupdf.Irect):
+        return r
+    if isinstance(r, fitz.IRect):
+        r = mupdf.Irect( r.x0, r.y0, r.x1, r.y1)
         return r
     if isinstance(r, Rect):
-        return mupdf.mfz_make_irect(r.x0, r.y0, r.x1, r.y1)
+        ret = mupdf.mfz_make_irect(r.x0, r.y0, r.x1, r.y1)
+        return ret
     if not r or not PySequence_Check(r) or PySequence_Size(r) != 4:
-        return mupdf.Rect(mupdf.fz_infinite_irect)
+        return mupdf.Irect(mupdf.fz_infinite_irect)
     f = [0, 0, 0, 0]
     for i in range(4):
-        f[i] = JM_FLOAT_ITEM(r, i)
+        f[i] = r[i]
         if f[i] is None:
             return mupdf.Rect(mupdf.fz_infinite_irect)
         if f[i] < FZ_MIN_INF_RECT:
@@ -17696,7 +17742,7 @@ class TOOLS:
 # We cannot import utils earlier because it imports this fitz.py file itself
 # and uses some fitz.* types in function typing.
 #
-import fitz_utils as utils
+import fitz.utils
 
 mupdf.set_warning_callback(JM_mupdf_warning)
 mupdf.set_error_callback(JM_mupdf_error)
