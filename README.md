@@ -27,6 +27,7 @@ SPDX-License-Identifier: GPL-3.0-only
     # Build MuPDF Python bindings:
     cd .../mupdf && ./scripts/mupdfwrap.py -d build/shared-debug -b --python all
     
+    # Run a PyMuPDF programme:
     PYTHONPATH=.../mupdfpy:.../mupdf/build/shared-debug \
         LD_LIBRARY_PATH=.../mupdf/build/shared-debug \
         myprog.py ...
@@ -46,8 +47,7 @@ Run PyMuPDF's `py.test` tests with mupdfpy's `fitz` module, with:
 
 This assumes that:
 
-* There is a `PyMuPDF` checkout next to the `mupdfpy`
-directory.
+* There is a `PyMuPDF` checkout next to the `mupdfpy` directory.
 
 * One of the following is the case:
     * The MuPDF Python bindings are installed and can be imported with `import mupdf`.
@@ -62,25 +62,26 @@ Use the `--pymupdf` and `--mupdf` options to specify different locations, for ex
 
 ## Details:
 
-We provide a Python module called `fitz`, a drop-in replacement for PyMuPDF's
-module of the same name.
+We provide a Python package/module called `fitz`, a drop-in replacement for
+PyMuPDF's module of the same name.
 
-As of 2022-02-10, the implementation consists of two Python files:
+As of 2022-02-16, the implementation consists of these two Python files in the
+`fitz` directory:
 
-    fitz.py
-    fitz_utils.py
+    fitz/
+        __init__.py
+        utils.py
 
-`fitz.py` contains a Python implementation of PyMuPDF's internal C code. It
-also has modified versions of PyMuPDF's Python code, for example the top-level
-classes such as `fitz.Document`. It uses the MuPDF Python bindings' classes
-and functions where the PyMuPDF code called the native C MuPDF API. Much of
-the PyMuPDF naming structure is preserved, for example functions with names
-starting with `JM_` such as `JM_add_oc_object()`, and a `TOOLS` namespace
-containing functions such as `TOOLS.set_annot_stem()`.
+`fitz/__init__.py` contains most of the code. It has Python implementations of
+PyMuPDF's internal C code, and modified copies of PyMuPDF's Python code. For
+example it contains the top-level classes such as `fitz.Document`. It uses the
+MuPDF Python bindings' classes and functions where the PyMuPDF code called the
+native C MuPDF API. Much of the PyMuPDF naming structure is preserved, for
+example functions with names starting with `JM_` such as `JM_add_oc_object()`,
+and a `TOOLS` namespace containing functions such as `TOOLS.set_annot_stem()`.
 
 We also preserve PyMuPDF's alias deprecation system, albeit with a slightly
 different implementation - see `fitz.py:restore_aliases()`.
 
-`fitz_utils.py` is a copy of PyMuPDF's `fitz/utils.py` with minor
-modifications; it is renamed to `fitz_utils.py` in order to avoid it being
-imported unintentionally, but appears as `fitz.utils`.
+`fitz/utils.py` is a copy of PyMuPDF's `fitz/utils.py` with various
+modifications.
