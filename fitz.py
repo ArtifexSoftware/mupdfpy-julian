@@ -4588,7 +4588,6 @@ class Font:
     def is_writable(self):
         #return _fitz.Font_is_writable(self)
         font = self.this
-        #jlib.log( '{=type(font)}')
         if ( mupdf.mfz_font_t3_procs(font)
                 or mupdf.font_flags(font.m_internal).ft_substitute
                 or not mupdf.mpdf_font_writing_supported(font)
@@ -13365,7 +13364,6 @@ def JM_merge_resources( page, temp_res):
     Returns the next available numbers n, m for objects /Alp<n>, /F<m>.
     '''
     # page objects /Resources, /Resources/ExtGState, /Resources/Font
-    jlib.log( '{=type(page.obj()) type(PDF_NAME("Resources"))}')
     resources = mupdf.mpdf_dict_get(page.obj(), PDF_NAME('Resources'))
     main_extg = mupdf.mpdf_dict_get(resources, PDF_NAME('ExtGState'))
     main_fonts = mupdf.mpdf_dict_get(resources, PDF_NAME('Font'))
