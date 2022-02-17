@@ -16,7 +16,7 @@ import typing
 import warnings
 import tempfile
 
-import fitz
+import fitz.fitz
 
 TESSDATA_PREFIX = os.environ.get("TESSDATA_PREFIX")
 point_like = "point_like"
@@ -289,7 +289,6 @@ def insert_image(page, rect, **kwargs):
     Returns:
         xref (int) of inserted image. Re-use as argument for multiple insertions.
     """
-    import jlib
     fitz.CheckParent(page)
     doc = page.parent
     if not doc.is_pdf:
