@@ -12230,7 +12230,7 @@ def JM_font_name(font):
     assert isinstance(font, mupdf.Font)
     name = mupdf.mfz_font_name(font)
     s = name.find('+')
-    if subset_fontnames or s == -1 or s-name != 6:
+    if subset_fontnames or s == -1 or s != 6:
         return name
     return name[s + 1:]
 
@@ -13237,10 +13237,9 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
 
         if raw: # make and append a char dict
             char_dict = dict()
-            char_dict[dictkey_origin] = ch.m_internal.origin
+            char_dict[dictkey_origin] = JM_py_from_point( ch.m_internal.origin)
             char_dict[dictkey_bbox] = JM_py_from_rect(r)
-
-            char_dict[dictkey_c] = ch.m_internal.c
+            char_dict[dictkey_c] = chr(ch.m_internal.c)
 
             if char_list is None:
                 char_list = []
@@ -13273,7 +13272,9 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
 def JM_make_text_block(block, block_dict, raw, buff, tp_rect):
     line_list = []
     block_rect = mupdf.Rect(mupdf.Rect.Fixed_EMPTY)
+    #fitz.jlib.log('{block!r=}')
     for line in block:
+        #fitz.jlib.log('{line!r=}')
         if (mupdf.mfz_is_empty_rect(mupdf.mfz_intersect_rect(tp_rect, mupdf.Rect(line.m_internal.bbox)))
                 and not mupdf.mfz_is_infinite_rect(tp_rect)
                 ):
@@ -13294,6 +13295,7 @@ def JM_make_textpage_dict(tp, page_dict, raw):
     block_list = []
     tp_rect = mupdf.Rect(tp.m_internal.mediabox)
     block_n = -1
+    #fitz.jlib.log( 'JM_make_textpage_dict {=tp}')
     for block in tp:
         block_n += 1
         if (not mupdf.mfz_contains_rect(tp_rect, mupdf.Rect(block.m_internal.bbox))
