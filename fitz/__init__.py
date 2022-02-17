@@ -2847,7 +2847,7 @@ class Document:
             if (not _INRANGE(pno, 0, page_count - 1)
                     or not _INRANGE(to, -1, page_count - 1)
                     ):
-                THROWMSG(gctx, "bad page number(s)")
+                THROWMSG( "bad page number(s)")
 
             page1 = mupdf.mpdf_resolve_indirect( mupdf.mpdf_lookup_page_obj( pdf, pno))
 
@@ -3648,7 +3648,7 @@ class Document:
         page_n = -1;
         val = page_id[ 0]
         if not isinstance(val, int):
-            THROWMSG(gctx, "bad page id");
+            THROWMSG( "bad page id");
         chapter = val
         val = page_id[ 1]
         pno = val
@@ -5893,8 +5893,8 @@ class Page:
 
         if xref > 0:
             ref = mupdf.mpdf_new_indirect(pdf, xref, 0)
-            w = mupdf.mpdf_to_int( mupdf.mpdf_dict_geta(ref, PDF_NAME('Width'), PDF_NAME('W')))
-            h = mupdf.mpdf_to_int( mupdf.mpdf_dict_geta(gctx, ref, PDF_NAME('Height'), PDF_NAME('H')))
+            w = mupdf.mpdf_to_int( mupdf.mpdf_dict_geta( ref, PDF_NAME('Width'), PDF_NAME('W')))
+            h = mupdf.mpdf_to_int( mupdf.mpdf_dict_geta( ref, PDF_NAME('Height'), PDF_NAME('H')))
             if w + h == 0:
                 THROWMSG("xref is no image");
             #goto have_xref()
@@ -7948,7 +7948,7 @@ class Pixmap:
         for j in range(n):
             i = color[j]
             if not _INRANGE(i, 0, 255):
-                THROWMSG(gctx, "bad color sequence");
+                THROWMSG( "bad color sequence");
             c.append( ord(i))
         stride = mupdf.mfz_pixmap_stride( pm)
         i = stride * y + n * x
@@ -11357,11 +11357,11 @@ def JM_annot_border(annot_obj):
     style = None
     o = annot_obj.dict_get(mupdf.PDF_ENUM_NAME_Border)
     if o.is_array():
-        width = pdf_to_real(ctx, o.array_get(2))
+        width = mupdf.mpdf_to_real( o.array_get(2))
         if o.array_len() == 4:
             dash = o.array_get(3)
             for i in range(dash.array_len()):
-                val = mupdf.ppdf_to_int(ctx, dash.array_get(i))
+                val = mupdf.ppdf_to_int( dash.array_get(i))
                 dash_py.append(val)
 
     bs_o = annot_obj.dict_get(mupdf.PDF_ENUM_NAME_BS)
@@ -11644,9 +11644,9 @@ def JM_char_quad(line, ch):
     
     cwidth = quad.lr.x - quad.ll.x
     if cwidth < FLT_EPSILON:
-        glyph = mupdf.mfz_encode_character( font, ch.m_internal.c())
+        glyph = mupdf.mfz_encode_character( font, ch.m_internal.c)
         if glyph:
-            fwidth = mupdf.mfz_advance_glyph(ctx, font, glyph, line.mm_internal.wmode)
+            fwidth = mupdf.mfz_advance_glyph( font, glyph, line.m_internal.wmode)
             quad.lr.x = quad.ll.x + fwidth * fsize
             quad.ur.x = quad.lr.x
 
@@ -12491,7 +12491,7 @@ def JM_get_font(
         #goto have_file;
         font = mupdf.mfz_new_font_from_file(None, fontfile, index, 0)
         if not font.m_internal:
-            THROWMSG(ctx, "could not create font")
+            THROWMSG( "could not create font")
         return font
 
     if fontbuffer:
@@ -12499,7 +12499,7 @@ def JM_get_font(
         res = JM_BufferFromBytes(fontbuffer)
         font = mupdf.mfz_new_font_from_buffer(None, res, index, 0)
         if not font.m_internal:
-            THROWMSG(ctx, "could not create font");
+            THROWMSG( "could not create font");
         return font
 
     if ordering > -1:
@@ -12508,7 +12508,7 @@ def JM_get_font(
         if data:
             font = mupdf.mfz_new_font_from_memory(None, data, size, index, 0);
         if not font.m_internal:
-            THROWMSG(ctx, "could not create font");
+            THROWMSG( "could not create font");
         return font
 
     if fontname:
@@ -12523,7 +12523,7 @@ def JM_get_font(
         if data:
             font = mupdf.mfz_new_font_from_memory(fontname, data, size, 0, 0)
         if not font.m_internal:
-            THROWMSG(ctx, "could not create font");
+            THROWMSG( "could not create font");
         return font
 
 
@@ -15342,7 +15342,7 @@ def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, c
 # 1 - stroke text (PDF Tr 1)
 # 3 - ignore text (PDF Tr 3)
 
-def jm_tracedraw_fill_text(ctx, dev, text, ctm, colorspace, color, alpha, color_params):
+def jm_tracedraw_fill_text( dev, text, ctm, colorspace, color, alpha, color_params):
     out = dev.out
     jm_trace_text(out, text, 0, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
