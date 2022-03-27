@@ -123,7 +123,7 @@ def main():
         elif arg == '--tests':
             run_pymupdf_tests( state)
         elif arg == '--run':
-            command = state.env_vars()
+            command = state.env_vars() + ' '
             command += ' '.join( [a for a in args])
             print( f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
