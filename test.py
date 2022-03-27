@@ -115,7 +115,7 @@ class State:
         
 
 
-def run_pymupdf_tests( state):
+def run_pymupdf_tests( state, cppyy=False):
     '''
     Runs pytest in PyMuPDF/tests, using mupdfpy.
     '''
@@ -125,7 +125,12 @@ def run_pymupdf_tests( state):
     else:
         raise Exception( 'Cannot find py.test command')
     d = os.path.abspath( f'{state.pymupdf}/tests')
-    command = f'cd {d} && {state.env_vars()} {pytest} -s'
+    if cppyy:
+        subprocess.run( 'pip install cppyy', check=True, shell=1)
+        env = state.env_vars_cppyy()
+    else:
+        env = state.env_vars()
+    command = f'cd {d} && {env} {pytest} -s'
     print( f'Running: {command}', file=sys.stderr)
     sys.stderr.flush()
     subprocess.run( command, check=True, shell=1)
@@ -145,7 +150,7 @@ def main():
             state.mupdf = next( args)
         elif arg == '--pymupdf':
             state.pymupdf = next( args)
-        elif arg == '--test-cppyy':
+        elif arg == '--test-cppyy-simple':
             venv_name = 'pylocal'
             dir_mupdf = f'{state.mupdfpy}/../mupdf'
             command = ''
@@ -154,6 +159,8 @@ def main():
             command += f' python -m fitz'
             print(f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
+        elif arg == '--tests-cppyy':
+            run_pymupdf_tests( state, cppyy=True)
         elif arg == '--tests':
             run_pymupdf_tests( state)
         elif arg == '--run':
