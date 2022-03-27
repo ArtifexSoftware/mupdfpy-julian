@@ -11,6 +11,7 @@ import base64
 import binascii
 import gzip
 import hashlib
+import importlib
 import inspect
 import math
 import os
@@ -21,7 +22,14 @@ import typing
 import warnings
 import weakref
 
-import mupdf
+mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
+if mupdf_cppyy:
+    # Use cppyy bindings; experimental.
+    mupdf_cppyy = importlib.machinery.SourceFileLoader( 'mupdf_cppyy', mupdf_cppyy).load_module()
+    mupdf = mupdf_cppyy.cppyy.gbl.mupdf
+else:
+    # Use SWIG bindings.
+    import mupdf
 
 try:
     import jlib # This is .../mupdf/scripts/jlib.py
@@ -17749,8 +17757,10 @@ class TOOLS:
 #
 import fitz.utils
 
-mupdf.set_warning_callback(JM_mupdf_warning)
-mupdf.set_error_callback(JM_mupdf_error)
+# Callbacks not yet supported with cppyy.
+if not mupdf_cppyy:
+    mupdf.set_warning_callback(JM_mupdf_warning)
+    mupdf.set_error_callback(JM_mupdf_error)
 
 # If there are pending warnings when we exit, we end up in this sequence:
 #

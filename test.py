@@ -120,6 +120,17 @@ def main():
             state.mupdf = next( args)
         elif arg == '--pymupdf':
             state.pymupdf = next( args)
+        elif arg == '--test-cppyy':
+            venv_name = 'pylocal'
+            dir_mupdf = f'{state.mupdfpy}/../mupdf'
+            command = ''
+            command += f'{sys.executable} -m venv {venv_name} && . {venv_name}/bin/activate &&'
+            command += f' LD_LIBRARY_PATH={os.path.abspath(dir_mupdf)}/build/shared-release'
+            command += f' PYTHONPATH={os.path.abspath(state.mupdfpy)}'
+            command += f' MUPDF_CPPYY={os.path.abspath(dir_mupdf)}/platform/python/mupdf_cppyy.py'
+            command += f' python -m fitz'
+            print(f'Running: {command}')
+            subprocess.run( command, check=True, shell=True)
         elif arg == '--tests':
             run_pymupdf_tests( state)
         elif arg == '--run':
