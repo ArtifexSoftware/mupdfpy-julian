@@ -67,27 +67,52 @@ class State:
     Locations of PyMuPDF and mupdf directories.
     '''
     def __init__( self):
-        self.mupdfpy    = f'{__file__}/..'
-        #self.mupdf      = f'{self.mupdfpy}/../mupdf/build/shared-release'
-        self.mupdf      = None
-        self.pymupdf    = f'{self.mupdfpy}/../PyMuPDF'
+        self.mupdfpy            = f'{__file__}/..'
+        self.mupdf_dir          = f'{self.mupdfpy}/../mupdf'
+        self.mupdf_build_dir    = f'{self.mupdf_dir}/build/shared-release'
+        #self.mupdf              = None
+        self.pymupdf            = f'{self.mupdfpy}/../PyMuPDF'
     
     def env_vars( self):
         '''
-        Returns string for use as a command prefix that sets LD_LIBRARY_PATH
-        and PYTHONPATH so that Python can find the mupdf Python module and
-        mupdfpy's fitz Python module.
+        Returns shell-style environmental variables assuming Python module
+        'mupdf' is installed. I.e. we just need specify location of mupdfpy in
+        PYTHONPATH.
         '''
         ret = ''
-        if self.mupdf:
-            ret += f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath(self.mupdf)}'
-        if self.mupdfpy or self.mupdf:
+        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}'
+        return ret
+    
+    def env_vars_mupdf( self):
+        '''
+        Returns string for use as a command prefix that sets LD_LIBRARY_PATH
+        and PYTHONPATH so that Python can find the mupdf Python module in a
+        mupdf directory and mupdfpy's fitz Python module.
+        '''
+        ret = ''
+        if self.mupdf_build_dir:
+            ret += f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath(self.mupdf_build_dir)}'
+        if self.mupdfpy or self.mupdf_build_dir:
             ret += f' PYTHONPATH=$PYTHONPATH'
             if self.mupdfpy:
                 ret += f':{os.path.abspath(self.mupdfpy)}'
-            if self.mupdf:
+            if self.mupdf_build_dir:
                 ret += f':{os.path.abspath(self.mupdf)}'
         return ret
+    
+    def env_vars_cppyy( self):
+        '''
+        Returns string for use as a command prefix that sets LD_LIBRARY_PATH
+        and MUPDF_CPPYY and PYTHONPATH so that we can find mupdfpy
+        Python module, the mupdf C and C++ libraries, and the
+        mupdf/platform/python/mupdf_cppyy.py module.
+        '''
+        ret = ''
+        ret += f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath( self.mupdf_build_dir)}'
+        ret += f' MUPDF_CPPYY={os.path.abspath(self.mupdf_dir + "/platform/python/mupdf_cppyy.py")}'
+        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}'
+        return ret
+        
 
 
 def run_pymupdf_tests( state):
@@ -125,9 +150,7 @@ def main():
             dir_mupdf = f'{state.mupdfpy}/../mupdf'
             command = ''
             command += f'{sys.executable} -m venv {venv_name} && . {venv_name}/bin/activate &&'
-            command += f' LD_LIBRARY_PATH={os.path.abspath(dir_mupdf)}/build/shared-release'
-            command += f' PYTHONPATH={os.path.abspath(state.mupdfpy)}'
-            command += f' MUPDF_CPPYY={os.path.abspath(dir_mupdf)}/platform/python/mupdf_cppyy.py'
+            command += f' {state.env_vars_cppyy()}'
             command += f' python -m fitz'
             print(f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
