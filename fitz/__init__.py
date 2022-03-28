@@ -26,7 +26,33 @@ mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
 if mupdf_cppyy:
     # Use cppyy bindings; experimental.
     mupdf_cppyy = importlib.machinery.SourceFileLoader( 'mupdf_cppyy', mupdf_cppyy).load_module()
-    mupdf = mupdf_cppyy.cppyy.gbl.mupdf
+    if 1:
+        mupdf = mupdf_cppyy.cppyy.gbl.mupdf
+    else:
+        #print( f'mupdf_cppyy.cppyy.gbl.mupdf.__dir__()={mupdf_cppyy.cppyy.gbl.mupdf.__dir__(mupdf_cppyy.cppyy.gbl.mupdf)}')
+        #print( f'mupdf_cppyy.cppyy.gbl.__dir__()={mupdf_cppyy.cppyy.gbl.__dir__()}')
+        class MuPDF_Dummy:
+            pass
+        class MuPDF:
+            def __getattribute__( self, name, default=MuPDF_Dummy):
+                ret = getattr( mupdf_cppyy.cppyy.gbl.mupdf, name, MuPDF_Dummy)
+                if ret is MuPDF_Dummy:
+                    ret = getattr( mupdf_cppyy.cppyy.gbl, name, MuPDF_Dummy)
+                if ret is MuPDF_Dummy:
+                    print( f'Cannot find name={name}')
+                    if default is MuPDF_Dummy:
+                        raise AttributeError( f'Cannot find mupdf name={name}')
+                    else:
+                        return default
+                return ret
+            def __dir__( self):
+                ret = (
+                        mupdf_cppyy.cppyy.gbl.mupdf.__dir__(mupdf_cppyy.cppyy.gbl.mupdf)
+                        + mupdf_cppyy.cppyy.gbl.__dir__(mupdf_cppyy.cppyy.gbl)
+                        )
+                print( f'fitz/__init__.py: returning: {ret}')
+                return ret
+        mupdf = MuPDF()
 else:
     # Use SWIG bindings.
     import mupdf
@@ -10390,6 +10416,8 @@ if 1:
     # Import some mupdf constants
     # These don't appear to be in native fitz module?
     self = sys.modules[__name__]
+    #print( f'__name__={__name__}')
+    #print( f'self={self}')
     for name, value in inspect.getmembers(mupdf):
         if name.startswith(('PDF_', 'UCDN_SCRIPT_')):
             if name.startswith('PDF_ENUM_NAME_'):
@@ -10397,8 +10425,9 @@ if 1:
                 pass
             else:
                 assert not inspect.isroutine(value)
-                #print(f'importing {name}')
+                #print(f'fitz/__init__.py: importing {name}')
                 setattr(self, name, value)
+                #print(f'fitz/__init__.py: getattr( self, name, None)={getattr( self, name, None)}')
     # This is a macro so not preserved in mupdf C++/Python bindings.
     #
     PDF_SIGNATURE_DEFAULT_APPEARANCE = (0
@@ -10409,8 +10438,14 @@ if 1:
             | PDF_SIGNATURE_SHOW_GRAPHIC_NAME
             | PDF_SIGNATURE_SHOW_LOGO
             )
+    
+    #UCDN_SCRIPT_ADLAM = mupdf.UCDN_SCRIPT_ADLAM
+    #setattr(self, 'UCDN_SCRIPT_ADLAM', mupdf.UCDN_SCRIPT_ADLAM)
+    
     assert mupdf.UCDN_EAST_ASIAN_H == 1
     assert PDF_TX_FIELD_IS_MULTILINE == mupdf.PDF_TX_FIELD_IS_MULTILINE
+    #print( f'fitz/__init__.py: mupdf.UCDN_SCRIPT_ADLAM={mupdf.UCDN_SCRIPT_ADLAM}')
+    #print( f'fitz/__init__.py: UCDN_SCRIPT_ADLAM={UCDN_SCRIPT_ADLAM}')
     assert UCDN_SCRIPT_ADLAM == mupdf.UCDN_SCRIPT_ADLAM
     del self
 
