@@ -8,12 +8,25 @@ line.
 
 Arguments:
 
+    --env <type>
+        type:
+            'installed' (default):
+                Use installed MuPDF Python bindings, e.g. from 'pip install
+                mupdf'.
+            'mupdf':
+                Use local MuPDF Python bindings, as specified by
+                --mupdf-build-dir.
+            'cppyy':
+                Use experimental local MuPDF experimental cppyy Python
+                bindings, as specified by --mupdf and --mupdf-build-dir.
+    
     --mupdf <dir>
+        Specify location of local mupdf directory. This is used to find
+        mupdf/platform/python/mupdfwrap_cppyy.py by '--env cppyy'.
+    
+    --mupdf-build-dir <dir>
         Specify location of MuPDF library and Python files, for example:
             foo/bar/mupdf/build/shared-debug
-        
-        Default is None so we require that mupdf is installed, for example with
-        'pip install mupdf'.
     
     --pymupdf <dir>
         Specify location of PyMuPDF directory, for example:
@@ -36,6 +49,9 @@ Arguments:
         in the venv before running this command. Otherwise the system pytest
         will be used which in turn will use the system python, which won't see
         the venv's modules.
+    
+    --tests-pypy
+        Experimental. Like --tests but runs tests with pypy.
     
     --venv <name> <command>
         Run specified command in a Python virtual environment called <name> (in
@@ -70,10 +86,20 @@ class State:
         self.mupdfpy            = f'{__file__}/..'
         self.mupdf_dir          = f'{self.mupdfpy}/../mupdf'
         self.mupdf_build_dir    = f'{self.mupdf_dir}/build/shared-release'
-        #self.mupdf              = None
         self.pymupdf            = f'{self.mupdfpy}/../PyMuPDF'
+        self.env                = 'installed'
     
     def env_vars( self):
+        if self.env == 'installed':
+            return self.env_vars_installed()
+        elif self.env == 'mupdf':
+            return self.env_vars_mupdf()
+        elif self.env == 'cppyy':
+            return self.env_vars_cppyy()
+        else:
+            raise Exception( 'Unrecognised env={env}')
+    
+    def env_vars_installed( self):
         '''
         Returns shell-style environmental variables assuming Python module
         'mupdf' is installed. I.e. we just need specify location of mupdfpy in
@@ -97,7 +123,7 @@ class State:
             if self.mupdfpy:
                 ret += f':{os.path.abspath(self.mupdfpy)}'
             if self.mupdf_build_dir:
-                ret += f':{os.path.abspath(self.mupdf)}'
+                ret += f':{os.path.abspath(self.mupdf_build_dir)}'
         return ret
     
     def env_vars_cppyy( self):
@@ -115,7 +141,7 @@ class State:
         
 
 
-def run_pymupdf_tests( state, cppyy=False):
+def run_pymupdf_tests( state, pypy=False):
     '''
     Runs pytest in PyMuPDF/tests, using mupdfpy.
     '''
@@ -125,12 +151,11 @@ def run_pymupdf_tests( state, cppyy=False):
     else:
         raise Exception( 'Cannot find py.test command')
     d = os.path.abspath( f'{state.pymupdf}/tests')
-    if cppyy:
-        subprocess.run( 'pip install cppyy', check=True, shell=1)
-        env = state.env_vars_cppyy()
+    env = state.env_vars()
+    if pypy:
+        command = f'cd {d} && {env} pypy3 `which {pytest}` -s'
     else:
-        env = state.env_vars()
-    command = f'cd {d} && {env} {pytest} -s'
+        command = f'cd {d} && {env} {pytest} -s'
     print( f'Running: {command}', file=sys.stderr)
     sys.stderr.flush()
     subprocess.run( command, check=True, shell=1)
@@ -144,12 +169,22 @@ def main():
             arg = next( args)
         except StopIteration:
             break
+        
         if arg in ( '-h', '--help'):
             print( __doc__)
+        
+        elif arg == '--env':
+            state.env = next( args)
+        
         elif arg == '--mupdf':
             state.mupdf = next( args)
+        
+        elif arg == '--mupdf-build-dir':
+            state.mupdf_build_dir = next( args)
+        
         elif arg == '--pymupdf':
             state.pymupdf = next( args)
+        
         elif arg == '--test-cppyy-simple':
             venv_name = 'pylocal'
             dir_mupdf = f'{state.mupdfpy}/../mupdf'
@@ -159,22 +194,76 @@ def main():
             command += f' python -m fitz'
             print(f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
-        elif arg == '--tests-cppyy':
-            run_pymupdf_tests( state, cppyy=True)
+        
+        elif arg == '--test-cppyy-simple2':
+            # This demonstrates that cppyy allows enumeration of items in
+            # namespaces, but not of items at top-level scope.
+            #
+            # So we can enumerate the mupdf namespace, e.g. get to see find the
+            # MuPDF wrapper classes, but cannot enumerate the enums that MuPDF
+            # C API defines, such as PDF_ENUM_NAME_3D etc.
+            #
+            # https://root-forum.cern.ch/t/cppyy-gbl-and-root-namespace/34396/7
+            #
+            import cppyy
+            import inspect
+            
+            def show( namespace):
+                '''
+                Show items in <namespace> whose names do not start with an
+                underscore.
+                '''
+                print( f'{namespace}:')
+                for n, v in inspect.getmembers( namespace):
+                    if not n.startswith( '_'):
+                        print( f'    {n}={v}')
+            
+            # Create some C++ functions, enums and a namespace:
+            cppyy.cppdef('''
+                    enum { FOO };
+                    void foo() {}
+                    namespace N
+                    {
+                        enum { BAR };
+                        void bar() {}
+                    }
+                    ''')
+            
+            show( cppyy.gbl)    # Does not show FOO or foo().
+            show( cppyy.gbl.N)  # Shows BAR and bar().
+            
+            # foo() and FOO do exist if we ask for them explicitly:
+            print( f'cppyy.__version__={cppyy.__version__}')
+            print( f'cppyy.gbl.foo={cppyy.gbl.FOO}')
+            print( f'cppyy.gbl.foo={cppyy.gbl.foo}')
+            print( f'cppyy.gbl.N.bar={cppyy.gbl.N.BAR}')
+            print( f'cppyy.gbl.N.bar={cppyy.gbl.N.bar}')
+            
+            show( cppyy.gbl)    # Now shows FOO and foo().
+            
+            show( cppyy)
+        
         elif arg == '--tests':
             run_pymupdf_tests( state)
+        
+        elif arg == '--tests-pypy':
+            run_pymupdf_tests( state, pypy=True)
+        
         elif arg == '--run':
             command = state.env_vars() + ' '
             command += ' '.join( [a for a in args])
             print( f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
+        
         elif arg == '--venv':
             name = next( args)
             command = f'{sys.executable} -m venv {name} && . {name}/bin/activate && {next(args)}'
             print( f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
+        
         else:
             raise Exception( f'Unrecognised arg: {arg!r}')
+
 
 if __name__ == '__main__':
     main()
