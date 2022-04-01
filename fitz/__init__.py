@@ -791,23 +791,12 @@ class Annot:
         annot = self.this
         return JM_annot_set_border(border, annot.annot_page().doc(), annot.annot_obj())
 
-    if 0:
-        def set_colors(self, colors=None, fill=None, stroke=None):
-            """Set 'stroke' and 'fill' colors.
-
-            Use either a dict or the direct arguments.
-            """
-            CheckParent(self)
-            if type(colors) is not dict:
-                colors = {"fill": fill, "stroke": stroke}
-            assert 0, 'no Annot_set_colors'
-            return _fitz.Annot_set_colors(self, colors, fill, stroke)
-
     def set_colors(self, colors=None, stroke=None, fill=None):
         """Set 'stroke' and 'fill' colors.
 
         Use either a dict or the direct arguments.
         """
+        #return _fitz.Annot_set_colors(self, colors, fill, stroke)
         CheckParent(self)
         doc = self.parent.parent
         if type(colors) is not dict:
@@ -1445,7 +1434,7 @@ class Colorspace:
 
 class Device:
     def __init__(self, *args):
-        assert 0, '_fitz.new_Device() not found?'
+        assert 0, '_fitz.new_Device() not found in PyMuPDF?'
         this = _fitz.new_Device(*args)
         try:
             self.this.append(this)
@@ -1693,6 +1682,7 @@ class Document:
         """Add new form font."""
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
+        # fixme: not translated to python yet.
         return _fitz.Document__addFormFont(self, name, font)
 
     def _deleteObject(self, xref):
@@ -2181,6 +2171,7 @@ class Document:
         """Make an array page number -> page object."""
         if self.is_closed:
             raise ValueError("document closed")
+        # fixme: not translated to python yet.
         return _fitz.Document__make_page_map(self)
 
     def _move_copy_page(self, pno, nb, before, copy):
@@ -2303,6 +2294,7 @@ class Document:
         assert 0, f'Unrecognised type(self.this)={type(self.this)}'
 
     def _update_toc_item(self, xref, action=None, title=None, flags=0, collapse=None, color=None):
+        # fixme: not translated to python yet.
         return _fitz.Document__update_toc_item(self, xref, action, title, flags, collapse, color)
 
     @property
@@ -2310,6 +2302,7 @@ class Document:
         """Get list of field font resource names."""
         if self.is_closed:
             raise ValueError("document closed")
+        # fixme: not translated to python yet.
         return _fitz.Document_FormFonts(self)
 
     def add_layer(self, name, creator=None, on=None):
@@ -2503,6 +2496,7 @@ class Document:
         """Delete XML metadata."""
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
+        # fixme: not translated to python yet.
         return _fitz.Document_del_xml_metadata(self)
 
     def delete_page(self, pno: int =-1):
@@ -3629,6 +3623,7 @@ class Document:
             raise ValueError("document closed")
         if not self.isFormPDF:
             return None
+        # fixme: not translated to python yet.
         return _fitz.Document_need_appearances(self, value)
 
     @property
@@ -3810,6 +3805,7 @@ class Document:
         """Get PDF trailer as a string."""
         if self.is_closed:
             raise ValueError("document closed")
+        # fixme: not translated to python yet.
         return _fitz.Document_pdf_trailer(self, compressed, ascii)
 
     @property
@@ -4100,12 +4096,14 @@ class Document:
         """Set / unset OC intent configuration."""
         if self.is_closed:
             raise ValueError("document closed")
+        # fixme: not translated to python yet.
         return _fitz.Document_set_layer_ui_config(self, number, action)
 
     def set_xml_metadata(self, metadata):
         """Store XML document level metadata."""
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
+        # fixme: not translated to python yet.
         return _fitz.Document_set_xml_metadata(self, metadata)
 
     def set_language(self, language=None):
@@ -4412,19 +4410,21 @@ class Document:
         """Get decompressed xref stream."""
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
+        # fixme: not translated to python yet.
         return _fitz.Document_xref_stream(self, xref)
 
     def xref_stream_raw(self, xref):
         """Get xref stream without decompression."""
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
-
+        # fixme: not translated to python yet.
         return _fitz.Document_xref_stream_raw(self, xref)
 
     def xref_xml_metadata(self):
         """Get xref of document XML metadata."""
         if self.is_closed:
             raise ValueError("document closed")
+        # fixme: not translated to python yet.
         return _fitz.Document_xref_xml_metadata(self)
 
     outline = property(lambda self: self._outline)
@@ -4500,6 +4500,7 @@ class Font:
         return "Font('%s')" % self.name
 
     def _valid_unicodes(self, arr): # Not implemented because implementation calls FT_Get_First_Char() etc.
+        # fixme: not translated to python yet.
         return _fitz.Font__valid_unicodes(self, arr)
 
     @property
@@ -4510,6 +4511,7 @@ class Font:
 
     @property
     def bbox(self):
+        # fixme: not translated to python yet.
         val = _fitz.Font_bbox(self)
         val = Rect(val)
         return val
@@ -4581,7 +4583,7 @@ class Font:
 
     def glyph_bbox(self, chr, language=None, script=0):
         """Return the glyph bbox of a unicode (font size 1)."""
-
+        # fixme: not translated to python yet.
         val = _fitz.Font_glyph_bbox(self, chr, language, script)
         val = Rect(val)
         return val
@@ -4597,7 +4599,7 @@ class Font:
 
     def has_glyph(self, chr, language=None, script=0, fallback=0):
         """Check whether font has a glyph for this unicode."""
-
+        # fixme: not translated to python yet.
         return _fitz.Font_has_glyph(self, chr, language, script, fallback)
 
     @property
@@ -4713,9 +4715,11 @@ class Link:
         return "link on " + str(self.parent)
 
     def _border(self, doc, xref):
+        # fixme: not translated to python yet.
         return _fitz.Link__border(self, doc, xref)
 
     def _colors(self, doc, xref):
+        # fixme: not translated to python yet.
         return _fitz.Link__colors(self, doc, xref)
 
     def _erase(self):
@@ -4727,9 +4731,11 @@ class Link:
         self.thisown = False
 
     def _setColors(self, colors, doc, xref):
+        # fixme: not translated to python yet.
         return _fitz.Link__setColors(self, colors, doc, xref)
 
     def _setBorder(self, border, doc, xref):
+        # fixme: not translated to python yet.
         return _fitz.Link__setBorder(self, border, doc, xref)
 
     @property
@@ -4807,6 +4813,7 @@ class Link:
     def rect(self):
         """Rectangle ('hot area')."""
         CheckParent(self)
+        # fixme: not translated to python yet.
         val = _fitz.Link_rect(self)
         val = Rect(val)
         return val
@@ -5855,9 +5862,11 @@ class Page:
             return rc
 
     def _getDrawings(self):
+        # fixme: not translated to python yet.
         return _fitz.Page__getDrawings(self)
 
     def _get_text_page(self, clip=None, flags=0):
+        # fixme: not translated to python yet.
         val = _fitz.Page__get_text_page(self, clip, flags)
         val.thisown = True
         return val
@@ -6076,6 +6085,7 @@ class Page:
         return Annot(annot) if annot else None
 
     def _makePixmap(self, doc, ctm, cs, alpha=0, annots=1, clip=None):
+        # fixme: not translated to python yet.
         return _fitz.Page__makePixmap(self, doc, ctm, cs, alpha, annots, clip)
 
     def _pdf_page(self):
@@ -7562,6 +7572,7 @@ class Pixmap:
             return "Pixmap(%s, %s, %s)" % ('None', self.irect, self.alpha)
 
     def _getImageData(self, format):
+        # fixme: not translated to python yet.
         return _fitz.Pixmap__getImageData(self, format)
 
     @property
@@ -7835,7 +7846,7 @@ class Pixmap:
     def pixel(self, x, y):
         """Get color tuple of pixel (x, y).
         Last item is the alpha if Pixmap.alpha is true."""
-
+        # fixme: not translated to python yet.
         return _fitz.Pixmap_pixel(self, x, y)
 
     @property
@@ -9800,6 +9811,7 @@ class TextPage:
         return val
 
     def extractSelection(self, pointa, pointb):
+        # fixme: not translated to python yet.
         return _fitz.TextPage_extractSelection(self, pointa, pointb)
 
     def extractText(self, sort=False) -> str:
@@ -11518,9 +11530,9 @@ def JM_append_rune(buff, ch):
     if (ch >= 32 and ch <= 255) or ch == 10:
         mupdf.mfz_append_byte(buff, ch)
     elif ch <= 0xffff:  # 4 hex digits
-        mupdf.mfz_append_printf(buff, "\\u%04x", ch)
+        mupdf.mfz_append_string( buff, f'\\u{ch:04x}')
     else:   # 8 hex digits
-        mupdf.mfz_append_printf(buff, "\\U%08x", ch)
+        mupdf.mfz_append_string( buff, f'\\U{ch:08x}')
 
 
 def JM_append_word(lines, buff, wbbox, block_n, line_n, word_n):
@@ -15527,9 +15539,10 @@ def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, 
         if stroke.dash_len:
             buff = mupdf.mfz_new_buffer( 50)
             mupdf.mfz_append_string( buff, "[ ")
+            # fixme: this does not use fz_append_printf()'s special handling of %g etc.
             for i in range( stroke.dash_len):
-                mupdf.mfz_append_printf( buff, '%g ', trace_device.dev_pathfactor * stroke.dash_list[i])
-            mupdf.mfz_append_printf( buff, '] %g', trace_device.dev_pathfactor * stroke.dash_phase)
+                mupdf.mfz_append_string( buff, f'{trace_device.dev_pathfactor * stroke.dash_list[i]:g}')
+            mupdf.mfz_append_string( buff, f'] {trace_device.dev_pathfactor * stroke.dash_phase:g}')
             trace_device.dev_pathdict[ 'dashes'] = buff
         else:
             trace_device.dev_pathdict[ 'dashes'] = '[] 0'
