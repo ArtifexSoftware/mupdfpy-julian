@@ -41,7 +41,10 @@ Arguments:
         
         For example:
             PYTHONPATH=PySimpleGUI ./mupdfpy/test.py --mupdf mupdf/build/shared-release --run python3 PyMuPDF-Utilities/animations/morph-demo1.py
-    
+
+    --test <test-file>
+        E.g.:
+            --test test_annots.py    
     --tests
         Run PyMuPDF's py.test tests.
         
@@ -142,7 +145,7 @@ class State:
         
 
 
-def run_pymupdf_tests( state, pypy=False):
+def run_pymupdf_tests( state, testname=None, pypy=False):
     '''
     Runs pytest in PyMuPDF/tests, using mupdfpy.
     '''
@@ -157,6 +160,8 @@ def run_pymupdf_tests( state, pypy=False):
         command = f'cd {d} && {env} pypy3 `which {pytest}` -s'
     else:
         command = f'cd {d} && {env} {pytest} -s'
+    if testname:
+        command += f' {testname}'
     print( f'Running: {command}', file=sys.stderr)
     sys.stderr.flush()
     subprocess.run( command, check=True, shell=1)
@@ -248,6 +253,21 @@ def main():
             show( cppyy.gbl)    # Now shows FOO and foo().
             
             show( cppyy)
+
+        elif arg == '--test-cppyy-simple3':
+            # https://github.com/wlav/cppyy/issues/51
+            import cppyy
+            cppyy.cppdef('''
+                    #define foo() foo_()
+                    enum foo { FOO };
+                    void foo() {}
+                    void bar( enum foo f) {}
+                    ''')
+            cppyy.gbl.bar( cppyy.gbl.FOO)
+        
+        elif arg == '--test':
+            testname = next( args)
+            run_pymupdf_tests( state, testname)
         
         elif arg == '--tests':
             run_pymupdf_tests( state)
