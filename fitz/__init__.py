@@ -23,9 +23,15 @@ import warnings
 import weakref
 
 mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
-if mupdf_cppyy:
+if mupdf_cppyy is not None:
     # Use cppyy bindings; experimental.
-    mupdf_cppyy = importlib.machinery.SourceFileLoader( 'mupdf_cppyy', mupdf_cppyy).load_module()
+    print( f'MUPDF_CPPYY={mupdf_cppyy!r} so attempting to import mupdf_cppyy.')
+    print( f'PYTHONPATH={os.environ["PYTHONPATH"]}')
+    if mupdf_cppyy == '':
+        import mupdf_cppyy
+    else:
+        mupdf_cppyy = importlib.machinery.SourceFileLoader( 'mupdf_cppyy', mupdf_cppyy).load_module()
+    
     if 1:
         mupdf = mupdf_cppyy.cppyy.gbl.mupdf
     else:

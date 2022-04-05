@@ -131,12 +131,13 @@ class State:
         Returns string for use as a command prefix that sets LD_LIBRARY_PATH
         and MUPDF_CPPYY and PYTHONPATH so that we can find mupdfpy
         Python module, the mupdf C and C++ libraries, and the
-        mupdf/platform/python/mupdf_cppyy.py module.
+        build/*/mupdf_cppyy.py module.
         '''
         ret = ''
         ret += f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath( self.mupdf_build_dir)}'
-        ret += f' MUPDF_CPPYY={os.path.abspath(self.mupdf_dir + "/platform/python/mupdf_cppyy.py")}'
-        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}'
+        #ret += f' MUPDF_CPPYY={os.path.abspath(self.mupdf_dir + "/platform/python/mupdf_cppyy.py")}'
+        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}:{os.path.abspath(self.mupdf_build_dir)}'
+        ret += f' MUPDF_CPPYY='
         return ret
         
 
@@ -185,15 +186,20 @@ def main():
         elif arg == '--pymupdf':
             state.pymupdf = next( args)
         
-        elif arg == '--test-cppyy-simple':
-            venv_name = 'pylocal'
-            dir_mupdf = f'{state.mupdfpy}/../mupdf'
-            command = ''
-            command += f'{sys.executable} -m venv {venv_name} && . {venv_name}/bin/activate &&'
-            command += f' {state.env_vars_cppyy()}'
-            command += f' python -m fitz'
+        elif arg == '--cppyy-simple':
+            env = state.env_vars()
+            command = f'{env} {sys.executable} -m mupdf_cppyy'
             print(f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
+            
+            #venv_name = 'pylocal'
+            #dir_mupdf = f'{state.mupdfpy}/../mupdf'
+            #command = ''
+            #command += f'{sys.executable} -m venv {venv_name} && . {venv_name}/bin/activate &&'
+            #command += f' {state.env_vars_cppyy()}'
+            #command += f' python -m fitz'
+            #print(f'Running: {command}')
+            #subprocess.run( command, check=True, shell=True)
         
         elif arg == '--test-cppyy-simple2':
             # This demonstrates that cppyy allows enumeration of items in
