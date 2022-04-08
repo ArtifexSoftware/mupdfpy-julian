@@ -4742,7 +4742,8 @@ class Link:
         try:
             self.parent._forget_annot(self)
         except:
-            jlib.exception_info()
+            # Verbose in PyMuPDF/tests.
+            #jlib.exception_info()
             pass
         self.parent = None
         self.thisown = False
@@ -4831,7 +4832,15 @@ class Link:
         """Rectangle ('hot area')."""
         CheckParent(self)
         # fixme: not translated to python yet.
-        val = _fitz.Link_rect(self)
+        #val = _fitz.Link_rect(self)
+        
+        # utils.py:getLinkDict() appears to expect exceptions from us, so we
+        # ensure that we raise on error.
+        if not self.this or not self.this.m_internal:
+            raise Exception( 'self.this.m_internal not available')
+        assert self.this
+        assert self.this.m_internal
+        val = JM_py_from_rect( self.this.rect())
         val = Rect(val)
         return val
 
@@ -7092,7 +7101,8 @@ class Page:
             CJK_number = CJK_list_n.index(fontname)
             serif = 0
         except:
-            jlib.exception_info()
+            # Verbose in PyMuPDF/tests.
+            #jlib.exception_info()
             pass
 
         if CJK_number < 0:
@@ -7100,7 +7110,8 @@ class Page:
                 CJK_number = CJK_list_s.index(fontname)
                 serif = 1
             except:
-                jlib.exception_info()
+                # Verbose in PyMuPDF/tests.
+                #jlib.exception_info()
                 pass
 
         if fontname.lower() in fitz_fontdescriptors.keys():
@@ -11895,7 +11906,7 @@ def JM_compress_buffer(inbuffer):
             inbuffer.m_internal,
             mupdf.FZ_DEFLATE_BEST,
             )
-    jlib.log( '{=data compressed_length}')
+    #jlib.log( '{=data compressed_length}')
     if not data or compressed_length == 0:
         return None
     buf = mupdf.Buffer(mupdf.new_buffer_from_data(data, compressed_length))
@@ -11986,10 +11997,10 @@ def JM_convert_to_pdf(doc, fp, tp, rotate):
 # Create widget
 def JM_create_widget(doc, page, type, fieldname):
     old_sigflags = mupdf.mpdf_to_int(mupdf.mpdf_dict_getp(mupdf.mpdf_trailer(doc), "Root/AcroForm/SigFlags"))
-    jlib.log( '*** JM_create_widget()')
-    jlib.log( f'mupdf.mpdf_create_annot_raw={mupdf.mpdf_create_annot_raw}')
-    jlib.log( f'page={page}')
-    jlib.log( f'mupdf.PDF_ANNOT_WIDGET={mupdf.PDF_ANNOT_WIDGET}')
+    #jlib.log( '*** JM_create_widget()')
+    #jlib.log( f'mupdf.mpdf_create_annot_raw={mupdf.mpdf_create_annot_raw}')
+    #jlib.log( f'page={page}')
+    #jlib.log( f'mupdf.PDF_ANNOT_WIDGET={mupdf.PDF_ANNOT_WIDGET}')
     annot = mupdf.mpdf_create_annot_raw(page, mupdf.PDF_ANNOT_WIDGET)
     annot_obj = mupdf.mpdf_annot_obj(annot)
     try:
@@ -12650,8 +12661,9 @@ def JM_get_widget_properties(annot, Widget):
     Populate a Python Widget object with the values from a PDF form field.
     Called by "Page.firstWidget" and "Widget.next".
     '''
-    if isinstance( annot, Annot):
-        annot = annot.this
+    #jlib.log( 'type(annot)={type(annot)}')
+    #if isinstance( annot, Annot):
+    #    annot = annot.this
     annot_obj = mupdf.mpdf_annot_obj(annot)
     page = mupdf.mpdf_annot_page(annot)
     pdf = page.doc()
@@ -12666,9 +12678,9 @@ def JM_get_widget_properties(annot, Widget):
         # represented by NULL.
         setattr(mod, key, value)
 
-    jlib.log( '=== + mupdf.mpdf_widget_type(tw)')
+    #jlib.log( '=== + mupdf.mpdf_widget_type(tw)')
     field_type = mupdf.mpdf_widget_type(tw)
-    jlib.log( '=== - mupdf.mpdf_widget_type(tw)')
+    #jlib.log( '=== - mupdf.mpdf_widget_type(tw)')
     Widget.field_type = field_type
     if field_type == PDF_WIDGET_TYPE_SIGNATURE:
         if mupdf.mpdf_signature_is_signed(pdf, annot_obj):
