@@ -57,8 +57,9 @@ Arguments:
         Experimental. Like --tests but runs tests with pypy.
     
     --venv <name> <command>
-        Run specified command in a Python virtual environment called <name> (in
-        the current directory). See below for example usage.
+        Run remaining args in a new test.py invocation running in a Python
+        virtual environment called <name> (in the current directory). See below
+        for example usage.
 
 Examples:
 
@@ -79,6 +80,10 @@ import subprocess
 import shlex
 import shutil
 import sys
+
+
+def log( text):
+    print( text, file=sys.stderr)
 
 
 class State:
@@ -139,8 +144,9 @@ class State:
         ret = ''
         ret += f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath( self.mupdf_build_dir)}'
         #ret += f' MUPDF_CPPYY={os.path.abspath(self.mupdf_dir + "/platform/python/mupdf_cppyy.py")}'
-        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}:{os.path.abspath(self.mupdf_build_dir)}'
+        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}:{os.path.abspath(self.mupdf_build_dir)}:{os.path.abspath(self.mupdf_dir)}/scripts'
         ret += f' MUPDF_CPPYY='
+        ret += f' CPPYY_CRASH_QUIET=1 MUPDF_cppyy_sig_exceptions=1'
         return ret
         
 
@@ -162,7 +168,7 @@ def run_pymupdf_tests( state, testname=None, pypy=False):
         command = f'cd {d} && {env} {pytest} -s'
     if testname:
         command += f' {testname}'
-    print( f'Running: {command}', file=sys.stderr)
+    log( f'Running: {command}')
     sys.stderr.flush()
     subprocess.run( command, check=True, shell=1)
 
@@ -194,7 +200,7 @@ def main():
         elif arg == '--cppyy-simple':
             env = state.env_vars()
             command = f'{env} {sys.executable} -m mupdf_cppyy'
-            print(f'Running: {command}')
+            log( f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
             
             #venv_name = 'pylocal'
@@ -203,7 +209,7 @@ def main():
             #command += f'{sys.executable} -m venv {venv_name} && . {venv_name}/bin/activate &&'
             #command += f' {state.env_vars_cppyy()}'
             #command += f' python -m fitz'
-            #print(f'Running: {command}')
+            #log(f'Running: {command}')
             #subprocess.run( command, check=True, shell=True)
         
         elif arg == '--test-cppyy-simple2':
@@ -224,10 +230,10 @@ def main():
                 Show items in <namespace> whose names do not start with an
                 underscore.
                 '''
-                print( f'{namespace}:')
+                log( f'{namespace}:')
                 for n, v in inspect.getmembers( namespace):
                     if not n.startswith( '_'):
-                        print( f'    {n}={v}')
+                        log( f'    {n}={v}')
             
             # Create some C++ functions, enums and a namespace:
             cppyy.cppdef('''
@@ -244,11 +250,11 @@ def main():
             show( cppyy.gbl.N)  # Shows BAR and bar().
             
             # foo() and FOO do exist if we ask for them explicitly:
-            print( f'cppyy.__version__={cppyy.__version__}')
-            print( f'cppyy.gbl.foo={cppyy.gbl.FOO}')
-            print( f'cppyy.gbl.foo={cppyy.gbl.foo}')
-            print( f'cppyy.gbl.N.bar={cppyy.gbl.N.BAR}')
-            print( f'cppyy.gbl.N.bar={cppyy.gbl.N.bar}')
+            log( f'cppyy.__version__={cppyy.__version__}')
+            log( f'cppyy.gbl.foo={cppyy.gbl.FOO}')
+            log( f'cppyy.gbl.foo={cppyy.gbl.foo}')
+            log( f'cppyy.gbl.N.bar={cppyy.gbl.N.BAR}')
+            log( f'cppyy.gbl.N.bar={cppyy.gbl.N.bar}')
             
             show( cppyy.gbl)    # Now shows FOO and foo().
             
@@ -265,6 +271,92 @@ def main():
                     ''')
             cppyy.gbl.bar( cppyy.gbl.FOO)
         
+        elif arg == '--test-cppyy-simple4':
+            path = 'test-cppyy-simple4.cpp'
+            with open( path, 'w') as f:
+                f.write( '''
+                        #include <assert.h>
+                        void foo()
+                        {
+                            assert( 0);
+                        }
+                        ''')
+            e = os.system( 'c++ -shared -fPIC -W -Wall -o test-cppyy-simple4_lib.so test-cppyy-simple4.cpp')
+            assert not e
+            import ctypes
+            import traceback
+            import cppyy
+            import cppyy.ll
+            
+            cppyy.cppdef('''
+                    void foo();
+                    ''')
+            cppyy.load_library('test-cppyy-simple4_lib.so')
+            
+            with cppyy.ll.signals_as_exception():
+                
+                try:
+                    cppyy.gbl.abort()
+                except:
+                    traceback.print_exc()
+                else:
+                    assert 0
+                
+                try:
+                    cppyy.gbl.foo()
+                except:
+                    traceback.print_exc()
+                else:
+                    assert 0
+                
+                try:
+                    cppyy.gbl.foo()
+                except:
+                    traceback.print_exc()
+                else:
+                    assert 0
+            
+            log( '======= Testing out-param')
+            cppyy.cppdef('''
+                    void bar( int* out1, unsigned char** out2)
+                    {
+                        std::cerr
+                                << "bar():"
+                                << " out1=" << out1
+                                << " *out1=" << *out1
+                                << " out2=" << out2
+                                << " *out2=" << ((void*) *out2)
+                                << "\\n";
+                        *out1 = 32;
+                        *out2 = (unsigned char*) "hello world";
+                        std::cerr << "bar(): *out2=" << ((void*) *out2) << "\\n";
+                    }
+                    ''')
+            out1 = ctypes.pointer( ctypes.c_int())
+            #out2 = ctypes.pointer( ctypes.pointer( ctypes.c_byte()))
+            #out2 = ctypes.pointer( ctypes.c_byte())
+            out2 = ctypes.POINTER( ctypes.c_ubyte)()
+            #out2_ = out2()
+            
+            cppyy.gbl.bar( out1,
+                    # out2,
+                    ctypes.pointer( out2),
+                    #out2_,
+                    )
+            log( f'out1={out1} out1.contents={out1.contents} out1.contents.value={out1.contents.value}')
+            
+            log( f'out2={out2}')
+            #log( f'out2.contents={out2.contents}')
+            #log( f'out2.contents.value={out2.contents.value}')
+            
+            cppyy.gbl.bar( out1,
+                    # out2,
+                    ctypes.pointer( out2),
+                    #out2_,
+                    )
+            
+            log( 'Ok')
+        
         elif arg == '--test':
             testname = next( args)
             run_pymupdf_tests( state, testname)
@@ -278,13 +370,16 @@ def main():
         elif arg == '--run':
             command = state.env_vars() + ' '
             command += ' '.join( [a for a in args])
-            print( f'Running: {command}')
+            log( f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
         
         elif arg == '--venv':
             name = next( args)
-            command = f'{sys.executable} -m venv {name} && . {name}/bin/activate && {next(args)}'
-            print( f'Running: {command}')
+            #command = f'{sys.executable} -m venv {name} && . {name}/bin/activate && {next(args)}'
+            command = f'{sys.executable} -m venv {name} && . {name}/bin/activate && python {sys.argv[0]}'
+            for arg in args:
+                command += f' {shlex.quote( arg)}'
+            log( f'Running: {command}')
             subprocess.run( command, check=True, shell=True)
         
         else:
