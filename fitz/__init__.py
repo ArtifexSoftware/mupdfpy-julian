@@ -73,7 +73,7 @@ except ImportError:
             print( text, file=sys.stderr)
         @staticmethod
         def exception_info():
-            return traceback.format_exc()
+            return traceback.print_exc()
     jlib.log( 'Failed to import jlib; using basic logging etc.')
 
 
@@ -113,6 +113,7 @@ class Annot:
         try:
             self.parent._forget_annot(self)
         except:
+            jlib.exception_info()
             return
         if getattr(self, "thisown", False):
             self.thisown = False
@@ -142,6 +143,7 @@ class Annot:
                 align = mupdf.mpdf_to_int(obj)
             values[dictkey_align] = align
         except Exception as e:
+            jlib.exception_info()
             return
         val = values
 
@@ -188,7 +190,8 @@ class Annot:
             if rect:
                 bbox = mupdf.mpdf_dict_get_rect(annot.annot_obj(), PDF_NAME('Rect'))
                 mupdf.mpdf_dict_put_rect(apobj, PDF_NAME('BBox'), bbox)
-        except Exception:
+        except Exception as e:
+            jlib.exception_info()
             return
         return
 
@@ -269,6 +272,7 @@ class Annot:
             extg.dict_put(mupdf.PDF_ENUM_NAME_H, alp0)
 
         except Exception as e:
+            jlib.exception_info()
             print( f'could not set opacity or blend mode: {e}', file=sys.stderr)
             raise
             return False
@@ -313,6 +317,7 @@ class Annot:
 
             return val
         except Exception:
+            jlib.exception_info()
             raise
 
     @property
@@ -382,6 +387,7 @@ class Annot:
             assert isinstance(annot, mupdf.PdfAnnot)
             return JM_annot_colors(annot.annot_obj())
         except Exception as e:
+            jlib.exception_info()
             raise
 
     def delete_responses(self):
@@ -2019,7 +2025,8 @@ class Document:
         """Remove a page from document page dict."""
         pid = id(page)
         if pid in self._page_refs:
-            self._page_refs[pid] = None
+            #self._page_refs[pid] = None
+            del self._page_refs[pid]
 
     def _get_char_widths(self, xref: int, bfname: str, ext: str, ordering: int, limit: int, idx: int = 0):
         pdf = self._this_as_pdf_document()
@@ -3076,6 +3083,7 @@ class Document:
             try:
                 pno = pno.number
             except:
+                jlib.exception_info()
                 raise ValueError("need a Page or page number")
         val = self._getPageInfo(pno, 1)
         if full is False:
@@ -3307,6 +3315,7 @@ class Document:
             if fields.is_array():
                 count = fields.array_len()
         except Exception:
+            jlib.exception_info()
             return False
         if count >= 0:
             return count
@@ -3892,7 +3901,8 @@ class Document:
             return -1, 0, 0
         try:
             loc, xp, yp = mupdf.mfz_resolve_link(this_doc, uri);
-        except Exception:
+        except Exception as e:
+            jlib.exception_info()
             if chapters:
                 return (-1, -1), 0, 0
             return -1, 0, 0
@@ -4732,6 +4742,7 @@ class Link:
         try:
             self.parent._forget_annot(self)
         except:
+            jlib.exception_info()
             pass
         self.parent = None
         self.thisown = False
@@ -5166,6 +5177,7 @@ class linkDest:
                     try:
                         self.page = int(ftab[0]) - 1
                     except:
+                        jlib.exception_info()
                         self.kind = LINK_NAMED
                         self.named = self.uri[1:]
             else:
@@ -5531,7 +5543,10 @@ class Page:
 
     def _add_caret_annot(self, point):
         #return _fitz.Page__add_caret_annot(self, point)
+        jlib.log( '*** _add_caret_annot()')
         page = self._pdf_page()
+        jlib.log( f'page={page}')
+        jlib.log( f'mupdf.PDF_ANNOT_CARET={mupdf.PDF_ANNOT_CARET}')
         annot = page.create_annot(mupdf.PDF_ANNOT_CARET)
         if point:
             p = JM_point_from_py(point)
@@ -5731,7 +5746,12 @@ class Page:
             name = stamp_id[stamp]
         annot = mupdf.mpdf_create_annot(page, mupdf.PDF_ANNOT_STAMP)
         mupdf.mpdf_set_annot_rect(annot, r)
-        mupdf.mpdf_dict_put(annot.annot_obj(), PDF_NAME('Name'), name)
+        try:
+            n = PDF_NAME('Name')
+            mupdf.mpdf_dict_put(annot.annot_obj(), PDF_NAME('Name'), name)
+        except Exception as e:
+            jlib.exception_info()
+            raise
         mupdf.mpdf_set_annot_contents(
                 annot,
                 mupdf.mpdf_dict_get_name(annot.annot_obj(), PDF_NAME('Name')),
@@ -5801,6 +5821,7 @@ class Page:
                 ind_obj = mupdf.mpdf_new_indirect( page.doc(), mupdf.mpdf_to_num( annot), 0)
                 mupdf.mpdf_array_push( annots, ind_obj)
             except Exception as e:
+                jlib.exception_info()
                 print("skipping bad link / annot item %i.\n" % i, file=sys.stderr)
 
     def _addWidget(self, field_type, field_name):
@@ -5828,6 +5849,7 @@ class Page:
         try:
             self.parent._forget_page(self)
         except:
+            jlib.exception_info()
             pass
         self._parent = None
         self.thisown = False
@@ -6657,6 +6679,7 @@ class Page:
                 linkobj = self._annot_refs[linkid]
                 linkobj._erase()
             except:
+                jlib.exception_info()
                 pass
             return val
 
@@ -6902,6 +6925,7 @@ class Page:
             try:
                 return self.get_image_rects(item, transform=transform)[0]
             except:
+                jlib.exception_info()
                 return inf_rect
         #val = _fitz.Page_get_image_bbox(self, name, transform)
         pdf_page = self._pdf_page()
@@ -7068,6 +7092,7 @@ class Page:
             CJK_number = CJK_list_n.index(fontname)
             serif = 0
         except:
+            jlib.exception_info()
             pass
 
         if CJK_number < 0:
@@ -7075,6 +7100,7 @@ class Page:
                 CJK_number = CJK_list_s.index(fontname)
                 serif = 1
             except:
+                jlib.exception_info()
                 pass
 
         if fontname.lower() in fitz_fontdescriptors.keys():
@@ -9174,6 +9200,7 @@ class Shape:
         try:
             maxcode = max([ord(c) for c in " ".join(text)])
         except:
+            jlib.exception_info()
             return 0
 
         # ensure valid 'fontname'
@@ -11302,8 +11329,10 @@ def JM_BinFromBuffer(buffer_):
     Turn fz_buffer into a Python bytes object
     '''
     assert isinstance(buffer_, mupdf.Buffer)
-    return buffer_.buffer_extract()
-
+    #print( f'JM_BinFromBuffer: calling buffer_.buffer_extract(). buffer_.m_internal={buffer_.m_internal}', file=sys.stderr)
+    ret = buffer_.buffer_extract()
+    #print( f'JM_BinFromBuffer: type(ret)={type(ret)} ret={ret!r}', file=sys.stderr)
+    return ret
 
 def JM_EscapeStrFromStr(c):
     # fixme: need to make this handle escape sequences.
@@ -11866,6 +11895,7 @@ def JM_compress_buffer(inbuffer):
             inbuffer.m_internal,
             mupdf.FZ_DEFLATE_BEST,
             )
+    jlib.log( '{=data compressed_length}')
     if not data or compressed_length == 0:
         return None
     buf = mupdf.Buffer(mupdf.new_buffer_from_data(data, compressed_length))
@@ -11956,6 +11986,10 @@ def JM_convert_to_pdf(doc, fp, tp, rotate):
 # Create widget
 def JM_create_widget(doc, page, type, fieldname):
     old_sigflags = mupdf.mpdf_to_int(mupdf.mpdf_dict_getp(mupdf.mpdf_trailer(doc), "Root/AcroForm/SigFlags"))
+    jlib.log( '*** JM_create_widget()')
+    jlib.log( f'mupdf.mpdf_create_annot_raw={mupdf.mpdf_create_annot_raw}')
+    jlib.log( f'page={page}')
+    jlib.log( f'mupdf.PDF_ANNOT_WIDGET={mupdf.PDF_ANNOT_WIDGET}')
     annot = mupdf.mpdf_create_annot_raw(page, mupdf.PDF_ANNOT_WIDGET)
     annot_obj = mupdf.mpdf_annot_obj(annot)
     try:
@@ -11984,7 +12018,8 @@ def JM_create_widget(doc, page, type, fieldname):
                     PDF_NAME('Fields'),
                     )
         mupdf.mpdf_array_push(form, annot_obj)  # Cleanup relies on this statement being last
-    except Exception:
+    except Exception as e:
+        jlib.exception_info()
         mupdf.mpdf_delete_annot(page, annot)
 
         if type == mupdf.PDF_WIDGET_TYPE_SIGNATURE:
@@ -12615,6 +12650,8 @@ def JM_get_widget_properties(annot, Widget):
     Populate a Python Widget object with the values from a PDF form field.
     Called by "Page.firstWidget" and "Widget.next".
     '''
+    if isinstance( annot, Annot):
+        annot = annot.this
     annot_obj = mupdf.mpdf_annot_obj(annot)
     page = mupdf.mpdf_annot_page(annot)
     pdf = page.doc()
@@ -12629,7 +12666,9 @@ def JM_get_widget_properties(annot, Widget):
         # represented by NULL.
         setattr(mod, key, value)
 
+    jlib.log( '=== + mupdf.mpdf_widget_type(tw)')
     field_type = mupdf.mpdf_widget_type(tw)
+    jlib.log( '=== - mupdf.mpdf_widget_type(tw)')
     Widget.field_type = field_type
     if field_type == PDF_WIDGET_TYPE_SIGNATURE:
         if mupdf.mpdf_signature_is_signed(pdf, annot_obj):
@@ -14309,6 +14348,9 @@ def JM_set_widget_properties(annot, Widget):
     Update the PDF form field with the properties from a Python Widget object.
     Called by "Page.addWidget" and "Annot.updateWidget".
     '''
+    if isinstance( annot, Annot):
+        annot = annot.this
+    assert isinstance( annot, mupdf.PdfAnnot), f'type(annot)={type(annot)} type={type}'
     page = mupdf.mpdf_annot_page(annot)
     annot_obj = mupdf.mpdf_annot_obj(annot)
     pdf = page.doc()
@@ -14630,6 +14672,7 @@ def CheckQuad(q: typing.Any) -> bool:
     try:
         q0 = Quad(q)
     except:
+        jlib.exception_info()
         return False
     return q0.isConvex
 
@@ -14642,6 +14685,7 @@ def CheckRect(r: typing.Any) -> bool:
     try:
         r = Rect(r)
     except:
+        jlib.exception_info()
         return False
     return not (r.is_empty or r.isInfinite)
 
@@ -14681,6 +14725,7 @@ def Page__add_text_marker(self, quads, annot_type):
         JM_add_annot_id(annot, "A")
         mupdf.mpdf_update_annot(annot)
     except Exception as e:
+        jlib.exception_info()
         final()
         return
     final()
@@ -15020,6 +15065,7 @@ def jm_append_merge(out):
                 trace_device.dev_pathdict[k] = v
         rc = 0
     except Exception as e:
+        jlib.exception_info()
         jlib.log('=' * 40)
         jlib.log(jlib.exception_info())
         raise
@@ -15049,7 +15095,7 @@ def jm_bbox_fill_image_mask( dev, image, ctm, colorspace, color, alpha, color_pa
     try:
         jm_bbox_add_rect( dev, mupdf.transform_rect(fz_unit_rect, ctm), "fill-imgmask")
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -15058,15 +15104,15 @@ def jm_bbox_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, color_
     try:
         jm_bbox_add_rect( dev, mupdf.bound_path(path, None, ctm), "fill-path")
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
 def jm_bbox_fill_shade( dev, shade, ctm, alpha, color_params):
     try:
         jm_bbox_add_rect( dev, mupdf.bound_shade( shade, ctm), "fill-shade")
-    except Exception:
-        jlib.log(jlib.exception_info())
+    except Exception as e:
+        jlib.exception_info()
         raise
 
 
@@ -15074,7 +15120,7 @@ def jm_bbox_stroke_text( dev, text, stroke, ctm, *args):
     try:
         m_bbox_add_rect( dev, mupdf.bound_text( text, stroke, ctm), "stroke-text")
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -15082,7 +15128,7 @@ def jm_bbox_fill_text( dev, text, ctm, *args):
     try:
         jm_bbox_add_rect( dev, mupdf.bound_text( text, None, ctm), "fill-text")
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -15094,7 +15140,7 @@ def jm_bbox_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, color
     try:
         jm_bbox_add_rect( dev, mupdf.bound_path( path, stroke, ctm), "stroke-path")
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 def jm_checkquad():
@@ -15364,7 +15410,7 @@ def jm_tracedraw_color(colorspace, color):
                     mupdf.ColorParams().internal(),
                     )
         except Exception as e:
-            jlib.log(jlib.exception_info())
+            jlib.exception_info()
             raise
         rgb = dv.dv0, dv.dv1, dv.dv2
         return rgb
@@ -15394,7 +15440,7 @@ def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, c
         jm_append_merge(out)
         dev.seqno += 1
     except Exception as e:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -15442,7 +15488,7 @@ def jm_tracedraw_path(dev, path):
                             )
                 trace_device.dev_linecount = 0  # reset # of consec. lines
             except Exception as e:
-                jlib.log( jlib.exception_info())
+                jlib.exception_info()
                 raise
 
         def lineto(self, x, y):   # trace_lineto().
@@ -15462,7 +15508,7 @@ def jm_tracedraw_path(dev, path):
                     # shrink to "re" or "qu" item
                     jm_checkquad()
             except Exception as e:
-                jlib.log( jlib.exception_info())
+                jlib.exception_info()
                 raise
 
         def curveto(self, x1, y1, x2, y2, x3, y3):   # trace_curveto().
@@ -15488,7 +15534,7 @@ def jm_tracedraw_path(dev, path):
                 trace_device.dev_lastpoint = p3
                 trace_device.dev_pathdict[ dictkey_items].append( list_)
             except Exception as e:
-                jlib.log( jlib.exception_info())
+                jlib.exception_info()
                 raise
 
         def closepath(self):    # trace_close().
@@ -15498,7 +15544,7 @@ def jm_tracedraw_path(dev, path):
                 else:
                     trace_device.dev_pathdict[ "closePath"] = True
             except Exception as e:
-                jlib.log( jlib.exception_info())
+                jlib.exception_info()
                 raise
 
     try:
@@ -15513,7 +15559,7 @@ def jm_tracedraw_path(dev, path):
         if not trace_device.dev_pathdict[ dictkey_items]:
             trace_device.dev_pathdict.clear()
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -15558,7 +15604,7 @@ def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, 
         dev.seqno += 1
     
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -15577,7 +15623,7 @@ def jm_increase_seqno( dev, *vargs):
     try:
         dev.seqno += 1
     except Exception:
-        jlib.log(jlib.exception_info())
+        jlib.exception_info()
         raise
 
 
@@ -16118,6 +16164,7 @@ def CheckRect(r: typing.Any) -> bool:
     try:
         r = Rect(r)
     except:
+        jlib.exception_info()
         return False
     return not (r.is_empty or r.isInfinite)
 
@@ -17345,7 +17392,8 @@ class TOOLS:
                     matrix[4],
                     matrix[5],
                     )
-        except Exception:
+        except Exception as e:
+            jlib.exception_info()
             src = matrix
         a = src.a
         det = a * src.d - src.b * src.c;
@@ -17643,7 +17691,8 @@ class TOOLS:
                             PDF_NAME('DA'),
                             )
                 da_str = mupdf.mpdf_to_text_string(da)
-            except Exception:
+            except Exception as e:
+                jlib.exception_info()
                 return
             return da_str
 
@@ -17750,7 +17799,8 @@ class TOOLS:
             mupdf.mpdf_dict_del(this_annot.annot_obj(), PDF_NAME('DS'))    # /* not supported */
             mupdf.mpdf_dict_del(this_annot.annot_obj(), PDF_NAME('RC'))    # /* not supported */
             mupdf.mpdf_dirty_annot(this_annot)
-        except Exception:
+        except Exception as e:
+            jlib.exception_info()
             return
         return
 

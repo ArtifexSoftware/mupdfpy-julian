@@ -17,6 +17,8 @@ import warnings
 import tempfile
 
 import fitz.fitz
+jlib = fitz.jlib
+
 
 TESSDATA_PREFIX = os.environ.get("TESSDATA_PREFIX")
 point_like = "point_like"
@@ -636,6 +638,7 @@ def get_textpage_ocr(
             imgpage.extend_textpage(tpage, flags=0, matrix=mat)
             imgdoc.close()
         except RuntimeError:
+            jlib.exception_info()
             tpage = None
             print("Falling back to full page OCR")
             return full_ocr(page, dpi, language, flags)
@@ -902,7 +905,8 @@ def getLinkDict(ln) -> dict:
     nl = {"kind": ln.dest.kind, "xref": 0}
     try:
         nl["from"] = ln.rect
-    except:
+    except Exception as e:
+        jlib.exception_info()
         pass
     pnt = fitz.Point(0, 0)
     if ln.dest.flags & fitz.LINK_FLAG_L_VALID:
@@ -1391,36 +1395,43 @@ def set_toc(
             txt += "/Count %i" % ol["count"]
         try:
             txt += ol["dest"]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
         try:
             if ol["first"] > -1:
                 txt += "/First %i 0 R" % xref[ol["first"]]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
         try:
             if ol["last"] > -1:
                 txt += "/Last %i 0 R" % xref[ol["last"]]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
         try:
             if ol["next"] > -1:
                 txt += "/Next %i 0 R" % xref[ol["next"]]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
         try:
             if ol["parent"] > -1:
                 txt += "/Parent %i 0 R" % xref[ol["parent"]]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
         try:
             if ol["prev"] > -1:
                 txt += "/Prev %i 0 R" % xref[ol["prev"]]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
         try:
             txt += "/Title" + ol["title"]
-        except:
+        except Exception as e:
+            jlib.exception_info()
             pass
 
         if ol.get("color") and len(ol["color"]) == 3:
@@ -2845,6 +2856,7 @@ def getColor(name: str) -> tuple:
         c = getColorInfoList()[getColorList().index(name.upper())]
         return (c[1] / 255.0, c[2] / 255.0, c[3] / 255.0)
     except:
+        jlib.exception_info()
         return (1, 1, 1)
 
 
@@ -2856,7 +2868,8 @@ def getColorHSV(name: str) -> tuple:
     """
     try:
         x = getColorInfoList()[getColorList().index(name.upper())]
-    except:
+    except Exception as e:
+        jlib.exception_info()
         return (-1, -1, -1)
 
     r = x[1] / 255.0
@@ -2904,6 +2917,7 @@ def _get_font_properties(doc: fitz.Document, xref: int) -> tuple:
                     dsc = bbox.y0
                 asc = 1 - dsc
         except:
+            jlib.exception_info()
             asc *= 1.2
             dsc *= 1.2
         return fontname, ext, stype, asc, dsc
@@ -2913,6 +2927,7 @@ def _get_font_properties(doc: fitz.Document, xref: int) -> tuple:
             asc = font.ascender
             dsc = font.descender
         except:
+            jlib.exception_info()
             asc *= 1.2
             dsc *= 1.2
     else:
@@ -3377,6 +3392,7 @@ class Shape:
         try:
             maxcode = max([ord(c) for c in " ".join(text)])
         except:
+            jlib.exception_info()
             return 0
 
         # ensure valid 'fontname'
@@ -3974,6 +3990,7 @@ def apply_redactions(page: fitz.Page, images: int = 2) -> bool:
         try:
             text_width = fitz.get_text_length(text, font, fsize)
         except ValueError:  # unsupported font
+            jlib.exception_info()
             return annot_rect
         line_height = fsize * 1.2
         limit = annot_rect.width
@@ -4391,6 +4408,7 @@ def fill_textbox(
         try:
             line, tl = new_lines.pop(0)
         except IndexError:
+            jlib.exception_info()
             break
 
         if right_to_left:  # Arabic, Hebrew
@@ -4594,6 +4612,7 @@ def get_ocmd(doc: fitz.Document, xref: int) -> dict:
         try:
             ve = json.loads(ve)
         except:
+            jlib.exception_info()
             print("bad /VE key: ", ve)
             raise
     return {"xref": xref, "ocgs": ocgs, "policy": policy, "ve": ve}
@@ -5145,6 +5164,7 @@ def subset_fonts(doc: fitz.Document) -> None:
         try:
             import fontTools.subset as fts
         except ImportError:
+            jlib.exception_info()
             print("This method requires fontTools to be installed.")
             raise
         tmp_dir = tempfile.gettempdir()
@@ -5193,18 +5213,22 @@ def subset_fonts(doc: fitz.Document) -> None:
             if len(font.valid_codepoints()) == 0:
                 new_buffer = None
         except:
+            jlib.exception_info()
             new_buffer = None
         try:
             os.remove(uncfile_path)
         except:
+            jlib.exception_info()
             pass
         try:
             os.remove(oldfont_path)
         except:
+            jlib.exception_info()
             pass
         try:
             os.remove(newfont_path)
         except:
+            jlib.exception_info()
             pass
         return new_buffer
 
