@@ -42,11 +42,13 @@ Arguments:
         For example:
             PYTHONPATH=PySimpleGUI ./mupdfpy/test.py --mupdf mupdf/build/shared-release --run python3 PyMuPDF-Utilities/animations/morph-demo1.py
 
-    --test <test-file>
-        E.g.:
-            --test test_annots.py    
-    --tests
+    --tests <test-file> | all | '' | '.'
         Run PyMuPDF's py.test tests.
+        
+        E.g.:
+            --test test_annots.py
+        
+        Uses 'all' or '' or '.' to run all tests.   
         
         If running in a Python virtual environment, be sure to install pytest
         in the venv before running this command. Otherwise the system pytest
@@ -358,12 +360,11 @@ def main():
             
             log( 'Ok')
         
-        elif arg == '--test':
-            testname = next( args)
-            run_pymupdf_tests( state, testname)
-        
         elif arg == '--tests':
-            run_pymupdf_tests( state)
+            testname = next( args)
+            if testname in ( 'all', '', '.'):
+                testname = None
+            run_pymupdf_tests( state, testname)
         
         elif arg == '--tests-pypy':
             run_pymupdf_tests( state, pypy=True)
