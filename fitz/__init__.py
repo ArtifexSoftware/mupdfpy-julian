@@ -12662,12 +12662,9 @@ def JM_get_widget_properties(annot, Widget):
     Called by "Page.firstWidget" and "Widget.next".
     '''
     jlib.log( 'type(annot)={type(annot)}')
-    #if isinstance( annot, Annot):
-    #    annot = annot.this
-    annot2 = annot.this
-    annot_obj = mupdf.mpdf_annot_obj(annot2)
+    annot_obj = mupdf.mpdf_annot_obj(annot.this)
     jlib.log( 'Have called mupdf.mpdf_annot_obj()')
-    page = mupdf.mpdf_annot_page(annot2)
+    page = mupdf.mpdf_annot_page(annot.this)
     pdf = page.doc()
     tw = annot
 
