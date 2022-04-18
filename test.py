@@ -114,7 +114,7 @@ class State:
         PYTHONPATH.
         '''
         ret = ''
-        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}'
+        ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}:{os.path.abspath(self.mupdf_dir)}/scripts'
         return ret
     
     def env_vars_mupdf( self):
@@ -132,6 +132,7 @@ class State:
                 ret += f':{os.path.abspath(self.mupdfpy)}'
             if self.mupdf_build_dir:
                 ret += f':{os.path.abspath(self.mupdf_build_dir)}'
+            ret += f':{os.path.abspath(self.mupdf_dir)}/scripts'
         return ret
     
     def env_vars_cppyy( self):
