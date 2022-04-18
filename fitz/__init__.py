@@ -11782,7 +11782,7 @@ def JM_choice_options(annot):
     '''
     return list of choices for list or combo boxes
     '''
-    annot_obj = mupdf.mpdf_annot_obj( annot)
+    annot_obj = mupdf.mpdf_annot_obj( annot.this)
     pdf = mupdf.mpdf_get_bound_document( annot_obj)
     
     # pdf_choice_widget_options() is not usable from python, so we implement it
@@ -12661,11 +12661,13 @@ def JM_get_widget_properties(annot, Widget):
     Populate a Python Widget object with the values from a PDF form field.
     Called by "Page.firstWidget" and "Widget.next".
     '''
-    #jlib.log( 'type(annot)={type(annot)}')
+    jlib.log( 'type(annot)={type(annot)}')
     #if isinstance( annot, Annot):
     #    annot = annot.this
-    annot_obj = mupdf.mpdf_annot_obj(annot)
-    page = mupdf.mpdf_annot_page(annot)
+    annot2 = annot.this
+    annot_obj = mupdf.mpdf_annot_obj(annot2)
+    jlib.log( 'Have called mupdf.mpdf_annot_obj()')
+    page = mupdf.mpdf_annot_page(annot2)
     pdf = page.doc()
     tw = annot
 
@@ -12679,7 +12681,7 @@ def JM_get_widget_properties(annot, Widget):
         setattr(mod, key, value)
 
     #jlib.log( '=== + mupdf.mpdf_widget_type(tw)')
-    field_type = mupdf.mpdf_widget_type(tw)
+    field_type = mupdf.mpdf_widget_type(tw.this)
     #jlib.log( '=== - mupdf.mpdf_widget_type(tw)')
     Widget.field_type = field_type
     if field_type == PDF_WIDGET_TYPE_SIGNATURE:
@@ -12717,9 +12719,9 @@ def JM_get_widget_properties(annot, Widget):
             d[i] = mupdf.mpdf_to_int(mupdf.mpdf_array_get(obj, i))
         SETATTR_DROP(Widget, "border_dashes", d)
 
-    SETATTR_DROP(Widget, "text_maxlen", mupdf.mpdf_text_widget_max_len(tw))
+    SETATTR_DROP(Widget, "text_maxlen", mupdf.mpdf_text_widget_max_len(tw.this))
 
-    SETATTR_DROP(Widget, "text_format", mupdf.mpdf_text_widget_format(tw))
+    SETATTR_DROP(Widget, "text_format", mupdf.mpdf_text_widget_format(tw.this))
 
     obj = mupdf.mpdf_dict_getl(annot_obj, PDF_NAME('MK'), PDF_NAME('BG'))
     if mupdf.mpdf_is_array(obj):
