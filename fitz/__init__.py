@@ -13886,7 +13886,7 @@ def JM_print_stext_page_as_text(out, page):
                         last_char = ch.m_internal.c
                         utf = mupdf.runetochar2(last_char)
                         for c in utf:
-                            assert isinstance(c, int)
+                            assert isinstance(c, int), f'type(c)={type(c)} c={c}'
                             assert 0 <= c < 256, f'utf={utf!r} cc={c}'
                             mupdf.mfz_write_byte(out, c)
                 if last_char != 10 and last_char > 0:
