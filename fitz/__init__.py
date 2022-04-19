@@ -22,6 +22,9 @@ import typing
 import warnings
 import weakref
 
+g_exceptions_verbose = False
+#g_exceptions_verbose = True
+
 mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
 if mupdf_cppyy is not None:
     # Use cppyy bindings; experimental.
@@ -143,7 +146,7 @@ class Annot:
                 align = mupdf.mpdf_to_int(obj)
             values[dictkey_align] = align
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             return
         val = values
 
@@ -191,7 +194,7 @@ class Annot:
                 bbox = mupdf.mpdf_dict_get_rect(annot.annot_obj(), PDF_NAME('Rect'))
                 mupdf.mpdf_dict_put_rect(apobj, PDF_NAME('BBox'), bbox)
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             return
         return
 
@@ -272,7 +275,7 @@ class Annot:
             extg.dict_put(mupdf.PDF_ENUM_NAME_H, alp0)
 
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             print( f'could not set opacity or blend mode: {e}', file=sys.stderr)
             raise
             return False
@@ -317,7 +320,7 @@ class Annot:
 
             return val
         except Exception:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             raise
 
     @property
@@ -387,7 +390,7 @@ class Annot:
             assert isinstance(annot, mupdf.PdfAnnot)
             return JM_annot_colors(annot.annot_obj())
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             raise
 
     def delete_responses(self):
@@ -1451,6 +1454,7 @@ class Device:
         try:
             self.this.append(this)
         except __builtin__.Exception:
+            if g_exceptions_verbose:    jlib.exception_info()
             self.this = this
 
 
@@ -3315,7 +3319,7 @@ class Document:
             if fields.is_array():
                 count = fields.array_len()
         except Exception:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             return False
         if count >= 0:
             return count
@@ -3902,7 +3906,7 @@ class Document:
         try:
             loc, xp, yp = mupdf.mfz_resolve_link(this_doc, uri);
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             if chapters:
                 return (-1, -1), 0, 0
             return -1, 0, 0
@@ -4505,6 +4509,7 @@ class Font:
         #        is_italic,
         #        is_serif,
         #        )
+        jlib.log( '{=type(language) language}')
         lang = mupdf.mfz_text_language_from_string(language)
         font = JM_get_font(fontname, fontfile,
                    fontbuffer, script, lang, ordering,
@@ -4642,6 +4647,9 @@ class Font:
     def is_writable(self):
         #return _fitz.Font_is_writable(self)
         font = self.this
+        #jlib.log( '{mupdf.mfz_font_t3_procs(font)=}')
+        #jlib.log( '{mupdf.font_flags(font.m_internal).ft_substitute=}')
+        #jlib.log( '{mupdf.mpdf_font_writing_supported(font)=}')
         if ( mupdf.mfz_font_t3_procs(font)
                 or mupdf.font_flags(font.m_internal).ft_substitute
                 or not mupdf.mpdf_font_writing_supported(font)
@@ -5759,7 +5767,7 @@ class Page:
             n = PDF_NAME('Name')
             mupdf.mpdf_dict_put(annot.annot_obj(), PDF_NAME('Name'), name)
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             raise
         mupdf.mpdf_set_annot_contents(
                 annot,
@@ -5830,7 +5838,7 @@ class Page:
                 ind_obj = mupdf.mpdf_new_indirect( page.doc(), mupdf.mpdf_to_num( annot), 0)
                 mupdf.mpdf_array_push( annots, ind_obj)
             except Exception as e:
-                jlib.exception_info()
+                if g_exceptions_verbose:    jlib.exception_info()
                 print("skipping bad link / annot item %i.\n" % i, file=sys.stderr)
 
     def _addWidget(self, field_type, field_name):
@@ -5876,18 +5884,26 @@ class Page:
         doc = self.parent
         check = doc.xref_object(oc, compressed=True)
         if not ("/Type/OCG" in check or "/Type/OCMD" in check):
+            jlib.log( 'raising "bad optional content"')
             raise ValueError("bad optional content: 'oc'")
+        jlib.log( 'Looking at self._get_resource_properties()')
         props = {}
         for p, x in self._get_resource_properties():
             props[x] = p
+        jlib.log( ' ')
         if oc in props.keys():
+            jlib.log( ' ')
             return props[oc]
+        jlib.log( ' ')
         i = 0
         mc = "MC%i" % i
+        jlib.log( ' ')
         while mc in props.values():
             i += 1
             mc = "MC%i" % i
+        jlib.log( ' ')
         self._set_resource_property(mc, oc)
+        jlib.log( 'returning {mc=}')
         return mc
 
     def _get_resource_properties(self):
@@ -5910,20 +5926,30 @@ class Page:
 
     def _get_textpage(self, clip=None, flags=0, matrix=None):
         #return _fitz.Page__get_textpage(self, clip, flags, matrix)
+        jlib.log( ' ')
         page = self.this
+        jlib.log( ' ')
         options = mupdf.StextOptions(flags)
+        jlib.log( ' ')
         rect = JM_rect_from_py(clip)
+        jlib.log( ' ')
         ctm = JM_matrix_from_py(matrix)
+        jlib.log( ' ')
         tpage = mupdf.StextPage(rect)
+        jlib.log( ' ')
         dev = mupdf.mfz_new_stext_device(tpage, options)
+        jlib.log( ' ')
         if isinstance(page, mupdf.Page):
             pass
         elif isinstance(page, mupdf.PdfPage):
             page = page.super()
         else:
             assert 0, f'Unrecognised type(page)={type(page)}'
+        jlib.log( ' ')
         mupdf.mfz_run_page(page, dev, ctm, mupdf.Cookie());
+        jlib.log( ' ')
         mupdf.mfz_close_device(dev)
+        jlib.log( ' ')
         return tpage
 
     def _insertFont(self, fontname, bfname, fontfile, fontbuffer, set_simple, idx, wmode, serif, encoding, ordering):
@@ -7027,6 +7053,7 @@ class Page:
         return rc
 
     def get_textpage(self, clip: rect_like = None, flags: int = 0, matrix=None) -> "TextPage":
+        jlib.log( ' ')
         CheckParent(self)
         if matrix is None:
             matrix = Matrix(1, 1)
@@ -7034,8 +7061,11 @@ class Page:
         if old_rotation != 0:
             self.set_rotation(0)
         try:
+            jlib.log( ' ')
             textpage = self._get_textpage(clip, flags=flags, matrix=matrix)
+            jlib.log( ' ')
         finally:
+            jlib.log( ' ')
             if old_rotation != 0:
                 self.set_rotation(old_rotation)
         #textpage.parent = weakref.proxy(self)
@@ -12030,7 +12060,7 @@ def JM_create_widget(doc, page, type, fieldname):
                     )
         mupdf.mpdf_array_push(form, annot_obj)  # Cleanup relies on this statement being last
     except Exception as e:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         mupdf.mpdf_delete_annot(page, annot)
 
         if type == mupdf.PDF_WIDGET_TYPE_SIGNATURE:
@@ -12165,8 +12195,12 @@ def JM_embedded_clean(pdf):
 def JM_EscapeStrFromBuffer(buff):
     if not buff.m_internal:
          return ''
+    jlib.log( 'JM_EscapeStrFromBuffer(): calling buff.buffer_extract()')
+    jlib.exception_info()
     s = buff.buffer_extract()
+    jlib.log( '{s=}')
     val = PyUnicode_DecodeRawUnicodeEscape(s, errors='replace')
+    jlib.log( '{val=}')
     return val;
 
 
@@ -14531,6 +14565,7 @@ def JM_set_widget_properties(annot, Widget):
 
 
 def JM_UnicodeFromBuffer(buff):
+    jlib.log( 'calling buff.buffer_extract()')
     buff_bytes = buff.buffer_extract()
     val = buff_bytes.decode(errors='replace')
     z = val.find(chr(0))
@@ -14736,7 +14771,7 @@ def Page__add_text_marker(self, quads, annot_type):
         JM_add_annot_id(annot, "A")
         mupdf.mpdf_update_annot(annot)
     except Exception as e:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         final()
         return
     final()
@@ -15076,9 +15111,7 @@ def jm_append_merge(out):
                 trace_device.dev_pathdict[k] = v
         rc = 0
     except Exception as e:
-        jlib.exception_info()
-        jlib.log('=' * 40)
-        jlib.log(jlib.exception_info())
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
         rc = -1
     if rc == 0:
@@ -15106,7 +15139,7 @@ def jm_bbox_fill_image_mask( dev, image, ctm, colorspace, color, alpha, color_pa
     try:
         jm_bbox_add_rect( dev, mupdf.transform_rect(fz_unit_rect, ctm), "fill-imgmask")
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15115,7 +15148,7 @@ def jm_bbox_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, color_
     try:
         jm_bbox_add_rect( dev, mupdf.bound_path(path, None, ctm), "fill-path")
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15123,7 +15156,7 @@ def jm_bbox_fill_shade( dev, shade, ctm, alpha, color_params):
     try:
         jm_bbox_add_rect( dev, mupdf.bound_shade( shade, ctm), "fill-shade")
     except Exception as e:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15131,7 +15164,7 @@ def jm_bbox_stroke_text( dev, text, stroke, ctm, *args):
     try:
         m_bbox_add_rect( dev, mupdf.bound_text( text, stroke, ctm), "stroke-text")
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15139,7 +15172,7 @@ def jm_bbox_fill_text( dev, text, ctm, *args):
     try:
         jm_bbox_add_rect( dev, mupdf.bound_text( text, None, ctm), "fill-text")
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15151,7 +15184,7 @@ def jm_bbox_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, color
     try:
         jm_bbox_add_rect( dev, mupdf.bound_path( path, stroke, ctm), "stroke-path")
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 def jm_checkquad():
@@ -15421,7 +15454,7 @@ def jm_tracedraw_color(colorspace, color):
                     mupdf.ColorParams().internal(),
                     )
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             raise
         rgb = dv.dv0, dv.dv1, dv.dv2
         return rgb
@@ -15451,7 +15484,7 @@ def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, c
         jm_append_merge(out)
         dev.seqno += 1
     except Exception as e:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15499,7 +15532,7 @@ def jm_tracedraw_path(dev, path):
                             )
                 trace_device.dev_linecount = 0  # reset # of consec. lines
             except Exception as e:
-                jlib.exception_info()
+                if g_exceptions_verbose:    jlib.exception_info()
                 raise
 
         def lineto(self, x, y):   # trace_lineto().
@@ -15519,7 +15552,7 @@ def jm_tracedraw_path(dev, path):
                     # shrink to "re" or "qu" item
                     jm_checkquad()
             except Exception as e:
-                jlib.exception_info()
+                if g_exceptions_verbose:    jlib.exception_info()
                 raise
 
         def curveto(self, x1, y1, x2, y2, x3, y3):   # trace_curveto().
@@ -15545,7 +15578,7 @@ def jm_tracedraw_path(dev, path):
                 trace_device.dev_lastpoint = p3
                 trace_device.dev_pathdict[ dictkey_items].append( list_)
             except Exception as e:
-                jlib.exception_info()
+                if g_exceptions_verbose:    jlib.exception_info()
                 raise
 
         def closepath(self):    # trace_close().
@@ -15555,7 +15588,7 @@ def jm_tracedraw_path(dev, path):
                 else:
                     trace_device.dev_pathdict[ "closePath"] = True
             except Exception as e:
-                jlib.exception_info()
+                if g_exceptions_verbose:    jlib.exception_info()
                 raise
 
     try:
@@ -15570,7 +15603,7 @@ def jm_tracedraw_path(dev, path):
         if not trace_device.dev_pathdict[ dictkey_items]:
             trace_device.dev_pathdict.clear()
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15615,7 +15648,7 @@ def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, 
         dev.seqno += 1
     
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -15634,7 +15667,7 @@ def jm_increase_seqno( dev, *vargs):
     try:
         dev.seqno += 1
     except Exception:
-        jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
@@ -17404,7 +17437,7 @@ class TOOLS:
                     matrix[5],
                     )
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             src = matrix
         a = src.a
         det = a * src.d - src.b * src.c;
@@ -17703,7 +17736,7 @@ class TOOLS:
                             )
                 da_str = mupdf.mpdf_to_text_string(da)
             except Exception as e:
-                jlib.exception_info()
+                if g_exceptions_verbose:    jlib.exception_info()
                 return
             return da_str
 
@@ -17811,7 +17844,7 @@ class TOOLS:
             mupdf.mpdf_dict_del(this_annot.annot_obj(), PDF_NAME('RC'))    # /* not supported */
             mupdf.mpdf_dirty_annot(this_annot)
         except Exception as e:
-            jlib.exception_info()
+            if g_exceptions_verbose:    jlib.exception_info()
             return
         return
 
