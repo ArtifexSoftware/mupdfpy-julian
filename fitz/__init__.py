@@ -1658,12 +1658,16 @@ class Document:
             c = stream
             #len = (size_t) PyBytes_Size(stream);
 
-            # Pass raw bytes data to mupdf.mfz_open_memory(). This assumes
-            # that the bytes string will not be modified; i think the original
-            # PyMuPDF code makes the same assumption. Presumably setting
-            # self.stream above ensures that the bytes will not be garbage
-            # collected?
-            data = mupdf.mfz_open_memory(mupdf.python_bytes_data(c), len(c))
+            if mupdf_cppyy:
+                buffer_ = mupdf.mfz_new_buffer_from_copied_data( c)
+                data = mupdf.mfz_open_buffer( buffer_)
+            else:
+                # Pass raw bytes data to mupdf.mfz_open_memory(). This assumes
+                # that the bytes string will not be modified; i think the
+                # original PyMuPDF code makes the same assumption. Presumably
+                # setting self.stream above ensures that the bytes will not be
+                # garbage collected?
+                data = mupdf.mfz_open_memory(mupdf.python_bytes_data(c), len(c))
             magic = filename
             if not magic:
                 magic = filetype
