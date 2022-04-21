@@ -4733,7 +4733,7 @@ class Graftmap:
 
     def __init__(self, doc):
         #this = _fitz.new_Graftmap(doc)
-        dst = mupdf.mpdf_specifics(doc)
+        dst = mupdf.mpdf_specifics(doc.this)
         ASSERT_PDF(dst)
         map_ = mupdf.mpdf_new_graft_map(dst)
         self.this = map_
@@ -14606,7 +14606,7 @@ def JM_xobject_from_page(pdfout, fsrcpage, xref, gmap):
     if xref > 0:
         xobj1 = mupdf.mpdf_new_indirect(pdfout, xref, 0)
     else:
-        srcpage = mupdf.mpdf_page_from_fz_page(fsrcpage)
+        srcpage = mupdf.mpdf_page_from_fz_page(fsrcpage.this)
         spageref = srcpage.obj()
         mediabox = mupdf.mpdf_to_rect(mupdf.mpdf_dict_get_inheritable(spageref, PDF_NAME('MediaBox')))
         # Deep-copy resources object of source page
