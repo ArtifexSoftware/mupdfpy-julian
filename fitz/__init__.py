@@ -4564,8 +4564,13 @@ class Font:
     def buffer(self):
         #return _fitz.Font_buffer(self)
         buffer_ = mupdf.Buffer( mupdf.keep_buffer( self.this.m_internal.buffer))
-        size, data = buffer_.buffer_extract_raw()
-        return mupdf.raw_to_python_bytes( data, size)
+        if mupdf_cppyy:
+            ret = mupdf.mfz_buffer_storage_bytes( buffer_)
+            assert isinstance( ret, bytes)
+            return ret
+        else:
+            size, data = buffer_.buffer_extract_raw()
+            return mupdf.raw_to_python_bytes( data, size)
 
     def char_lengths(self, text, fontsize=11, language=None, script=0, wmode=0, small_caps=0):
         """Return tuple of char lengths of unicode 'text' under a fontsize."""
