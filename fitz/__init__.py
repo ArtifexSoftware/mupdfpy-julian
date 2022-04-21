@@ -14792,21 +14792,13 @@ def Page_clean_contents(self, sanitize):
     page = self.this.page_from_fz_page()
     if not page:
         return
-    assert isinstance(page, mupdf.PdfPage)
-    filter_ = mupdf.pdf_filter_options()
-    filter_.opaque = None
-    filter_.image_filter = None
-    filter_.text_filter = None
-    filter_.after_text_object = None
-    filter_.end_page = None
+    assert isinstance(page, mupdf.PdfPage)    
+    filter_ = mupdf.PdfFilterOptions()
     filter_.recurse = 1
     filter_.instance_forms = 1
     filter_.sanitize = 1
-    filter_.ascii = 0
-
     filter_.sanitize = sanitize
-    filter2 = mupdf.PdfFilterOptions(filter_)
-    page.doc().filter_page_contents(page, filter2)
+    page.doc().filter_page_contents(page, filter_)
     # fixme: page->doc->dirty = 1;
 
 
