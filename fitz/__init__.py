@@ -12194,12 +12194,12 @@ def JM_embedded_clean(pdf):
 def JM_EscapeStrFromBuffer(buff):
     if not buff.m_internal:
          return ''
-    jlib.log( 'JM_EscapeStrFromBuffer(): calling buff.buffer_extract()')
-    jlib.exception_info()
+    #jlib.log( 'JM_EscapeStrFromBuffer(): calling buff.buffer_extract()')
+    #jlib.exception_info()
     s = buff.buffer_extract()
-    jlib.log( '{s=}')
+    #jlib.log( '{s=}')
     val = PyUnicode_DecodeRawUnicodeEscape(s, errors='replace')
-    jlib.log( '{val=}')
+    #jlib.log( '{val=}')
     return val;
 
 
@@ -12400,9 +12400,6 @@ def JM_gather_fonts(pdf, dict_, fontlist, stream_xref):
         ext = "n/a"
         if xref:
             ext = JM_get_fontextension(pdf, xref)
-        jlib.log( '{name=}')
-        n = name.to_name()
-        jlib.log( '{n=}')
         entry = (
                 xref,
                 ext,
@@ -14568,7 +14565,7 @@ def JM_set_widget_properties(annot, Widget):
 
 
 def JM_UnicodeFromBuffer(buff):
-    jlib.log( 'calling buff.buffer_extract()')
+    #jlib.log( 'calling buff.buffer_extract()')
     buff_bytes = buff.buffer_extract()
     val = buff_bytes.decode(errors='replace')
     z = val.find(chr(0))

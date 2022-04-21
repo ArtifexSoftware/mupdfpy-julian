@@ -791,7 +791,7 @@ def get_text(
         tp = page.get_textpage(clip=clip, flags=flags)
     elif getattr(tp, "parent") != page:
         raise ValueError("not a textpage of this page")
-    jlib.log( '{option=}')
+    #jlib.log( '{option=}')
     if option == "json":
         t = tp.extractJSON(cb=cb, sort=sort)
     elif option == "rawjson":
