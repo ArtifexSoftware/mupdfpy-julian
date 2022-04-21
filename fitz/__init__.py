@@ -28,8 +28,8 @@ g_exceptions_verbose = False
 mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
 if mupdf_cppyy is not None:
     # Use cppyy bindings; experimental.
-    print( f'MUPDF_CPPYY={mupdf_cppyy!r} so attempting to import mupdf_cppyy.')
-    print( f'PYTHONPATH={os.environ["PYTHONPATH"]}')
+    print( f'{__file__}: $MUPDF_CPPYY={mupdf_cppyy!r} so attempting to import mupdf_cppyy.')
+    print( f'{__file__}: $PYTHONPATH={os.environ["PYTHONPATH"]}')
     if mupdf_cppyy == '':
         import mupdf_cppyy
     else:
@@ -202,83 +202,101 @@ class Annot:
         #return _fitz.Annot__update_appearance(self, opacity, blend_mode, fill_color, rotate)
         annot = self.this
         assert annot.m_internal
-        type_ = annot.annot_type()
+        annot_obj = mupdf.mpdf_annot_obj( annot)
+        page = mupdf.mpdf_annot_page( annot)
+        pdf = page.doc()
+        type_ = mupdf.mpdf_annot_type( annot)
         fcol = [1, 1, 1, 1] # std fill color: white
         nfcol = 0   # number of color components
-        nfcol = JM_color_FromSequence(fill_color, fcol);
+        nfcol = JM_color_FromSequence(fill_color, fcol)
 
-        annot.dirty_annot() # enforce MuPDF /AP formatting
-        if type_ == mupdf.PDF_ANNOT_FREE_TEXT:
-            if fill_color:
-                # Use mupdf python custom fn. fixme: make this available as a
-                # class method and as mpdf_set_annot_color().
-                mupdf.mpdf_set_annot_color(annot, fcol[:nfcol])
-            else:
-                annot.annot_obj().dict_del(mupdf.PDF_ENUM_NAME_IC)
-        else:
-            if fill_color:
-                annot.set_annot_interior_color(fcol[:nfcol])
-            elif fill_color is not None:
-                annot.annot_obj().dict_del(mupdf.PDF_ENUM_NAME_IC)
+        try:
+            mupdf.mpdf_dirty_annot( annot)  # enforce new /AP
+            # remove fill color from unsupported annots
+            # or if so requested
+            if nfcol == 0 or type_ not in (
+                    mupdf.PDF_ANNOT_SQUARE,
+                    mupdf.PDF_ANNOT_CIRCLE,
+                    mupdf.PDF_ANNOT_LINE,
+                    mupdf.PDF_ANNOT_POLY_LINE,
+                    mupdf.PDF_ANNOT_POLYGON
+                    ):
+                mupdf.mpdf_dict_del( annot_obj, PDF_NAME('IC'))
+            elif nfcol > 0:
+                mupdf.mpdf_set_annot_interior_color( annot, fcol[:nfcol])
 
-        insert_rot = 1 if rotate >= 0 else 0
-        if type not in (
-                mupdf.PDF_ANNOT_CARET,
-                mupdf.PDF_ANNOT_CIRCLE,
-                mupdf.PDF_ANNOT_FREE_TEXT,
-                mupdf.PDF_ANNOT_FILE_ATTACHMENT,
-                mupdf.PDF_ANNOT_INK,
-                mupdf.PDF_ANNOT_LINE,
-                mupdf.PDF_ANNOT_POLY_LINE,
-                mupdf.PDF_ANNOT_POLYGON,
-                mupdf.PDF_ANNOT_SQUARE,
-                mupdf.PDF_ANNOT_STAMP,
-                mupdf.PDF_ANNOT_TEXT,
-                ):
-            insert_rot = 0
+            insert_rot = 1 if rotate >= 0 else 0
+            if type_ not in (
+                    mupdf.PDF_ANNOT_CARET,
+                    mupdf.PDF_ANNOT_CIRCLE,
+                    mupdf.PDF_ANNOT_FREE_TEXT,
+                    mupdf.PDF_ANNOT_FILE_ATTACHMENT,
+                    mupdf.PDF_ANNOT_INK,
+                    mupdf.PDF_ANNOT_LINE,
+                    mupdf.PDF_ANNOT_POLY_LINE,
+                    mupdf.PDF_ANNOT_POLYGON,
+                    mupdf.PDF_ANNOT_SQUARE,
+                    mupdf.PDF_ANNOT_STAMP,
+                    mupdf.PDF_ANNOT_TEXT,
+                    ):
+                insert_rot = 0
 
-        if insert_rot:
-            annot.annot_obj().dict_put_int(mupdf.PDF_ENUM_NAME_Rotate, rotate)
-        self.needs_new_ap = 1   # re-create appearance stream
-        annot.update_annot()    # update the annotation
+            if insert_rot:
+                mupdf.mpdf_dict_put_int( annot_obj, PDF_NAME('Rotate'), rotate)
 
+            mupdf.mpdf_update_annot( annot) # let MuPDF update
+
+            # insert fill color
+            if type_ == mupdf.PDF_ANNOT_FREE_TEXT:
+                if nfcol > 0:
+                    mupdf.mpdf_set_annot_color( annot, fcol[:nfcol])
+            elif nfcol > 0:
+                col = mupdf.mpdf_new_array( page.doc(), nfcol)
+                for i in range( nfcol):
+                    mupdf.mpdf_array_push_real( col, fcol[i])
+                mupdf.mpdf_dict_put( annot_obj, PDF_NAME('IC'), col)
+        except Exception as e:
+            if g_exceptions_verbose:    jlib.exception_info()
+            print( f'cannot update annot: {e}', file=sys.stderr)
+            raise
+            return False
+        
         if (opacity < 0 or opacity >= 1) and not blend_mode:    # no opacity, no blend_mode
             return True
 
         try:    # create or update /ExtGState
             ap = mupdf.mpdf_dict_getl(
                     annot.annot_obj(),
-                    mupdf.PDF_ENUM_NAME_AP,
-                    mupdf.PDF_ENUM_NAME_N
+                    PDF_NAME('AP'),
+                    PDF_NAME('N')
                     )
             if not ap.m_internal:   # should never happen
                 raise Exception("annot has no /AP object")
 
-            resources = ap.dict_get(mupdf.PDF_ENUM_NAME_Resources)
-
+            resources = mupdf.mpdf_dict_get( ap, PDF_NAME('Resources'))
             if not resources.m_internal:    # no Resources yet: make one
-                resources = ap.dict_put_dict(mupdf.PDF_ENUM_NAME_Resources, 2)
-            alp0 = annot.annot_page().doc().new_dict(3)
+                resources = mupdf.mpdf_dict_put_dict( ap, PDF_NAME('Resources'), 2)
+            
+            alp0 = mupdf.mpdf_new_dict( page.doc(), 3)
             if opacity >= 0 and opacity < 1:
-                alp0.dict_put_real(mupdf.PDF_ENUM_NAME_CA, opacity)
-                alp0.dict_put_real(mupdf.PDF_ENUM_NAME_ca, opacity)
-                annot.annot_obj().dict_put_real(mupdf.PDF_ENUM_NAME_CA, opacity)
+                mupdf.mpdf_dict_put_real( alp0, PDF_NAME('CA'), opacity)
+                mupdf.mpdf_dict_put_real( alp0, PDF_NAME('ca'), opacity)
+                mupdf.mpdf_dict_put_real( annot_obj, PDF_NAME('CA'), opacity)
 
             if blend_mode:
-                alp0.dict_put_name(mupdf.PDF_ENUM_NAME_BM, blend_mode)
-                annot.annot_obj().dict_put_name(mupdf.PDF_ENUM_NAME_BM, blend_mode)
+                mupdf.mpdf_dict_put_name( alp0, PDF_NAME('BM'), blend_mode)
+                mupdf.mpdf_dict_put_name( annot_obj, PDF_NAME('BM'), blend_mode)
 
-            extg = resources.dict_get(mupdf.PDF_ENUM_NAME_ExtGState)
+            extg = mupdf.mpdf_dict_get( resources, PDF_NAME('ExtGState'))
             if not extg.m_internal: # no ExtGState yet: make one
-                extg = resources.dict_put_dict(mupdf.PDF_ENUM_NAME_ExtGState, 2)
+                extg = mupdf.mpdf_dict_put_dict( resources, PDF_NAME('ExtGState'), 2)
 
-            extg.dict_put(mupdf.PDF_ENUM_NAME_H, alp0)
+            mupdf.mpdf_dict_put_drop( extg, PDF_NAME('H'), alp0)
 
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             print( f'could not set opacity or blend mode: {e}', file=sys.stderr)
             raise
-            return False
 
         return True
 
@@ -755,7 +773,7 @@ class Annot:
         rotation = annot.annot_obj().dict_get(mupdf.PDF_ENUM_NAME_Rotate)
         if not rotation.m_internal:
             return -1
-        return rotation.to_int(g)
+        return mupdf.mpdf_to_int( rotation)
 
     def set_apn_bbox(self, bbox):
         """
@@ -2802,6 +2820,7 @@ class Document:
         res = mupdf.mpdf_load_raw_stream(obj)
         if img_type == mupdf.FZ_IMAGE_UNKNOWN:
             _, c = res.buffer_storage_raw()
+            #jlib.log( '{=_ c}')
             img_type = mupdf.mfz_recognize_image_format(c)
             ext = JM_image_extension(img_type)
         if img_type == mupdf.FZ_IMAGE_UNKNOWN:
@@ -5890,18 +5909,13 @@ class Page:
         props = {}
         for p, x in self._get_resource_properties():
             props[x] = p
-        jlib.log( ' ')
         if oc in props.keys():
-            jlib.log( ' ')
             return props[oc]
-        jlib.log( ' ')
         i = 0
         mc = "MC%i" % i
-        jlib.log( ' ')
         while mc in props.values():
             i += 1
             mc = "MC%i" % i
-        jlib.log( ' ')
         self._set_resource_property(mc, oc)
         jlib.log( 'returning {mc=}')
         return mc
@@ -5926,30 +5940,20 @@ class Page:
 
     def _get_textpage(self, clip=None, flags=0, matrix=None):
         #return _fitz.Page__get_textpage(self, clip, flags, matrix)
-        jlib.log( ' ')
         page = self.this
-        jlib.log( ' ')
         options = mupdf.StextOptions(flags)
-        jlib.log( ' ')
         rect = JM_rect_from_py(clip)
-        jlib.log( ' ')
         ctm = JM_matrix_from_py(matrix)
-        jlib.log( ' ')
         tpage = mupdf.StextPage(rect)
-        jlib.log( ' ')
         dev = mupdf.mfz_new_stext_device(tpage, options)
-        jlib.log( ' ')
         if isinstance(page, mupdf.Page):
             pass
         elif isinstance(page, mupdf.PdfPage):
             page = page.super()
         else:
             assert 0, f'Unrecognised type(page)={type(page)}'
-        jlib.log( ' ')
         mupdf.mfz_run_page(page, dev, ctm, mupdf.Cookie());
-        jlib.log( ' ')
         mupdf.mfz_close_device(dev)
-        jlib.log( ' ')
         return tpage
 
     def _insertFont(self, fontname, bfname, fontfile, fontbuffer, set_simple, idx, wmode, serif, encoding, ordering):
@@ -7053,7 +7057,6 @@ class Page:
         return rc
 
     def get_textpage(self, clip: rect_like = None, flags: int = 0, matrix=None) -> "TextPage":
-        jlib.log( ' ')
         CheckParent(self)
         if matrix is None:
             matrix = Matrix(1, 1)
@@ -7061,11 +7064,8 @@ class Page:
         if old_rotation != 0:
             self.set_rotation(0)
         try:
-            jlib.log( ' ')
             textpage = self._get_textpage(clip, flags=flags, matrix=matrix)
-            jlib.log( ' ')
         finally:
-            jlib.log( ' ')
             if old_rotation != 0:
                 self.set_rotation(old_rotation)
         #textpage.parent = weakref.proxy(self)
@@ -7582,8 +7582,7 @@ class Pixmap:
                 res = JM_BufferFromBytes(imagedata)
                 if not res.m_internal:
                     THROWMSG("bad image data")
-                size, data = res.buffer_storage_raw()
-                if not size:
+                if not res.m_internal.len:
                     THROWMSG("bad image data")
                 img = mupdf.mfz_new_image_from_buffer(res)
 
@@ -7885,7 +7884,7 @@ class Pixmap:
         try:
             from PIL import Image
         except ImportError:
-            print("PIL/Pillow not instralled")
+            print("PIL/Pillow not installed")
             raise
 
         cspace = self.colorspace
@@ -11385,10 +11384,13 @@ def JM_BufferFromBytes(stream):
     Make fz_buffer from a PyBytes, PyByteArray, io.BytesIO object.
     '''
     if isinstance(stream, bytes):
+        jlib.log( 'bytes. calling mupdf.Buffer.new_buffer_from_copied_data()')
         return mupdf.Buffer.new_buffer_from_copied_data(stream)
     if isinstance(stream, bytearray):
+        jlib.log( 'bytearray. calling mupdf.Buffer.new_buffer_from_copied_data()')
         return mupdf.Buffer.new_buffer_from_copied_data(stream)
     if hasattr(stream, 'getvalue'):
+        jlib.log( '.getvalue')
         data = stream.getvalue()
         if isinstance(data, bytes):
             pass
@@ -12401,6 +12403,9 @@ def JM_gather_fonts(pdf, dict_, fontlist, stream_xref):
         ext = "n/a"
         if xref:
             ext = JM_get_fontextension(pdf, xref)
+        jlib.log( '{name=}')
+        n = name.to_name()
+        jlib.log( '{n=}')
         entry = (
                 xref,
                 ext,
@@ -13858,7 +13863,8 @@ def JM_pixmap_from_display_list(
     rect = mupdf.mfz_transform_rect(rect, matrix)
     irect = mupdf.mfz_round_rect(rect)
 
-    pix = mupdf.mfz_new_pixmap_with_bbox(cs, irect, seps, alpha)
+    assert isinstance( cs, Colorspace)
+    pix = mupdf.mfz_new_pixmap_with_bbox(cs.this, irect, seps, alpha)
     if alpha:
         mupdf.mfz_clear_pixmap(pix)
     else:
