@@ -5579,10 +5579,7 @@ class Page:
 
     def _add_caret_annot(self, point):
         #return _fitz.Page__add_caret_annot(self, point)
-        jlib.log( '*** _add_caret_annot()')
         page = self._pdf_page()
-        jlib.log( f'page={page}')
-        jlib.log( f'mupdf.PDF_ANNOT_CARET={mupdf.PDF_ANNOT_CARET}')
         annot = page.create_annot(mupdf.PDF_ANNOT_CARET)
         if point:
             p = JM_point_from_py(point)
@@ -11384,13 +11381,13 @@ def JM_BufferFromBytes(stream):
     Make fz_buffer from a PyBytes, PyByteArray, io.BytesIO object.
     '''
     if isinstance(stream, bytes):
-        jlib.log( 'bytes. calling mupdf.Buffer.new_buffer_from_copied_data()')
+        #jlib.log( 'bytes. calling mupdf.Buffer.new_buffer_from_copied_data()')
         return mupdf.Buffer.new_buffer_from_copied_data(stream)
     if isinstance(stream, bytearray):
-        jlib.log( 'bytearray. calling mupdf.Buffer.new_buffer_from_copied_data()')
+        #jlib.log( 'bytearray. calling mupdf.Buffer.new_buffer_from_copied_data()')
         return mupdf.Buffer.new_buffer_from_copied_data(stream)
     if hasattr(stream, 'getvalue'):
-        jlib.log( '.getvalue')
+        #jlib.log( '.getvalue')
         data = stream.getvalue()
         if isinstance(data, bytes):
             pass

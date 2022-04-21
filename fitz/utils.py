@@ -760,7 +760,6 @@ def get_text(
         "words": 0,
         "blocks": 1,
     }
-    jlib.log( ' ')
     option = option.lower()
     if option not in formats:
         option = "text"
@@ -769,7 +768,6 @@ def get_text(
         if formats[option] == 1:
             flags |= fitz.TEXT_PRESERVE_IMAGES
 
-    jlib.log( ' ')
     if option == "words":
         return get_text_words(
             page, clip=clip, flags=flags, textpage=textpage, sort=sort
@@ -778,7 +776,6 @@ def get_text(
         return get_text_blocks(
             page, clip=clip, flags=flags, textpage=textpage, sort=sort
         )
-    jlib.log( ' ')
     fitz.CheckParent(page)
     cb = None
     if option in ("html", "xml", "xhtml"):  # no clipping for MuPDF functions
@@ -789,14 +786,10 @@ def get_text(
     elif type(page) is fitz.Page:
         cb = page.cropbox
     # fitz.TextPage with or without images
-    jlib.log( ' ')
     tp = textpage
     if tp is None:
-        jlib.log( ' ')
         tp = page.get_textpage(clip=clip, flags=flags)
-        jlib.log( ' ')
     elif getattr(tp, "parent") != page:
-        jlib.log( ' ')
         raise ValueError("not a textpage of this page")
     jlib.log( '{option=}')
     if option == "json":
@@ -816,10 +809,8 @@ def get_text(
     else:
         t = tp.extractText(sort=sort)
 
-    jlib.log( ' ')
     if textpage is None:
         del tp
-    jlib.log( ' ')
     return t
 
 
@@ -3610,7 +3601,6 @@ class Shape:
             fill_str = fitz.ColorCode(color, "f")
 
         optcont = self.page._get_optional_content(oc)
-        jlib.log( ' ')
         if optcont != None:
             bdc = "/OC /%s BDC\n" % optcont
             emc = "EMC\n"
@@ -3618,16 +3608,13 @@ class Shape:
             bdc = emc = ""
 
         # determine opacity / transparency
-        jlib.log( ' ')
         alpha = self.page._set_opacity(CA=stroke_opacity, ca=fill_opacity)
         if alpha == None:
             alpha = ""
         else:
             alpha = "/%s gs\n" % alpha
 
-        jlib.log( ' ')
         if rotate % 90 != 0:
-            jlib.log( ' ')
             raise ValueError("rotate must be multiple of 90")
 
         rot = rotate
@@ -3637,10 +3624,8 @@ class Shape:
 
         # is buffer worth of dealing with?
         if not bool(buffer):
-            jlib.log( ' ')
             return rect.height if rot in (0, 180) else rect.width
 
-        jlib.log( ' ')
         cmp90 = "0 1 -1 0 0 0 cm\n"  # rotates counter-clockwise
         cmm90 = "0 -1 1 0 0 0 cm\n"  # rotates clockwise
         cm180 = "-1 0 0 -1 0 0 cm\n"  # rotates by 180 deg.
@@ -3650,7 +3635,6 @@ class Shape:
         if fname.startswith("/"):
             fname = fname[1:]
 
-        jlib.log( ' ')
         xref = self.page.insert_font(
             fontname=fname, fontfile=fontfile, encoding=encoding, set_simple=set_simple
         )
@@ -3664,7 +3648,6 @@ class Shape:
         ascender = fontdict["ascender"]
         descender = fontdict["descender"]
 
-        jlib.log( ' ')
         if lineheight:
             lheight_factor = lineheight
         elif ascender - descender <= 1:
@@ -3679,7 +3662,6 @@ class Shape:
         else:
             t0 = buffer
 
-        jlib.log( ' ')
         maxcode = max([ord(c) for c in t0])
         # replace invalid char codes for simple fonts
         if simple and maxcode > 255:
@@ -3724,7 +3706,6 @@ class Shape:
         # ---------------------------------------------------------------------------
         # adjust for text orientation / rotation
         # ---------------------------------------------------------------------------
-        jlib.log( ' ')
         progr = 1  # direction of line progress
         c_pnt = fitz.Point(0, fontsize * ascender)  # used for line progress
         if rot == 0:  # normal orientation
@@ -3818,7 +3799,6 @@ class Shape:
         if more > fitz.EPSILON:  # landed too much outside rect
             return (-1) * more  # return deficit, don't output
 
-        jlib.log( ' ')
         more = abs(more)
         if more < fitz.EPSILON:
             more = 0  # don't bother with epsilons
@@ -3876,7 +3856,6 @@ class Shape:
 
         self.text_cont += nres
         self.updateRect(rect)
-        jlib.log( ' ')
         return more
 
     def finish(
