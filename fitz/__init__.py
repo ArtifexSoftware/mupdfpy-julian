@@ -6069,10 +6069,17 @@ class Page:
             #jlib.log( 'do_process_stream')
             # process stream ---------------------------------
             state = mupdf.Md5()
-            mupdf.mfz_md5_update(state, imgbuf.m_internal.data, imgbuf.m_internal.len)
+            jlib.log( '{=type(imgbuf) type(imgbuf.m_internal.data) type(imgbuf.m_internal.len)}')
+            if mupdf_cppyy:
+                mupdf.mfz_md5_update_buffer( state, imgbuf)
+            else:
+                mupdf.mfz_md5_update(state, imgbuf.m_internal.data, imgbuf.m_internal.len)
             if imask:
                 maskbuf = JM_BufferFromBytes(imask)
-                fz_md5_update(state, maskbuf.m_internal.data, maskbuf.m_internal.len)
+                if mupdf_cppyy:
+                    mupdf.mfz_md5_update_buffer( state, maskbuf)
+                else:
+                    fz_md5_update(state, maskbuf.m_internal.data, maskbuf.m_internal.len)
             digest = state.md5_final2()
             md5_py = bytes(digest)
             temp = digests.get(md5_py, None)
