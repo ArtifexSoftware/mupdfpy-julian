@@ -16746,7 +16746,8 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
     for i in range( len(known_page_objs)):
         obj = mupdf.mpdf_dict_get_inheritable( page_ref, known_page_objs[i])
         if obj.m_internal:
-            mupdf.mpdf_dict_put( page_dict, known_page_objs[i], mupdf.mpdf_graft_mapped_object(graft_map, obj))
+            #jlib.log( '{=type(graft_map) type(graft_map.this)}')
+            mupdf.mpdf_dict_put( page_dict, known_page_objs[i], mupdf.mpdf_graft_mapped_object(graft_map.this, obj))
 
     # Copy the annotations, but skip types Link, Popup, IRT.
     # Remove dict keys P (parent) and Popup from copied annot.
@@ -16769,7 +16770,7 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
                     continue
                 mupdf.mpdf_dict_del( o, PDF_NAME('Popup'))
                 mupdf.mpdf_dict_del( o, PDF_NAME('P'))
-                copy_o = mupdf.mpdf_graft_mapped_object( graft_map, o)
+                copy_o = mupdf.mpdf_graft_mapped_object( graft_map.this, o)
                 annot = mupdf.mpdf_new_indirect( doc_des, mupdf.mpdf_to_num( copy_o), 0)
                 mupdf.mpdf_array_push( new_annots, annot)
 
