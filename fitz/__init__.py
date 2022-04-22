@@ -6069,7 +6069,6 @@ class Page:
             #jlib.log( 'do_process_stream')
             # process stream ---------------------------------
             state = mupdf.Md5()
-            jlib.log( '{=type(imgbuf) type(imgbuf.m_internal.data) type(imgbuf.m_internal.len)}')
             if mupdf_cppyy:
                 mupdf.mfz_md5_update_buffer( state, imgbuf)
             else:
@@ -13058,6 +13057,10 @@ def JM_image_reporter(page):
         def image_filter( self, ctm, name, image):
             assert isinstance(ctm, mupdf.fz_matrix)
             JM_image_filter(self, mupdf.Matrix(ctm), name, image)
+            if mupdf_cppyy:
+                # cppyy doesn't appear to treat returned None as nullptr,
+                # resulting in obscure 'python exception' exception.
+                return 0
 
     filter_ = Filter()
 
