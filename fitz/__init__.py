@@ -4494,7 +4494,7 @@ class Font:
             is_italic=0,
             is_serif=0,
             ):
-
+        jlib.log( '{=fontname fontfile fontbuffer script language ordering is_bold is_italic is_serif}')
         if fontname:
             if "/" in fontname or "\\" in fontname or "." in fontname:
                 print("Warning: did you mean a fontfile?")
@@ -4532,12 +4532,38 @@ class Font:
         #        is_italic,
         #        is_serif,
         #        )
-        jlib.log( '{=type(language) language}')
+        #jlib.log( '{=type(language) language}')
         lang = mupdf.mfz_text_language_from_string(language)
+        #jlib.log( '{=lang}')
         font = JM_get_font(fontname, fontfile,
                    fontbuffer, script, lang, ordering,
                    is_bold, is_italic, is_serif)
+        #jlib.log( 'mupdf.mfz_font_flags(font):')
+        flags = mupdf.mfz_font_flags(font)
+        if mupdf_cppyy:
+            import cppyy
+            # cppyy doesn't handle bitfields very well - each bitfield value
+            # reads as the byte it is within.
+            #
+            jlib.log( 'flags={cppyy.gbl.mupdf_mfz_font_flags_string( flags)}')
+        else:
+            for n in (
+                    'is_mono',
+                    'is_serif',
+                    'is_bold',
+                    'is_italic',
+                    'ft_substitute',
+                    'ft_stretch',
 
+                    'fake_bold',
+                    'fake_italic',
+                    'has_opentype',
+                    'invalid_bbox',
+
+                    'cjk',
+                    'cjk_lang',
+                    ):
+                jlib.log( '    {n}={getattr( flags, n)}')
         self.this = font
 
     def __repr__(self):
@@ -4602,6 +4628,7 @@ class Font:
         if not f:
             return
         assert isinstance( f, mupdf.fz_font_flags_t)
+        #jlib.log( '{=f}')
         return {
                 "mono":         f.is_mono,
                 "serif":        f.is_serif,
@@ -4675,11 +4702,18 @@ class Font:
     def is_writable(self):
         #return _fitz.Font_is_writable(self)
         font = self.this
-        #jlib.log( '{mupdf.mfz_font_t3_procs(font)=}')
+        #jlib.log( '{=mupdf.mfz_font_t3_procs(font) bool(mupdf.mfz_font_t3_procs(font))}')
         #jlib.log( '{mupdf.font_flags(font.m_internal).ft_substitute=}')
         #jlib.log( '{mupdf.mpdf_font_writing_supported(font)=}')
+        flags = mupdf.font_flags(font.m_internal)
+        if mupdf_cppyy:
+            # cppyy doesn't handle bitfields correctly.
+            import cppyy
+            ft_substitute = cppyy.gbl.mupdf_mfz_font_flags_ft_substitute( flags)
+        else:
+            ft_substitute = flags.ft_substitute
         if ( mupdf.mfz_font_t3_procs(font)
-                or mupdf.font_flags(font.m_internal).ft_substitute
+                or ft_substitute
                 or not mupdf.mpdf_font_writing_supported(font)
                 ):
             return False
@@ -10231,6 +10265,7 @@ class TextWriter:
             resources = mupdf.mpdf_new_dict(pdfpage.doc(), 5)
             contents = mupdf.mfz_new_buffer(1024)
             dev = mupdf.mpdf_new_pdf_device( pdfpage.doc(), mupdf.Matrix(), resources, contents)
+            jlib.log( '=== {dev_color!r=}')
             mupdf.mfz_fill_text(
                     dev,
                     self.this,
@@ -12669,12 +12704,14 @@ def JM_get_font(
     if fontname:
         # goto have_base14;
         data, size = mupdf.mfz_lookup_base14_font(fontname)
+        #jlib.log( '{=data size}')
         if data:
             font = mupdf.mfz_new_font_from_memory(fontname, data, size, 0, 0)
         if font.m_internal:
             return font
 
         data, size = mupdf.mfz_lookup_builtin_font(fontname, is_bold, is_italic)
+        #jlib.log( '{=data size}')
         if data:
             font = mupdf.mfz_new_font_from_memory(fontname, data, size, 0, 0)
         if not font.m_internal:
