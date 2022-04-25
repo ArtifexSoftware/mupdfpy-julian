@@ -42,8 +42,11 @@ Arguments:
         For example:
             PYTHONPATH=PySimpleGUI ./mupdfpy/test.py --mupdf mupdf/build/shared-release --run python3 PyMuPDF-Utilities/animations/morph-demo1.py
 
-    --tests <test-file> | all | '' | '.'
+    --tests [<pytest-flags>] <test-file> | all | '' | '.'
         Run PyMuPDF's py.test tests.
+        
+        <pytest-flags>:
+            E.g. '-x' to stop at first error.
         
         E.g.:
             --test test_annots.py
@@ -154,7 +157,7 @@ class State:
         
 
 
-def run_pymupdf_tests( state, testname=None, pypy=False):
+def run_pymupdf_tests( state, testname=None, pypy=False, ptest_flags=''):
     '''
     Runs pytest in PyMuPDF/tests, using mupdfpy.
     '''
@@ -168,7 +171,7 @@ def run_pymupdf_tests( state, testname=None, pypy=False):
     if pypy:
         command = f'cd {d} && {env} pypy3 `which {pytest}` -s'
     else:
-        command = f'cd {d} && {env} {pytest} -s'
+        command = f'cd {d} && {env} {pytest} {ptest_flags} -s'
     if testname:
         command += f' {testname}'
     log( f'Running: {command}')
@@ -360,11 +363,42 @@ def main():
             
             log( 'Ok')
         
+        elif arg == '--test-cppyy-5':
+            import cppyy
+            import cppyy.ll
+            import ctypes
+            cppyy.cppdef('''
+                    void foo(const char* name)
+                    {
+                        std::cerr << "name=" << (void*) name;
+                        if (name) std::cerr << "='" << name << "'";
+                        std::cerr << "\\n";
+                    }
+                    ''')
+            def call( p):
+                print( f'=== calling foo() with p={p}={p!r}', file=sys.stderr)
+                try:
+                    cppyy.gbl.foo( p)
+                except Exception  as e:
+                    print( f'Failed: {e}', file=sys.stderr)
+                else:
+                    print( f'Ok.', file=sys.stderr)
+            call( 0)    # Fails.
+            call( cppyy.nullptr)    # Fails.
+            call( cppyy.ll.cast[ 'const char*']( 0))    # Passes pointer to ''.
+            call( ctypes.c_char_p())    # Ok, passes nullptr.
+        
         elif arg == '--tests':
-            testname = next( args)
+            ptest_flags = ''
+            while 1:
+                testname = next( args)
+                if not testname.startswith( '-'):
+                    break
+                a = testname
+                ptest_flags += f' {a}'
             if testname in ( 'all', '', '.'):
                 testname = None
-            run_pymupdf_tests( state, testname)
+            run_pymupdf_tests( state, testname, ptest_flags=ptest_flags)
         
         elif arg == '--tests-pypy':
             run_pymupdf_tests( state, pypy=True)
