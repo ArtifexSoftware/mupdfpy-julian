@@ -4548,9 +4548,9 @@ class Font:
             # cppyy doesn't handle bitfields very well - each bitfield value
             # reads as the byte it is within.
             #
-            jlib.log( 'flags={cppyy.gbl.mupdf_mfz_font_flags_string( flags)}')
+            t = jlib.log_text( 'flags: {cppyy.gbl.mupdf_mfz_font_flags_string( flags)}')
         else:
-            t = ''
+            t = 'flags: {'
             for n in (
                     'is_mono',
                     'is_serif',
@@ -4568,7 +4568,8 @@ class Font:
                     'cjk_lang',
                     ):
                 t += f' {n}={getattr( flags, n)}'
-            jlib.log( t)
+            t += '}'
+        jlib.log( '{t}')
         self.this = font
         jlib.log( '{self.name=}')
 
@@ -4728,7 +4729,9 @@ class Font:
     @property
     def name(self):
         #return _fitz.Font_name(self)
-        return mupdf.mfz_font_name(self.this)
+        ret = mupdf.mfz_font_name(self.this)
+        jlib.log( '{ret=}')
+        return ret
 
     def text_length(self, text, fontsize=11, language=None, script=0, wmode=0, small_caps=0):
         """Return length of unicode 'text' under a fontsize."""
@@ -10138,6 +10141,7 @@ class TextWriter:
     def append(self, pos, text, font=None, fontsize=11, language=None, right_to_left=0, small_caps=0):
         """Store 'text' at point 'pos' using 'font' and 'fontsize'."""
         pos = Point(pos) * self.ictm
+        jlib.log( '{font=}')
         if font is None:
             font = Font("helv")
         if not font.is_writable:
@@ -10149,6 +10153,10 @@ class TextWriter:
             jlib.log( '{font.this.m_internal.width_count=}')
             jlib.log( '{font.this.m_internal.width_default=}')
             jlib.log( '{font.this.m_internal.has_digest=}')
+            jlib.log( 'Unsupported font {font.name=}')
+            if mupdf_cppyy:
+                import cppyy
+                jlib.log( 'Unsupported font {cppyy.gbl.mupdf_font_name(font.this.m_internal)!r=}')
             raise ValueError("Unsupported font '%s'." % font.name)
         if right_to_left:
             text = self.clean_rtl(text)
@@ -12694,7 +12702,7 @@ def JM_get_font(
     font = None
     if fontfile:
         #goto have_file;
-        font = mupdf.mfz_new_font_from_file( 0 if mupdf_cppyy else None, fontfile, index, 0)
+        font = mupdf.mfz_new_font_from_file( None, fontfile, index, 0)
         if not font.m_internal:
             THROWMSG( "could not create font")
         return font
@@ -12702,18 +12710,20 @@ def JM_get_font(
     if fontbuffer:
         #goto have_buffer;
         res = JM_BufferFromBytes(fontbuffer)
-        font = mupdf.mfz_new_font_from_buffer( 0 if mupdf_cppyy else None, res, index, 0)
+        font = mupdf.mfz_new_font_from_buffer( None, res, index, 0)
         if not font.m_internal:
             THROWMSG( "could not create font");
         return font
 
     if ordering > -1:
         # goto have_cjk;
-        data, size, index = mupdf.mfz_lookup_cjk_font(ordering);
+        data, size, index = mupdf.mfz_lookup_cjk_font(ordering)
+        jlib.log( '{=data size index}')
         if data:
             font = mupdf.mfz_new_font_from_memory( None, data, size, index, 0);
         if not font.m_internal:
-            THROWMSG( "could not create font");
+            THROWMSG( "could not create font")
+        jlib.log( 'after mupdf.mfz_new_font_from_memory(): {font.m_internal.name=}')
         return font
 
     if fontname:
