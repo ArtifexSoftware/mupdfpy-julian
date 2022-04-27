@@ -385,8 +385,46 @@ def main():
                     print( f'Ok.', file=sys.stderr)
             call( 0)    # Fails.
             call( cppyy.nullptr)    # Fails.
+            call( None) # Fails.
             call( cppyy.ll.cast[ 'const char*']( 0))    # Passes pointer to ''.
             call( ctypes.c_char_p())    # Ok, passes nullptr.
+        
+        elif arg == '--test-cppyy-6':
+            import cppyy
+            cppyy.cppdef('''
+                    struct Foo
+                    {
+                        unsigned int a : 1;
+                        unsigned int b : 2;
+                        unsigned int c : 4;
+                        unsigned int d : 1;
+                        unsigned int e : 8;
+                        unsigned int f :16;
+                        
+                        Foo() : a(1), b(0), c(0), d(0), e(0x33), f(0x5555)
+                        {}
+                    };
+                    ''')
+            f = cppyy.gbl.Foo();
+            print( f'a=0x{f.a:x} b=0x{f.b:x} c=0x{f.c:x} d=0x{f.d:x} e=0x{f.e:x} f=0x{f.f:x}')
+        
+        elif arg == '--test-cppyy-7':
+            import cppyy
+            import cppyy.ll
+            cppyy.cppdef('''
+                    struct Foo
+                    {
+                    };
+                    void foo(Foo* f)
+                    {
+                        std::cerr << "f=" << f << "\\n";
+                    }
+                    ''')
+            p = cppyy.ll.cast['Foo*'](0)
+            cppyy.gbl.foo( p)
+            cppyy.gbl.foo( cppyy.nullptr)
+            cppyy.gbl.foo( None)    # Fails.
+            
         
         elif arg == '--tests':
             ptest_flags = ''
