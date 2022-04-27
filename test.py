@@ -406,7 +406,20 @@ def main():
                     };
                     ''')
             f = cppyy.gbl.Foo();
-            print( f'a=0x{f.a:x} b=0x{f.b:x} c=0x{f.c:x} d=0x{f.d:x} e=0x{f.e:x} f=0x{f.f:x}')
+            print( f'a=0x{f.a:x}')
+            print( f'b=0x{f.b:x}')
+            print( f'c=0x{f.c:x}')
+            print( f'd=0x{f.d:x}')
+            print( f'e=0x{f.e:x}')
+            print( f'f=0x{f.f:x}')
+            f.c = 0xf0
+            print('After setting f.c to 0xf0:')
+            print( f'a=0x{f.a:x}')
+            print( f'b=0x{f.b:x}')
+            print( f'c=0x{f.c:x}')
+            print( f'd=0x{f.d:x}')
+            print( f'e=0x{f.e:x}')
+            print( f'f=0x{f.f:x}')
         
         elif arg == '--test-cppyy-7':
             import cppyy
