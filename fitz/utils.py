@@ -19,6 +19,8 @@ import tempfile
 import fitz.fitz
 jlib = fitz.jlib
 
+import mupdf
+
 g_exceptions_verbose = False
 #g_exceptions_verbose = True
 
@@ -760,6 +762,7 @@ def get_text(
         "words": 0,
         "blocks": 1,
     }
+    import jlib
     option = option.lower()
     if option not in formats:
         option = "text"
@@ -787,6 +790,8 @@ def get_text(
         cb = page.cropbox
     # fitz.TextPage with or without images
     tp = textpage
+    jlib.log( '{=tp clip flags sort}')
+    #jlib.exception_info()
     if tp is None:
         tp = page.get_textpage(clip=clip, flags=flags)
     elif getattr(tp, "parent") != page:
@@ -808,6 +813,7 @@ def get_text(
         t = tp.extractXHTML()
     else:
         t = tp.extractText(sort=sort)
+        jlib.log( '{=t}')
 
     if textpage is None:
         del tp
@@ -1824,6 +1830,7 @@ def new_page(
     Returns:
         A fitz.Page object.
     """
+    jlib.log( ' ')
     doc._newPage(pno, width=width, height=height)
     return doc[pno]
 
@@ -4218,6 +4225,22 @@ def scrub(
             doc.xref_set_key(xref, "Metadata", "null")
 
 
+def _show_fz_text( text):
+    #if mupdf_cppyy:
+    #    assert isinstance( text, cppyy.gbl.mupdf.Text)
+    #else:
+    #    assert isinstance( text, mupdf.Text)
+    num_spans = 0
+    num_chars = 0
+    span = text.m_internal.head
+    while 1:
+        if not span:
+            break
+        num_spans += 1
+        num_chars += span.len
+        span = span.next
+    return jlib.log_text( '{=num_spans num_chars}')
+
 def fill_textbox(
     writer: fitz.TextWriter,
     rect: rect_like,
@@ -4262,10 +4285,12 @@ def fill_textbox(
         return font.char_lengths(x, fontsize=fontsize, small_caps=small_caps)
 
     def append_this(pos, text):
-        return writer.append(
-            pos, text, font=font, fontsize=fontsize, small_caps=small_caps
-        )
-
+        jlib.log( 'append_this: {=pos type(text)}: {text!r}')
+        ret = writer.append(
+                pos, text, font=font, fontsize=fontsize, small_caps=small_caps
+                )
+        return ret
+        
     tolerance = fontsize * 0.2  # extra distance to left border
     space_len = textlen(" ")
     std_width = rect.width - tolerance
@@ -4382,6 +4407,7 @@ def fill_textbox(
         words, word_lengths = norm_words(std_width, words)
 
         n = len(words)
+        jlib.log( '=== {n=}')
         while True:
             line0 = " ".join(words[:n])
             wl = sum(word_lengths[:n]) + space_len * (len(word_lengths[:n]) - 1)
@@ -4439,6 +4465,9 @@ def fill_textbox(
         start.x = std_start
         start.y += LINEHEIGHT
 
+    jlib.log( '{=type(writer) type(writer.this)}')
+    t = _show_fz_text(writer.this)
+    jlib.log( 'returning. fz_text is: {_show_fz_text(writer.this)}')
     return new_lines  # return non-written lines
 
 

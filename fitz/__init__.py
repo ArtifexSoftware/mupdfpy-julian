@@ -1357,6 +1357,7 @@ class Annot:
         if res:
             JM_update_stream(pdf, stream, res, 1)
             # adjust /DL and /Size parameters
+            jlib.log( 'calling mupdf.mfz_buffer_storage()')
             len, _ = mupdf.mfz_buffer_storage(res, NULL)
             l = mupdf.mpdf_new_int(len)
             mupdf.mpdf_dict_put(stream, PDF_NAME('DL'), l)
@@ -1527,6 +1528,7 @@ class DisplayList:
 class Document:
 
     def __contains__(self, loc) -> bool:
+        jlib.log( 'self.this.count_pages()')
         page_count = self.this.count_pages()
         if type(loc) is int:
             if loc < self.page_count:
@@ -1595,6 +1597,7 @@ class Document:
             rect, width, height, fontsize: layout reflowable document
             on open (e.g. EPUB). Ignored if n/a.
         """
+        jlib.log( 'Document.__init__()')
         if 1:
             self.is_closed    = False
             self.is_encrypted = False
@@ -1699,11 +1702,15 @@ class Document:
 
         if self.thisown:
             self._graft_id = TOOLS.gen_id()
+            jlib.log( 'calling self.needs_pass')
             if self.needs_pass:
+                jlib.log( 'self.needs_pass True')
                 self.isEncrypted = True
                 self.is_encrypted = True
             else: # we won't init until doc is decrypted
+                jlib.log( 'self.needs_pass False')
                 self.init_doc()
+        jlib.log( 'Document.__init__() returning')
 
     def __len__(self) -> int:
         return self.page_count
@@ -1890,6 +1897,7 @@ class Document:
         if res.m_internal and buffer_ and buffer_.m_internal:
             JM_update_stream(pdf, filespec, res, 1)
             # adjust /DL and /Size parameters
+            jlib.log( 'calling mupdf.mfz_buffer_storage()')
             len, _ = mupdf.mfz_buffer_storage(res)
             l = mupdf.mpdf_new_int(len)
             mupdf.mpdf_dict_put(filespec, PDF_NAME('DL'), l)
@@ -1929,6 +1937,7 @@ class Document:
         data = JM_BufferFromBytes(buffer_)
         if not data.m_internal:
             THROWMSG("bad type: 'buffer'")
+        jlib.log( 'calling data.buffer_storage_raw()')
         size, buffdata = data.buffer_storage_raw()
 
         names = mupdf.mpdf_dict_getl(
@@ -2149,11 +2158,14 @@ class Document:
 
     def _getPageInfo(self, pno, what):
         """List fonts, images, XObjects used on a page."""
+        jlib.log( ' ')
+        jlib.exception_info( limit=10)
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document__getPageInfo(self, pno, what)
         doc = self.this
         pdf = self._this_as_pdf_document()
+        jlib.log( 'Calling doc.count_pages()')
         pageCount = doc.count_pages()
         n = pno;  # pno < 0 is allowed
         while n < 0:
@@ -2202,8 +2214,10 @@ class Document:
 
     def _loadOutline(self):
         """Load first outline."""
+        jlib.log( '{self.is_closed=}')
         if self.is_closed:
             raise ValueError("document closed")
+        jlib.log( 'Creating Outline by calling self.this.load_outline()')
         return Outline(self.this.load_outline())
 
     def _make_page_map(self):
@@ -2823,6 +2837,7 @@ class Document:
             ext = "jb2"
         res = mupdf.mpdf_load_raw_stream(obj)
         if img_type == mupdf.FZ_IMAGE_UNKNOWN:
+            jlib.log( 'calling res.buffer_storage_raw()')
             _, c = res.buffer_storage_raw()
             #jlib.log( '{=_ c}')
             img_type = mupdf.mfz_recognize_image_format(c)
@@ -3205,6 +3220,7 @@ class Document:
         return False
 
     def init_doc(self):
+        jlib.log( ' ')
         if self.is_encrypted:
             raise ValueError("cannot initialize - document still encrypted")
         self._outline = self._loadOutline()
@@ -3680,6 +3696,7 @@ class Document:
 
     def _newPage(self, pno=-1, width=595, height=842):
         """Make a new PDF page."""
+        jlib.log( ' ')
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #val = _fitz.Document__newPage(self, pno, width, height)
@@ -3728,6 +3745,7 @@ class Document:
         return next_loc.chapter, next_loc.page
 
     def page_annot_xrefs(self, n):
+        jlib.log( 'Calling self.this.count_pages()')
         page_count = self.this.count_pages()
         while n < 0:
             n += page_count
@@ -3742,8 +3760,11 @@ class Document:
     @property
     def page_count(self):
         """Number of pages."""
+        jlib.log( ' ')
+        jlib.exception_info(limit=10)
         if self.is_closed:
             raise ValueError("document closed")
+        jlib.log( 'Calling self.this.count_pages()')
         ret = self.this.count_pages()
         return ret
 
@@ -4494,7 +4515,7 @@ class Font:
             is_italic=0,
             is_serif=0,
             ):
-        jlib.log( '{=fontname fontfile fontbuffer script language ordering is_bold is_italic is_serif}')
+        #jlib.log( '{=fontname fontfile fontbuffer script language ordering is_bold is_italic is_serif}')
         if fontname:
             if "/" in fontname or "\\" in fontname or "." in fontname:
                 print("Warning: did you mean a fontfile?")
@@ -4515,13 +4536,13 @@ class Font:
             elif fontname.lower() in fitz_fontdescriptors.keys():
                 import pymupdf_fonts  # optional fonts
                 fontbuffer = pymupdf_fonts.myfont(fontname)  # make a copy
-                jlib.log( 'setting fontname to None')
+                #jlib.log( 'setting fontname to None')
                 fontname = None  # ensure using fontbuffer only
                 del pymupdf_fonts  # remove package again
 
             elif ordering < 0:
                 fontname = Base14_fontdict.get(fontname.lower(), fontname)
-                jlib.log( 'changed fontname to {fontname}')
+                #jlib.log( 'changed fontname to {fontname}')
 
         #this = _fitz.new_Font(
         #        fontname,
@@ -4536,42 +4557,43 @@ class Font:
         #        )
         #jlib.log( '{=type(language) language}')
         lang = mupdf.mfz_text_language_from_string(language)
-        jlib.log( '{=lang}')
-        jlib.log( '{=fontname}')
+        #jlib.log( '{=lang}')
+        #jlib.log( '{=fontname}')
         font = JM_get_font(fontname, fontfile,
                    fontbuffer, script, lang, ordering,
                    is_bold, is_italic, is_serif)
         #jlib.log( 'mupdf.mfz_font_flags(font):')
         flags = mupdf.mfz_font_flags(font)
-        if mupdf_cppyy:
-            import cppyy
-            # cppyy doesn't handle bitfields very well - each bitfield value
-            # reads as the byte it is within.
-            #
-            t = jlib.log_text( 'flags: {cppyy.gbl.mupdf_mfz_font_flags_string( flags)}')
-        else:
-            t = 'flags: {'
-            for n in (
-                    'is_mono',
-                    'is_serif',
-                    'is_bold',
-                    'is_italic',
-                    'ft_substitute',
-                    'ft_stretch',
+        if 0:
+            if mupdf_cppyy:
+                import cppyy
+                # cppyy doesn't handle bitfields very well - each bitfield value
+                # reads as the byte it is within.
+                #
+                t = jlib.log_text( 'flags: {cppyy.gbl.mupdf_mfz_font_flags_string( flags)}')
+            else:
+                t = 'flags: {'
+                for n in (
+                        'is_mono',
+                        'is_serif',
+                        'is_bold',
+                        'is_italic',
+                        'ft_substitute',
+                        'ft_stretch',
 
-                    'fake_bold',
-                    'fake_italic',
-                    'has_opentype',
-                    'invalid_bbox',
+                        'fake_bold',
+                        'fake_italic',
+                        'has_opentype',
+                        'invalid_bbox',
 
-                    'cjk',
-                    'cjk_lang',
-                    ):
-                t += f' {n}={getattr( flags, n)}'
-            t += '}'
-        jlib.log( '{t}')
+                        'cjk',
+                        'cjk_lang',
+                        ):
+                    t += f' {n}={getattr( flags, n)}'
+                t += '}'
+            jlib.log( '{t}')
         self.this = font
-        jlib.log( '{self.name=}')
+        #jlib.log( '{self.name=}')
 
     def __repr__(self):
         return "Font('%s')" % self.name
@@ -4598,10 +4620,12 @@ class Font:
         #return _fitz.Font_buffer(self)
         buffer_ = mupdf.Buffer( mupdf.keep_buffer( self.this.m_internal.buffer))
         if mupdf_cppyy:
+            jlib.log( 'calling mupdf.mfz_buffer_storage_bytes( buffer_)')
             ret = mupdf.mfz_buffer_storage_bytes( buffer_)
             assert isinstance( ret, bytes)
             return ret
         else:
+            jlib.log( 'calling buffer_extract_raw()')
             size, data = buffer_.buffer_extract_raw()
             return mupdf.raw_to_python_bytes( data, size)
 
@@ -4636,17 +4660,34 @@ class Font:
             return
         assert isinstance( f, mupdf.fz_font_flags_t)
         #jlib.log( '{=f}')
+        if mupdf_cppyy:
+            # cppyy includes remaining higher bits.
+            v = [f.is_mono]
+            def b(bits):
+                ret = v[0] & ((1 << bits)-1)
+                v[0] = v[0] >> bits
+                return ret
+            is_mono = b(1)
+            is_serif = b(1)
+            is_bold = b(1)
+            is_italic = b(1)
+            ft_substitute = b(1)
+            ft_stretch = b(1)
+            fake_bold = b(1)
+            fake_italic = b(1)
+            has_opentype = b(1)
+            invalid_bbox = b(1)
         return {
-                "mono":         f.is_mono,
-                "serif":        f.is_serif,
-                "bold":         f.is_bold,
-                "italic":       f.is_italic,
-                "substitute":   f.ft_substitute,
-                "stretch":      f.ft_stretch,
-                "fake-bold":    f.fake_bold,
-                "fake-italic":  f.fake_italic,
-                "opentype":     f.has_opentype,
-                "invalid-bbox": f.invalid_bbox,
+                "mono":         is_mono if mupdf_cppyy else f.is_mono,
+                "serif":        is_serif if mupdf_cppyy else f.is_serif,
+                "bold":         is_bold if mupdf_cppyy else f.is_bold,
+                "italic":       is_italic if mupdf_cppyy else f.is_italic,
+                "substitute":   ft_substitute if mupdf_cppyy else f.ft_substitute,
+                "stretch":      ft_stretch if mupdf_cppyy else f.ft_stretch,
+                "fake-bold":    fake_bold if mupdf_cppyy else f.fake_bold,
+                "fake-italic":  fake_italic if mupdf_cppyy else f.fake_italic,
+                "opentype":     has_opentype if mupdf_cppyy else f.has_opentype,
+                "invalid-bbox": invalid_bbox if mupdf_cppyy else f.invalid_bbox,
                 }
 
     def glyph_advance(self, chr_, language=None, script=0, wmode=0, small_caps=0):
@@ -4730,7 +4771,7 @@ class Font:
     def name(self):
         #return _fitz.Font_name(self)
         ret = mupdf.mfz_font_name(self.this)
-        jlib.log( '{ret=}')
+        #jlib.log( '{ret=}')
         return ret
 
     def text_length(self, text, fontsize=11, language=None, script=0, wmode=0, small_caps=0):
@@ -5952,9 +5993,9 @@ class Page:
         doc = self.parent
         check = doc.xref_object(oc, compressed=True)
         if not ("/Type/OCG" in check or "/Type/OCMD" in check):
-            jlib.log( 'raising "bad optional content"')
+            #jlib.log( 'raising "bad optional content"')
             raise ValueError("bad optional content: 'oc'")
-        jlib.log( 'Looking at self._get_resource_properties()')
+        #jlib.log( 'Looking at self._get_resource_properties()')
         props = {}
         for p, x in self._get_resource_properties():
             props[x] = p
@@ -5966,7 +6007,7 @@ class Page:
             i += 1
             mc = "MC%i" % i
         self._set_resource_property(mc, oc)
-        jlib.log( 'returning {mc=}')
+        #jlib.log( 'returning {mc=}')
         return mc
 
     def _get_resource_properties(self):
@@ -6714,7 +6755,7 @@ class Page:
         rect = Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
         if rect.is_infinite or rect.is_empty:
             raise ValueError("rect must be finite and not empty")
-        jlib.log( '{=mb rect type(mb) type(rect)}')
+        #jlib.log( '{=mb rect type(mb) type(rect)}')
         if rect not in mb:
             raise ValueError("rect not in mediabox")
         doc.xref_set_key(self.xref, boxtype, "[%g %g %g %g]" % tuple(rect))
@@ -7602,6 +7643,7 @@ class Pixmap:
             res = JM_BufferFromBytes(samples);
             if not res.m_internal:
                 THROWMSG("bad samples data")
+            jlib.log( 'calling mupdf.mfz_buffer_storage_raw(res)')
             size, c = mupdf.mfz_buffer_storage_raw(res)
             if stride * h != size:
                 THROWMSG("bad samples length")
@@ -9791,6 +9833,7 @@ class TextPage:
 
     def _extractText(self, format_):
         #return _fitz.TextPage__extractText(self, format)
+        jlib.log( '{=format_}')
         this_tpage = self.this
         res = mupdf.mfz_new_buffer(1024)
         out = mupdf.mfz_new_output_with_buffer(res)
@@ -9806,8 +9849,11 @@ class TextPage:
         elif format_ == 4:
             mupdf.mfz_print_stext_page_as_xhtml(out, this_tpage, 0)
         else:
+            jlib.log( 'before JM_print_stext_page_as_text(), {=res res.m_internal.len}')
             JM_print_stext_page_as_text(out, this_tpage)
+        jlib.log( '{=res res.m_internal.len}')
         text = JM_UnicodeFromBuffer(res)
+        jlib.log( '{=type(text) text!r}')
         return text
 
     def _getNewBlockList(self, page_dict, raw):
@@ -9830,6 +9876,7 @@ class TextPage:
             block_n += 1
             blockrect = mupdf.Rect(mupdf.Rect.Fixed_EMPTY)
             if block.m_internal.type == mupdf.FZ_STEXT_BLOCK_TEXT:
+                jlib.log( 'calling mupdf.mfz_clear_buffer()')
                 mupdf.mfz_clear_buffer(res) # set text buffer to empty
                 line_n = -1
                 last_y0 = 0.0
@@ -9984,6 +10031,7 @@ class TextPage:
             for line in block:
                 line_n += 1
                 word_n = 0                        # word counter per line
+                jlib.log( 'calling mupdf.mfz_clear_buffer()')
                 mupdf.mfz_clear_buffer(buff)      # reset word buffer
                 buflen = 0                        # reset char counter
                 for ch in line:
@@ -9997,6 +10045,7 @@ class TextPage:
                     if ch.m_internal.c == 32:
                         if not mupdf.mfz_is_empty_rect(wbbox):
                             word_n, wbbox = JM_append_word(lines, buff, wbbox, block_n, line_n, word_n)
+                        jlib.log( 'calling mupdf.mfz_clear_buffer()')
                         mupdf.mfz_clear_buffer(buff)
                         buflen = 0  # reset char counter
                         continue
@@ -10140,28 +10189,31 @@ class TextWriter:
 
     def append(self, pos, text, font=None, fontsize=11, language=None, right_to_left=0, small_caps=0):
         """Store 'text' at point 'pos' using 'font' and 'fontsize'."""
+        jlib.log( '{=pos font fontsize language right_to_left small_caps}: {text!r}')
         pos = Point(pos) * self.ictm
-        jlib.log( '{font=}')
+        #jlib.log( '{font=}')
         if font is None:
             font = Font("helv")
         if not font.is_writable:
-            jlib.log( '{font.this.m_internal.name=}')
-            jlib.log( '{font.this.m_internal.t3matrix=}')
-            jlib.log( '{font.this.m_internal.bbox=}')
-            jlib.log( '{font.this.m_internal.glyph_count=}')
-            jlib.log( '{font.this.m_internal.use_glyph_bbox=}')
-            jlib.log( '{font.this.m_internal.width_count=}')
-            jlib.log( '{font.this.m_internal.width_default=}')
-            jlib.log( '{font.this.m_internal.has_digest=}')
-            jlib.log( 'Unsupported font {font.name=}')
-            if mupdf_cppyy:
-                import cppyy
-                jlib.log( 'Unsupported font {cppyy.gbl.mupdf_font_name(font.this.m_internal)!r=}')
+            if 0:
+                jlib.log( '{font.this.m_internal.name=}')
+                jlib.log( '{font.this.m_internal.t3matrix=}')
+                jlib.log( '{font.this.m_internal.bbox=}')
+                jlib.log( '{font.this.m_internal.glyph_count=}')
+                jlib.log( '{font.this.m_internal.use_glyph_bbox=}')
+                jlib.log( '{font.this.m_internal.width_count=}')
+                jlib.log( '{font.this.m_internal.width_default=}')
+                jlib.log( '{font.this.m_internal.has_digest=}')
+                jlib.log( 'Unsupported font {font.name=}')
+                if mupdf_cppyy:
+                    import cppyy
+                    jlib.log( 'Unsupported font {cppyy.gbl.mupdf_font_name(font.this.m_internal)!r=}')
             raise ValueError("Unsupported font '%s'." % font.name)
         if right_to_left:
             text = self.clean_rtl(text)
             text = "".join(reversed(text))
             right_to_left = 0
+            jlib.log( 'right_to_left. {text!r=}')
 
         #val = _fitz.TextWriter_append(self, pos, text, font, fontsize, language, right_to_left, small_caps)
         lang = mupdf.mfz_text_language_from_string(language)
@@ -10170,6 +10222,7 @@ class TextWriter:
         markup_dir = 0
         wmode = 0
         if small_caps == 0:
+            jlib.log( '{=font.this.m_internal.name trm wmode right_to_left markup_dir lang}: {text!r}')
             trm = mupdf.mfz_show_string( self.this, font.this, trm, text, wmode, right_to_left, markup_dir, lang)
         else:
             trm = JM_show_string_cs( self.this, font.this, trm, text, wmode, right_to_left, markup_dir, lang)
@@ -10178,6 +10231,7 @@ class TextWriter:
         self.last_point = Point(val[-2:]) * self.ctm
         self.text_rect = self._bbox * self.ctm
         val = self.text_rect, self.last_point
+        jlib.log( '{=type(font) type(font.flags)}')
         if font.flags["mono"] == 1:
             self.used_fonts.add(font)
         return val
@@ -10287,7 +10341,7 @@ class TextWriter:
             resources = mupdf.mpdf_new_dict(pdfpage.doc(), 5)
             contents = mupdf.mfz_new_buffer(1024)
             dev = mupdf.mpdf_new_pdf_device( pdfpage.doc(), mupdf.Matrix(), resources, contents)
-            jlib.log( '=== {dev_color!r=}')
+            #jlib.log( '=== {dev_color!r=}')
             mupdf.mfz_fill_text(
                     dev,
                     self.this,
@@ -10365,8 +10419,11 @@ class TextWriter:
         content = "\n".join(new_cont_lines).encode("utf-8")
         TOOLS._insert_contents(page, content, overlay=overlay)
         val = None
+        jlib.log( '{len(self.used_fonts)=}')
         for font in self.used_fonts:
+            jlib.log( 'calling repair_mono_font()')
             repair_mono_font(page, font)
+        jlib.log( 'returning')
         return val
 
 
@@ -11438,7 +11495,7 @@ def JM_BinFromBuffer(buffer_):
     Turn fz_buffer into a Python bytes object
     '''
     assert isinstance(buffer_, mupdf.Buffer)
-    #print( f'JM_BinFromBuffer: calling buffer_.buffer_extract(). buffer_.m_internal={buffer_.m_internal}', file=sys.stderr)
+    jlib.log( f'calling buffer_extract()')
     ret = buffer_.buffer_extract()
     #print( f'JM_BinFromBuffer: type(ret)={type(ret)} ret={ret!r}', file=sys.stderr)
     return ret
@@ -12038,6 +12095,7 @@ def JM_copy_rectangle(page, area):
                 need_new_line = 1
     mupdf.mfz_terminate_buffer(buffer_)
 
+    jlib.log( f'calling buffer_extract()')
     s = buffer_.buffer_extract()   # take over the data
     return s
 
@@ -12089,6 +12147,7 @@ def JM_convert_to_pdf(doc, fp, tp, rotate):
     res = mupdf.mfz_new_buffer(8192)
     out = mupdf.Output(res)
     mupdf.mpdf_write_document(pdfout, out, opts)
+    jlib.log( f'calling buffer_extract()')
     c = res.buffer_extract()
     assert isinstance(c, bytes)
     return c
@@ -12231,6 +12290,7 @@ def JM_embed_file(
             )
     mupdf.mpdf_dict_put(ef, PDF_NAME('F'), f)
     JM_update_stream(pdf, f, buf, compress)
+    jlib.log( 'calling buf.buffer_storage_raw()')
     len_, _ = buf.buffer_storage_raw()
     mupdf.mpdf_dict_put_int(f, PDF_NAME('DL'), len_)
     mupdf.mpdf_dict_put_int(f, PDF_NAME('Length'), len_)
@@ -12268,10 +12328,11 @@ def JM_EscapeStrFromBuffer(buff):
          return ''
     #jlib.log( 'JM_EscapeStrFromBuffer(): calling buff.buffer_extract()')
     #jlib.exception_info()
+    jlib.log( f'calling buffer_extract()')
     s = buff.buffer_extract()
     #jlib.log( '{s=}')
     val = PyUnicode_DecodeRawUnicodeEscape(s, errors='replace')
-    #jlib.log( '{val=}')
+    jlib.log( 'returning {=len(val) buff.m_internal.len buff.m_internal.cap}')
     return val;
 
 
@@ -12697,7 +12758,7 @@ def JM_get_font(
     '''
     return a fz_font from a number of parameters
     '''
-    jlib.log( '{=fontname fontfile fontbuffer script lang ordering is_bold is_italic is_serif}')
+    #jlib.log( '{=fontname fontfile fontbuffer script lang ordering is_bold is_italic is_serif}')
     index = 0
     font = None
     if fontfile:
@@ -12718,31 +12779,31 @@ def JM_get_font(
     if ordering > -1:
         # goto have_cjk;
         data, size, index = mupdf.mfz_lookup_cjk_font(ordering)
-        jlib.log( '{=data size index}')
+        #jlib.log( '{=data size index}')
         if data:
             font = mupdf.mfz_new_font_from_memory( None, data, size, index, 0);
         if not font.m_internal:
             THROWMSG( "could not create font")
-        jlib.log( 'after mupdf.mfz_new_font_from_memory(): {font.m_internal.name=}')
+        #jlib.log( 'after mupdf.mfz_new_font_from_memory(): {font.m_internal.name=}')
         return font
 
     if fontname:
         # goto have_base14;
         data, size = mupdf.mfz_lookup_base14_font(fontname)
-        jlib.log( '{=data size}')
+        #jlib.log( '{=data size}')
         if data:
             font = mupdf.mfz_new_font_from_memory(fontname, data, size, 0, 0)
         if font.m_internal:
-            jlib.log( '{font.m_internal.name}')
+            #jlib.log( '{font.m_internal.name}')
             return font
 
         data, size = mupdf.mfz_lookup_builtin_font(fontname, is_bold, is_italic)
-        jlib.log( '{=data size}')
+        #jlib.log( '{=data size}')
         if data:
             font = mupdf.mfz_new_font_from_memory(fontname, data, size, 0, 0)
         if not font.m_internal:
             THROWMSG( "could not create font");
-        jlib.log( '{font.m_internal.name}')
+        #jlib.log( '{font.m_internal.name}')
         return font
 
 
@@ -12773,9 +12834,9 @@ def JM_get_widget_properties(annot, Widget):
     Populate a Python Widget object with the values from a PDF form field.
     Called by "Page.firstWidget" and "Widget.next".
     '''
-    jlib.log( 'type(annot)={type(annot)}')
+    #jlib.log( 'type(annot)={type(annot)}')
     annot_obj = mupdf.mpdf_annot_obj(annot.this)
-    jlib.log( 'Have called mupdf.mpdf_annot_obj()')
+    #jlib.log( 'Have called mupdf.mpdf_annot_obj()')
     page = mupdf.mpdf_annot_page(annot.this)
     pdf = page.doc()
     tw = annot
@@ -12980,6 +13041,7 @@ def JM_get_page_labels(liste, nums):
         pno = mupdf.mpdf_to_int(key)
         val = mupdf.mpdf_resolve_indirect( mupdf.mpdf_array_get(nums, i + 1))
         res = JM_object_to_buffer(val, 1, 0)
+        jlib.log( f'calling buffer_extract()')
         c = res.buffer_extract()
         assert isinstance(c, bytes)
         c = c.decode('utf-8')
@@ -13079,7 +13141,7 @@ def JM_image_profile( imagedata, keep_image):
     if len < 8:
         sys.stderr.write( "bad image data\n")
         return None
-    jlib.log( 'calling mfz_recognize_image_format with {c!r=}')
+    #jlib.log( 'calling mfz_recognize_image_format with {c!r=}')
     type = mupdf.mfz_recognize_image_format( c)
     if type == mupdf.FZ_IMAGE_UNKNOWN:
         return None
@@ -13366,6 +13428,7 @@ def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
         buf.append_string(f'{col[0]} {col[1]} {col[2]} {col[3]} k ')
 
     buf.append_string(f'/{JM_expand_fname(fontname)} {fontsize} Tf')
+    jlib.log( 'calling buf.buffer_storage_raw()')
     len_, da = buf.buffer_storage_raw()
     buf_bytes = mupdf.raw_to_python_bytes(da, len_)
     buf_string = buf_bytes.decode('utf-8')
@@ -13375,6 +13438,7 @@ def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
 def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
     char_list = None
     span_list = []
+    jlib.log( 'calling mupdf.mfz_clear_buffer()')
     mupdf.mfz_clear_buffer(buff)
     span_rect = mupdf.Rect(mupdf.Rect.Fixed_EMPTY)
     line_rect = mupdf.Rect(mupdf.Rect.Fixed_EMPTY)
@@ -13432,6 +13496,7 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
                 else:
                     # put text string in the span
                     span[dictkey_text] = JM_EscapeStrFromBuffer( buff)
+                    jlib.log( 'calling mupdf.mfz_clear_buffer()')
                     mupdf.mfz_clear_buffer(buff)
 
                 span[dictkey_origin] = JM_py_from_point(span_origin)
@@ -13481,6 +13546,7 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
             char_list = None
         else:
             span[dictkey_text] = JM_EscapeStrFromBuffer(buff)
+            jlib.log( 'calling mupdf.mfz_clear_buffer()')
             mupdf.mfz_clear_buffer(buff)
         span[dictkey_origin] = JM_py_from_point(span_origin)
         span[dictkey_bbox] = JM_py_from_rect(span_rect)
@@ -13985,11 +14051,25 @@ def JM_print_stext_page_as_text(out, page):
     but lines within a block are concatenated by space instead a new-line
     character (which else leads to 2 new-lines).
     '''
+    jlib.log( ' ')
     assert isinstance(out, mupdf.Output)
     assert isinstance(page, mupdf.StextPage)
     rect = mupdf.Rect(page.m_internal.mediabox)
     last_char = 0
 
+    n_blocks = 0
+    n_lines = 0
+    n_chars = 0
+    for n_blocks2, block in enumerate( page):
+        if block.m_internal.type == mupdf.FZ_STEXT_BLOCK_TEXT:
+            for n_lines2, line in enumerate( block):
+                for n_chars2, ch in enumerate( line):
+                    pass
+                n_chars += n_chars2
+            n_lines += n_lines2
+        n_blocks += n_blocks2
+    jlib.log( '{=n_blocks n_lines n_chars}')
+    
     for block in page:
         if block.m_internal.type == mupdf.FZ_STEXT_BLOCK_TEXT:
             for line in block:
@@ -14002,6 +14082,7 @@ def JM_print_stext_page_as_text(out, page):
                         #raw += chr(ch.m_internal.c)
                         last_char = ch.m_internal.c
                         utf = mupdf.runetochar2(last_char)
+                        #jlib.log( '{=last_char!r utf!r}')
                         for c in utf:
                             assert isinstance(c, int), f'type(c)={type(c)} c={c}'
                             assert 0 <= c < 256, f'utf={utf!r} cc={c}'
@@ -14649,6 +14730,7 @@ def JM_set_widget_properties(annot, Widget):
 
 def JM_UnicodeFromBuffer(buff):
     #jlib.log( 'calling buff.buffer_extract()')
+    jlib.log( f'calling buffer_extract()')
     buff_bytes = buff.buffer_extract()
     val = buff_bytes.decode(errors='replace')
     z = val.find(chr(0))
@@ -14662,12 +14744,14 @@ def JM_update_stream(doc, obj, buffer_, compress):
     update a stream object
     compress stream when beneficial
     '''
+    jlib.log( 'calling buffer_.buffer_storage_raw()')
     len_, _ = buffer_.buffer_storage_raw()
     nlen = len_
 
     if len_ > 30:   # ignore small stuff
         nres = JM_compress_buffer(buffer_)
         assert isinstance(nres, mupdf.Buffer)
+        jlib.log( 'calling nres.buffer_storage_raw()')
         nlen, _ = nres.buffer_storage_raw()
 
     if nlen < len_ and nres and compress==1:   # was it worth the effort?
