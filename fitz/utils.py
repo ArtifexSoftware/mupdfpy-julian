@@ -790,7 +790,6 @@ def get_text(
         cb = page.cropbox
     # fitz.TextPage with or without images
     tp = textpage
-    jlib.log( '{=tp clip flags sort}')
     #jlib.exception_info()
     if tp is None:
         tp = page.get_textpage(clip=clip, flags=flags)
@@ -813,7 +812,6 @@ def get_text(
         t = tp.extractXHTML()
     else:
         t = tp.extractText(sort=sort)
-        jlib.log( '{=t}')
 
     if textpage is None:
         del tp
@@ -1830,7 +1828,6 @@ def new_page(
     Returns:
         A fitz.Page object.
     """
-    jlib.log( ' ')
     doc._newPage(pno, width=width, height=height)
     return doc[pno]
 
@@ -4285,7 +4282,6 @@ def fill_textbox(
         return font.char_lengths(x, fontsize=fontsize, small_caps=small_caps)
 
     def append_this(pos, text):
-        jlib.log( 'append_this: {=pos type(text)}: {text!r}')
         ret = writer.append(
                 pos, text, font=font, fontsize=fontsize, small_caps=small_caps
                 )
@@ -4407,7 +4403,6 @@ def fill_textbox(
         words, word_lengths = norm_words(std_width, words)
 
         n = len(words)
-        jlib.log( '=== {n=}')
         while True:
             line0 = " ".join(words[:n])
             wl = sum(word_lengths[:n]) + space_len * (len(word_lengths[:n]) - 1)
@@ -4465,9 +4460,7 @@ def fill_textbox(
         start.x = std_start
         start.y += LINEHEIGHT
 
-    jlib.log( '{=type(writer) type(writer.this)}')
     t = _show_fz_text(writer.this)
-    jlib.log( 'returning. fz_text is: {_show_fz_text(writer.this)}')
     return new_lines  # return non-written lines
 
 
