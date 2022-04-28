@@ -1929,7 +1929,7 @@ class Document:
         data = JM_BufferFromBytes(buffer_)
         if not data.m_internal:
             THROWMSG("bad type: 'buffer'")
-        size, buffdata = data.buffer_storage_raw()
+        size, buffdata = data.buffer_storage()
 
         names = mupdf.mpdf_dict_getl(
                 mupdf.mpdf_trailer(pdf),
@@ -2823,7 +2823,7 @@ class Document:
             ext = "jb2"
         res = mupdf.mpdf_load_raw_stream(obj)
         if img_type == mupdf.FZ_IMAGE_UNKNOWN:
-            _, c = res.buffer_storage_raw()
+            _, c = res.buffer_storage()
             #jlib.log( '{=_ c}')
             img_type = mupdf.mfz_recognize_image_format(c)
             ext = JM_image_extension(img_type)
@@ -4598,13 +4598,7 @@ class Font:
     def buffer(self):
         #return _fitz.Font_buffer(self)
         buffer_ = mupdf.Buffer( mupdf.keep_buffer( self.this.m_internal.buffer))
-        if mupdf_cppyy:
-            ret = mupdf.mfz_buffer_storage_bytes( buffer_)
-            assert isinstance( ret, bytes)
-            return ret
-        else:
-            size, data = buffer_.buffer_extract_raw()
-            return mupdf.raw_to_python_bytes( data, size)
+        return mupdf.mfz_buffer_extract_copy( buffer_)
 
     def char_lengths(self, text, fontsize=11, language=None, script=0, wmode=0, small_caps=0):
         """Return tuple of char lengths of unicode 'text' under a fontsize."""
@@ -7620,7 +7614,7 @@ class Pixmap:
             res = JM_BufferFromBytes(samples);
             if not res.m_internal:
                 THROWMSG("bad samples data")
-            size, c = mupdf.mfz_buffer_storage_raw(res)
+            size, c = mupdf.mfz_buffer_storage(res)
             if stride * h != size:
                 THROWMSG("bad samples length")
             pm = mupdf.mfz_new_pixmap(cs, w, h, seps, alpha)
@@ -11458,7 +11452,7 @@ def JM_BinFromBuffer(buffer_):
     Turn fz_buffer into a Python bytes object
     '''
     assert isinstance(buffer_, mupdf.Buffer)
-    ret = buffer_.buffer_extract()
+    ret = buffer_.buffer_extract_copy()
     return ret
 
 def JM_EscapeStrFromStr(c):
@@ -12107,7 +12101,7 @@ def JM_convert_to_pdf(doc, fp, tp, rotate):
     res = mupdf.mfz_new_buffer(8192)
     out = mupdf.Output(res)
     mupdf.mpdf_write_document(pdfout, out, opts)
-    c = res.buffer_extract()
+    c = res.buffer_extract_copy()
     assert isinstance(c, bytes)
     return c
 
@@ -12249,7 +12243,7 @@ def JM_embed_file(
             )
     mupdf.mpdf_dict_put(ef, PDF_NAME('F'), f)
     JM_update_stream(pdf, f, buf, compress)
-    len_, _ = buf.buffer_storage_raw()
+    len_, _ = buf.buffer_storage()
     mupdf.mpdf_dict_put_int(f, PDF_NAME('DL'), len_)
     mupdf.mpdf_dict_put_int(f, PDF_NAME('Length'), len_)
     params = mupdf.mpdf_dict_put_dict(f, PDF_NAME('Params'), 4)
@@ -12284,7 +12278,7 @@ def JM_embedded_clean(pdf):
 def JM_EscapeStrFromBuffer(buff):
     if not buff.m_internal:
          return ''
-    s = buff.buffer_extract()
+    s = buff.buffer_extract_copy()
     val = PyUnicode_DecodeRawUnicodeEscape(s, errors='replace')
     return val;
 
@@ -13380,7 +13374,7 @@ def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
         buf.append_string(f'{col[0]} {col[1]} {col[2]} {col[3]} k ')
 
     buf.append_string(f'/{JM_expand_fname(fontname)} {fontsize} Tf')
-    len_, da = buf.buffer_storage_raw()
+    len_, da = buf.buffer_storage()
     buf_bytes = mupdf.raw_to_python_bytes(da, len_)
     buf_string = buf_bytes.decode('utf-8')
     annot.annot_obj().dict_put_text_string(mupdf.PDF_ENUM_NAME_DA, buf_string)
@@ -14675,7 +14669,7 @@ def JM_set_widget_properties(annot, Widget):
 
 
 def JM_UnicodeFromBuffer(buff):
-    buff_bytes = buff.buffer_extract()
+    buff_bytes = buff.buffer_extract_copy()
     val = buff_bytes.decode(errors='replace')
     z = val.find(chr(0))
     if z >= 0:
@@ -14688,13 +14682,13 @@ def JM_update_stream(doc, obj, buffer_, compress):
     update a stream object
     compress stream when beneficial
     '''
-    len_, _ = buffer_.buffer_storage_raw()
+    len_, _ = buffer_.buffer_storage()
     nlen = len_
 
     if len_ > 30:   # ignore small stuff
         nres = JM_compress_buffer(buffer_)
         assert isinstance(nres, mupdf.Buffer)
-        nlen, _ = nres.buffer_storage_raw()
+        nlen, _ = nres.buffer_storage()
 
     if nlen < len_ and nres and compress==1:   # was it worth the effort?
         obj.dict_put(
