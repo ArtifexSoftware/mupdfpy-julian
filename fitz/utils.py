@@ -19,7 +19,7 @@ import tempfile
 import fitz.fitz
 jlib = fitz.jlib
 
-import mupdf
+mupdf = fitz.mupdf
 
 g_exceptions_verbose = False
 #g_exceptions_verbose = True
