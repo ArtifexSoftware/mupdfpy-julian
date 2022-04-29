@@ -12015,8 +12015,8 @@ def JM_compress_buffer(inbuffer):
     '''
     compress char* into a new buffer
     '''
-    data, compressed_length = mupdf.new_deflated_data_from_buffer(
-            inbuffer.m_internal,
+    data, compressed_length = mupdf.mfz_new_deflated_data_from_buffer(
+            inbuffer,
             mupdf.FZ_DEFLATE_BEST,
             )
     #jlib.log( '{=data compressed_length}')
