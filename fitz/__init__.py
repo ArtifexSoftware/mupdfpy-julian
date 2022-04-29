@@ -15516,7 +15516,7 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     span_dict[ dictkey_ascender] = asc
     span_dict[ dictkey_descender] = dsc
     if colorspace.m_internal:
-            mupdf.mfz_convert_color( colorspace, color, mupdf.mfz_device_rgb(), rgb, None, fz_default_color_params)
+            rgb = mupdf.mfz_convert_color( colorspace, color, mupdf.mfz_device_rgb(), None, fz_default_color_params)
             span_dict[ dictkey_colorspace] = 3
             span_dict[ dictkey_color] = rgb[0], rgb[1], rgb[2]
     else:
@@ -15539,20 +15539,17 @@ def jm_tracedraw_color(colorspace, color):
         #                 rgb, NULL, fz_default_color_params);
         #rgb = [0.0, 0.0, 0.0]
         try:
-            dv = mupdf.convert_color2_dv()
-            mupdf.convert_color2(
+            rgb = mupdf.mfz_convert_color(
                     colorspace,
                     color,
                     mupdf.Colorspace( mupdf.Colorspace.Fixed_RGB).m_internal,
-                    dv,
                     None,
                     mupdf.ColorParams().internal(),
                     )
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
-        rgb = dv.dv0, dv.dv1, dv.dv2
-        return rgb
+        return rgb[:3]
     return ()
 
 
