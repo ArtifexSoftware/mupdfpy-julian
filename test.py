@@ -17,16 +17,17 @@ Arguments:
                 Use local MuPDF Python bindings, as specified by
                 --mupdf-build-dir.
             'cppyy':
-                Use experimental local MuPDF experimental cppyy Python
-                bindings, as specified by --mupdf and --mupdf-build-dir.
+                Use local experimental cppyy Python bindings, as specified by
+                --mupdf-build-dir.
     
     --mupdf <dir>
         Specify location of local mupdf directory. This is used to find
-        mupdf/platform/python/mupdfwrap_cppyy.py by '--env cppyy'.
+        mupdf/scripts/platform/python/mupdfwrap_cppyy.py by '--env cppyy'.
     
     --mupdf-build-dir <dir>
         Specify location of MuPDF library and Python files, for example:
             foo/bar/mupdf/build/shared-debug
+        Also used to find mupdf_cppyy.py by --env cppyy.
     
     --pymupdf <dir>
         Specify location of PyMuPDF directory, for example:
@@ -149,7 +150,6 @@ class State:
         '''
         ret = ''
         ret += f' LD_LIBRARY_PATH=$LD_LIBRARY_PATH:{os.path.abspath( self.mupdf_build_dir)}'
-        #ret += f' MUPDF_CPPYY={os.path.abspath(self.mupdf_dir + "/platform/python/mupdf_cppyy.py")}'
         ret += f' PYTHONPATH=$PYTHONPATH:{os.path.abspath(self.mupdfpy)}:{os.path.abspath(self.mupdf_build_dir)}:{os.path.abspath(self.mupdf_dir)}/scripts'
         ret += f' MUPDF_CPPYY='
         ret += f' CPPYY_CRASH_QUIET=1 MUPDF_cppyy_sig_exceptions=1'
@@ -438,6 +438,46 @@ def main():
             cppyy.gbl.foo( cppyy.nullptr)
             cppyy.gbl.foo( None)    # Fails.
             
+        elif arg == '--test-cppyy-8':
+            import cppyy
+            import cppyy.ll
+            
+            import time
+            
+            cppyy.cppdef('''
+                    struct Foo
+                    {
+                        virtual void fn() {}
+                        virtual void fn2() {}
+                        virtual void fn3() {}
+                        virtual void fn4() {}
+                    };
+                    ''')
+            class Foo2( cppyy.gbl.Foo):
+                def __init__( self):
+                    super().__init__()
+                    def fn( self):
+                        pass
+                    def fn2( self):
+                        pass
+                    def fn3( self):
+                        pass
+                    def fn4( self):
+                        pass
+            t = time.time()
+            foo = Foo2()
+            t = time.time() - t
+            print( f't={t}')
+            
+            t = time.time()
+            foo = Foo2()
+            t = time.time() - t
+            print( f't={t}')
+            
+            t = time.time()
+            foo = Foo2()
+            t = time.time() - t
+            print( f't={t}')
         
         elif arg == '--tests':
             ptest_flags = ''
