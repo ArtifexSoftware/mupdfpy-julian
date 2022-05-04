@@ -3240,7 +3240,6 @@ class Document:
             show_progress=0,
             final=1,
             _gmap=None,
-            timings=None,
             ):
         """Insert a page range from another PDF.
 
@@ -3261,75 +3260,62 @@ class Document:
         # Insert pages from a source PDF into this PDF.
         # For reconstructing the links (_do_links method), we must save the
         # insertion point (start_at) if it was specified as -1.
-        if timings is None:
-            class Timings:
-                def __enter__( self): pass
-                def __exit__( self): pass
-                def __call__( self, name): return self
-            timings = Timings()
-        
-        with timings( 'insert_pdf'):
-            with timings( 'head'):
-                if self.is_closed or self.is_encrypted:
-                    raise ValueError("document closed or encrypted")
-                if self._graft_id == docsrc._graft_id:
-                    raise ValueError("source and target cannot be same object")
-                sa = start_at
-                if sa < 0:
-                    sa = self.page_count
-                if len(docsrc) > show_progress > 0:
-                    inname = os.path.basename(docsrc.name)
-                    if not inname:
-                        inname = "memory PDF"
-                    outname = os.path.basename(self.name)
-                    if not outname:
-                        outname = "memory PDF"
-                    print("Inserting '%s' at '%s'" % (inname, outname))
+        if self.is_closed or self.is_encrypted:
+            raise ValueError("document closed or encrypted")
+        if self._graft_id == docsrc._graft_id:
+            raise ValueError("source and target cannot be same object")
+        sa = start_at
+        if sa < 0:
+            sa = self.page_count
+        if len(docsrc) > show_progress > 0:
+            inname = os.path.basename(docsrc.name)
+            if not inname:
+                inname = "memory PDF"
+            outname = os.path.basename(self.name)
+            if not outname:
+                outname = "memory PDF"
+            print("Inserting '%s' at '%s'" % (inname, outname))
 
-                # retrieve / make a Graftmap to avoid duplicate objects
-                isrt = docsrc._graft_id
-                _gmap = self.Graftmaps.get(isrt, None)
-                if _gmap is None:
-                    _gmap = Graftmap(self)
-                    self.Graftmaps[isrt] = _gmap
+        # retrieve / make a Graftmap to avoid duplicate objects
+        isrt = docsrc._graft_id
+        _gmap = self.Graftmaps.get(isrt, None)
+        if _gmap is None:
+            _gmap = Graftmap(self)
+            self.Graftmaps[isrt] = _gmap
 
-            #val = _fitz.Document_insert_pdf(self, docsrc, from_page, to_page, start_at, rotate, links, annots, show_progress, final, _gmap)
+        doc = self.this
+        pdfout = mupdf.mpdf_specifics(doc)
+        pdfsrc = mupdf.mpdf_specifics(docsrc.this)
+        outCount = mupdf.mfz_count_pages(doc)
+        srcCount = mupdf.mfz_count_pages(docsrc.this)
 
-            with timings( 'Document_insert_pdf'):
-                doc = self.this
-                pdfout = mupdf.mpdf_specifics(doc)
-                pdfsrc = mupdf.mpdf_specifics(docsrc.this)
-                outCount = mupdf.mfz_count_pages(doc)
-                srcCount = mupdf.mfz_count_pages(docsrc.this)
+        # local copies of page numbers
+        fp = from_page
+        tp = to_page
+        sa = start_at
 
-                # local copies of page numbers
-                fp = from_page
-                tp = to_page
-                sa = start_at
+        # normalize page numbers
+        fp = max(fp, 0) # -1 = first page
+        fp = min(fp, srcCount - 1)  # but do not exceed last page
 
-                # normalize page numbers
-                fp = max(fp, 0) # -1 = first page
-                fp = min(fp, srcCount - 1)  # but do not exceed last page
+        if tp < 0:
+            tp = srcCount - 1   # -1 = last page
+        tp = min(tp, srcCount - 1)  # but do not exceed last page
 
-                if tp < 0:
-                    tp = srcCount - 1   # -1 = last page
-                tp = min(tp, srcCount - 1)  # but do not exceed last page
+        if sa < 0:
+            sa = outCount   # -1 = behind last page
+        sa = min(sa, outCount)  # but that is also the limit
 
-                if sa < 0:
-                    sa = outCount   # -1 = behind last page
-                sa = min(sa, outCount)  # but that is also the limit
+        if not pdfout.m_internal or not pdfsrc.m_internal:
+            THROWMSG("source or target not a PDF")
+        ENSURE_OPERATION(pdfout)
+        JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
 
-                if not pdfout.m_internal or not pdfsrc.m_internal:
-                    THROWMSG("source or target not a PDF")
-                ENSURE_OPERATION(pdfout)
-                JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
-
-            with timings( 'tail'):
-                self._reset_page_refs()
-                if links:
-                    self._do_links(docsrc, from_page = from_page, to_page = to_page, start_at = sa)
-                if final == 1:
-                    self.Graftmaps[isrt] = None
+        self._reset_page_refs()
+        if links:
+            self._do_links(docsrc, from_page = from_page, to_page = to_page, start_at = sa)
+        if final == 1:
+            self.Graftmaps[isrt] = None
 
     @property
     def is_dirty(self):
