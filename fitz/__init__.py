@@ -7564,6 +7564,7 @@ class Pixmap:
             self.this = pm
 
         elif args_match(args, (Pixmap, mupdf.Pixmap), (int, None)):
+            # Pixmap(struct Pixmap *spix, int alpha=1)
             # copy pixmap & add / drop the alpha channel
             spix = args[0]
             alpha = args[1] if len(args) == 2 else 1
@@ -7584,24 +7585,66 @@ class Pixmap:
             pm.m_internal.yres = src_pix.m_internal.yres
 
             # copy samples data ------------------------------------------
-            if src_pix.alpha() == pm.alpha():   # identical samples
-                #memcpy(tptr, sptr, w * h * (n + alpha));
-                # fixme: inefficient.
-                for i in range(w * h * (n + alpha)):
-                    pm.samples_set(i, src_pix.samples_get(i))
+            import time
+            t = time.time()
+            if 1:
+                # We use specially-provided mupdfpy_pixmap_copy() to get best
+                # performance.
+                # test_pixmap.py:test_setalpha(): 3.9s t=0.0062
+                mupdf.mupdfpy_pixmap_copy( pm.m_internal, src_pix.m_internal, n)
+            elif 1:
+                # Use memoryview.
+                # test_pixmap.py:test_setalpha(): 4.6 t=0.51
+                src_view = mupdf.mfz_pixmap_samples2( src_pix)
+                pm_view = mupdf.mfz_pixmap_samples2( pm)
+                if src_pix.alpha() == pm.alpha():   # identical samples
+                    #memcpy(tptr, sptr, w * h * (n + alpha));
+                    size = w * h * (n + alpha)
+                    pm_view[ 0 : size] = src_view[ 0 : size]
+                else:
+                    tptr = 0
+                    sptr = 0
+                    # This is a little faster than calling
+                    # pm.samples_set(), but still quite slow. E.g. reduces
+                    # test_pixmap.py:test_setalpha() from 6.7s to 4.5s.
+                    #
+                    # t=0.53
+                    pm_stride = pm.stride()
+                    pm_n = pm.n()
+                    pm_alpha = pm.alpha()
+                    src_stride = src_pix.stride()
+                    src_n = src_pix.n()
+                    jlib.log( '{=pm_stride pm_n src_stride src_n}')
+                    for y in range( h):
+                        for x in range( w):
+                            pm_i = pm_stride * y + pm_n * x
+                            src_i = src_stride * y + src_n * x
+                            pm_view[ pm_i : pm_i + n] = src_view[ src_i : src_i + n]
+                            if pm_alpha:
+                                pm_view[ pm_i + n] = 255
             else:
-                tptr = 0
-                sptr = 0
-                for i in range(w * h):
-                    #memcpy(tptr, sptr, n);
-                    # fixme: inefficient.
-                    for j in range(n):
-                        pm.samples_set(tptr + j, src_pix.samples_get(sptr + j))
-                    tptr += n
-                    if pm.alpha():
-                        pm.samples_set(tptr, 255)
-                        tptr += 1
-                    sptr += n + src_pix.alpha()
+                # Copy individual bytes from Python. Very slow.
+                # test_pixmap.py:test_setalpha(): 6.89 t=2.601
+                if src_pix.alpha() == pm.alpha():   # identical samples
+                    #memcpy(tptr, sptr, w * h * (n + alpha));
+                    for i in range(w * h * (n + alpha)):
+                        pm.samples_set(i, src_pix.samples_get(i))
+                else:
+                    # t=2.56
+                    tptr = 0
+                    sptr = 0
+                    src_pix_alpha = src_pix.alpha()
+                    for i in range(w * h):
+                        #memcpy(tptr, sptr, n);
+                        for j in range(n):
+                            pm.samples_set(tptr + j, src_pix.samples_get(sptr + j))
+                        tptr += n
+                        if pm.alpha():
+                            pm.samples_set(tptr, 255)
+                            tptr += 1
+                        sptr += n + src_pix_alpha
+            t = time.time() - t
+            jlib.log( '{t=}')
             self.this = pm
 
         elif args_match(args, mupdf.Colorspace, int, int, None, int):
