@@ -6,6 +6,37 @@ License:
     SPDX-License-Identifier: GPL-3.0-only
 '''
 
+try:
+    import jlib # This is .../mupdf/scripts/jlib.py
+except ImportError:
+    # Provide basic implementations of the jlib functions that we use.
+    import sys
+    
+    class jlib:
+        @staticmethod
+        def log( text):
+            print( text, file=sys.stderr)
+        @staticmethod
+        def exception_info():
+            return traceback.print_exc()
+    
+        class Timings:
+            def __init__( self, *args, **kwargs):   pass
+            def begin( self, *args, **kwargs):      pass
+            def end( self, *args, **kwargs):        pass
+            def mid( self, *args, **kwargs):        pass
+            def __enter__( self):                   pass
+            def __exit__( self):                    pass
+            def __call__( self, *args, **kwargs):   return self
+            def text( self, *args, **kwargs):       return ''
+            def __str__( self):                     return ''
+    
+    jlib.log( 'Failed to import jlib; using basic logging etc.')
+
+
+g_timings = jlib.Timings( '__init__.py', active=0)
+g_timings.mid()
+
 import atexit
 import base64
 import binascii
@@ -22,6 +53,7 @@ import typing
 import warnings
 import weakref
 
+g_timings.mid()
 g_exceptions_verbose = False
 #g_exceptions_verbose = True
 
@@ -35,50 +67,13 @@ if mupdf_cppyy is not None:
     else:
         mupdf_cppyy = importlib.machinery.SourceFileLoader( 'mupdf_cppyy', mupdf_cppyy).load_module()
     
-    if 1:
-        mupdf = mupdf_cppyy.cppyy.gbl.mupdf
-    else:
-        #print( f'mupdf_cppyy.cppyy.gbl.mupdf.__dir__()={mupdf_cppyy.cppyy.gbl.mupdf.__dir__(mupdf_cppyy.cppyy.gbl.mupdf)}')
-        #print( f'mupdf_cppyy.cppyy.gbl.__dir__()={mupdf_cppyy.cppyy.gbl.__dir__()}')
-        class MuPDF_Dummy:
-            pass
-        class MuPDF:
-            def __getattribute__( self, name, default=MuPDF_Dummy):
-                ret = getattr( mupdf_cppyy.cppyy.gbl.mupdf, name, MuPDF_Dummy)
-                if ret is MuPDF_Dummy:
-                    ret = getattr( mupdf_cppyy.cppyy.gbl, name, MuPDF_Dummy)
-                if ret is MuPDF_Dummy:
-                    print( f'Cannot find name={name}')
-                    if default is MuPDF_Dummy:
-                        raise AttributeError( f'Cannot find mupdf name={name}')
-                    else:
-                        return default
-                return ret
-            def __dir__( self):
-                ret = (
-                        mupdf_cppyy.cppyy.gbl.mupdf.__dir__(mupdf_cppyy.cppyy.gbl.mupdf)
-                        + mupdf_cppyy.cppyy.gbl.__dir__(mupdf_cppyy.cppyy.gbl)
-                        )
-                print( f'fitz/__init__.py: returning: {ret}')
-                return ret
-        mupdf = MuPDF()
+    mupdf = mupdf_cppyy.cppyy.gbl.mupdf
 else:
     # Use SWIG bindings.
+    g_timings.mid()
     import mupdf
 
-try:
-    import jlib # This is .../mupdf/scripts/jlib.py
-except ImportError:
-    # Provide basic implementations of the jlib functions that we use.
-    class jlib:
-        @staticmethod
-        def log( text):
-            print( text, file=sys.stderr)
-        @staticmethod
-        def exception_info():
-            return traceback.print_exc()
-    jlib.log( 'Failed to import jlib; using basic logging etc.')
-
+g_timings.mid()
 
 # Names required by class method typing annotations.
 OptBytes = typing.Optional[typing.ByteString]
@@ -99,6 +94,7 @@ rect_like = 'rect_like'
 
 # Classes
 #
+#g_timings.mid()
 
 class Annot:
 
@@ -3283,6 +3279,7 @@ class Document:
             _gmap = Graftmap(self)
             self.Graftmaps[isrt] = _gmap
 
+        #val = _fitz.Document_insert_pdf(self, docsrc, from_page, to_page, start_at, rotate, links, annots, show_progress, final, _gmap)
         doc = self.this
         pdfout = mupdf.mpdf_specifics(doc)
         pdfsrc = mupdf.mpdf_specifics(docsrc.this)
@@ -3311,6 +3308,8 @@ class Document:
         ENSURE_OPERATION(pdfout)
         JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
 
+        # End of _fitz.Document_insert_pdf().
+        
         self._reset_page_refs()
         if links:
             self._do_links(docsrc, from_page = from_page, to_page = to_page, start_at = sa)
@@ -10579,6 +10578,7 @@ class IRect:
 
 # Data
 #
+g_timings.mid()
 
 if 1:
     # Import some mupdf constants
@@ -10617,6 +10617,7 @@ if 1:
     assert UCDN_SCRIPT_ADLAM == mupdf.UCDN_SCRIPT_ADLAM
     del self
 
+#g_timings.mid()
 _adobe_glyphs = {}
 _adobe_unicodes = {}
 
@@ -10639,6 +10640,7 @@ Base14_fontnames = (
     "ZapfDingbats",
     )
 
+#g_timings.mid()
 Base14_fontdict = {}
 for f in Base14_fontnames:
     Base14_fontdict[f.lower()] = f
@@ -10677,6 +10679,7 @@ JM_mupdf_show_errors = 1
 JM_mupdf_show_warnings = 0
 
 
+#g_timings.mid()
 LINK_NONE = 0
 LINK_GOTO = 1
 LINK_URI = 2
@@ -10769,6 +10772,7 @@ TEXT_FONT_MONOSPACED = 8
 TEXT_FONT_BOLD = 16
 
 
+#g_timings.mid()
 
 annot_skel = {
     "goto1": "<</A<</S/GoTo/D[%i 0 R/XYZ %g %g %g]>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
@@ -10787,6 +10791,7 @@ csCMYK = Colorspace(CS_CMYK)
 # These don't appear to be visible in native fitz module, but are used
 # internally.
 #
+g_timings.mid()
 dictkey_align = "align"
 dictkey_align = "ascender"
 dictkey_bbox = "bbox"
@@ -10839,6 +10844,7 @@ dictkey_xref = "xref"
 dictkey_xres = "xres"
 dictkey_yres = "yres"
 
+g_timings.mid()
 fitz_fontdescriptors = dict()
 
 no_device_caching = 0   # Switch for device hints = no cache
@@ -11106,6 +11112,7 @@ symbol_glyphs = (   # Glyph list for the built-in font 'Symbol'
     )
 
 
+#g_timings.mid()
 zapf_glyphs = ( # Glyph list for the built-in font 'ZapfDingbats'
     (183, 0.788),
     (183, 0.788),
@@ -11369,6 +11376,7 @@ zapf_glyphs = ( # Glyph list for the built-in font 'ZapfDingbats'
 # Functions
 #
 
+#g_timings.mid()
 def _read_samples( pixmap, offset, n):
     # fixme: need to be able to get a sample in one call, as a Python
     # bytes or similar.
@@ -15449,21 +15457,21 @@ def timings( fn):
     '''
     A decorator that outputs timing information about the decorated function.
     '''
-    timings = jlib.Timings()
+    timings_ = jlib.Timings()
     def fn2( *args, **kwargs):
         try:
             try:
                 fn_name = fn.__name__
-                with timings( fn_name):
-                    jlib.log_interval( lambda: f'{fn_name}: {timings}', caller=2, interval=4)
+                with timings_( fn_name):
+                    jlib.log_interval( lambda: f'{fn_name}: {timings_}', caller=2, interval=4)
                     assert 'timings' not in kwargs
-                    kwargs[ 'timings'] = timings
+                    kwargs[ 'timings'] = timings_
                     return fn( *args, **kwargs)
             except Exception as e:
                 jlib.log( str(e), nv=0)
                 raise
         finally:
-            jlib.log_interval( timings.__str__, caller=2, interval=4)
+            jlib.log_interval( timings_.__str__, caller=2, interval=4)
     return fn2
 
 def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, color_params):
@@ -15697,7 +15705,7 @@ def planish_line(p1: point_like, p2: point_like) -> Matrix:
     p2 = Point(p2)
     return Matrix(TOOLS._hor_matrix(p1, p2))
 
-
+g_timings.mid()
 class JM_image_reporter_Filter(mupdf.PdfFilterOptions2):
     def __init__(self):
         super().__init__()
@@ -15803,6 +15811,7 @@ class JM_new_tracetext_device_Device(mupdf.Device2):
 
 
 
+g_timings.mid()
 def _get_glyph_text() -> bytes:
     '''
     Adobe Glyph List function
@@ -16274,6 +16283,7 @@ def _get_glyph_text() -> bytes:
     )).decode().splitlines()
 
 
+g_timings.mid()
 def CheckMarkerArg(quads: typing.Any) -> tuple:
     if CheckRect(quads):
         r = Rect(quads)
@@ -16926,6 +16936,7 @@ def paper_size(s: str) -> tuple:
     return (rc[1], rc[0])
 
 
+#g_timings.mid()
 def paper_sizes():
     """Known paper formats @ 72 dpi as a dictionary. Key is the format string
     like "a4" for ISO-A4. Value is the tuple (width, height).
@@ -17407,6 +17418,7 @@ def vdist(dir, a, b):
     dy = b.y - a.y
     return mupdf.mfz_abs(dx * dir.y + dy * dir.x)
 
+#g_timings.mid()
 class TOOLS:
     '''
     We use @staticmethod to avoid the need to create an instance of this class.
@@ -18020,7 +18032,9 @@ class TOOLS:
 # We cannot import utils earlier because it imports this fitz.py file itself
 # and uses some fitz.* types in function typing.
 #
+g_timings.mid()
 import fitz.utils
+g_timings.mid()
 
 # Callbacks not yet supported with cppyy.
 if not mupdf_cppyy:
@@ -18052,6 +18066,7 @@ atexit.register( _atexit)
 
 # Use utils.*() fns for some class methods.
 #
+#g_timings.mid()
 recover_bbox_quad           = utils.recover_bbox_quad
 recover_char_quad           = utils.recover_char_quad
 recover_line_quad           = utils.recover_line_quad
@@ -18126,6 +18141,7 @@ Rect.get_area               = utils.get_area
 
 TextWriter.fill_textbox     = utils.fill_textbox
 
+#g_timings.mid()
 class FitzDeprecation(DeprecationWarning):
     pass
 
@@ -18136,6 +18152,7 @@ version = (VersionBind, VersionFitz, "20220201000001")
 VersionDate2 = VersionDate.replace('-', '').replace(' ', '').replace(':', '')
 version = (VersionBind, VersionFitz, VersionDate2)
 
+#g_timings.mid()
 def restore_aliases():
     warnings.filterwarnings( "once", category=FitzDeprecation)
 
@@ -18417,3 +18434,6 @@ def restore_aliases():
     _alias( utils.Shape, 'insert_textbox')
 
 restore_aliases()
+
+g_timings.end()
+jlib.log( '{g_timings.text(g_timings.root_item, precision=3)}')
