@@ -8098,6 +8098,7 @@ class Pixmap:
             bground = 1
         
         data_len = 0;
+        jlib.log( '{=type(alphavalues)}')
         if alphavalues:
             #res = JM_BufferFromBytes(alphavalues)
             #data_len, data = mupdf.mfz_buffer_storage(res)
@@ -8112,39 +8113,54 @@ class Pixmap:
                 assert 0, f'unexpected type for alphavalues: {type(alphavalues)}'
             if data_len < w * h:
                 THROWMSG("bad alpha values")
-        i = k = j = 0
-        data_fix = 255
-        while i < balen:
-            alpha = data[k]
-            if zero_out:
-                for j in range(i, i+n):
-                    if pix.samples_get(j) != colors[j - i]:
-                        data_fix = 255
-                        break
-                    else:
-                        data_fix = 0
-            if data_len:
-                def fz_mul255( a, b):
-                    x = a * b + 128
-                    x += x // 256
-                    return x // 256
-                
-                if data_fix == 0:
-                    pix.samples_set(i+n, 0)
-                else:
-                    pix.samples_set(i+n, alpha)
-                if premultiply and not bground:
-                    denom = int(data[k])
+        if 1:
+            import mupdf2
+            mupdf2.Pixmap_set_alpha_helper(
+                    balen,
+                    n,
+                    data_len,
+                    zero_out,
+                    mupdf.python_bytes_data( data),
+                    pix.m_internal,
+                    premultiply,
+                    bground,
+                    colors,
+                    bgcolor,
+                    )
+        else:
+            i = k = j = 0
+            data_fix = 255
+            while i < balen:
+                alpha = data[k]
+                if zero_out:
                     for j in range(i, i+n):
-                        pix.samples_set(j, fz_mul255( pix.samples_get(j), alpha))
-                elif bground:
-                    for j in range( i, i+n):
-                        m = bgcolor[j - i]
-                        pix.samples_set(j, fz_mul255( pix.samples_get(j) - m, alpha))
-            else:
-                pixsamples_set(i+n, data_fix)
-            i += n+1
-            k += 1
+                        if pix.samples_get(j) != colors[j - i]:
+                            data_fix = 255
+                            break
+                        else:
+                            data_fix = 0
+                if data_len:
+                    def fz_mul255( a, b):
+                        x = a * b + 128
+                        x += x // 256
+                        return x // 256
+
+                    if data_fix == 0:
+                        pix.samples_set(i+n, 0)
+                    else:
+                        pix.samples_set(i+n, alpha)
+                    if premultiply and not bground:
+                        denom = int(data[k])
+                        for j in range(i, i+n):
+                            pix.samples_set(j, fz_mul255( pix.samples_get(j), alpha))
+                    elif bground:
+                        for j in range( i, i+n):
+                            m = bgcolor[j - i]
+                            pix.samples_set(j, fz_mul255( pix.samples_get(j) - m, alpha))
+                else:
+                    pixsamples_set(i+n, data_fix)
+                i += n+1
+                k += 1
 
 
 #===========================
