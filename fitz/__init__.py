@@ -2469,6 +2469,7 @@ class Document:
         """Close document."""
         if self.is_closed:
             raise ValueError("document closed")
+        # self._cleanup()
         if hasattr(self, "_outline") and self._outline:
             self._outline = None
         self._reset_page_refs()
@@ -16902,6 +16903,9 @@ def on_highlight_char(hits, line, ch):
     hits.len += 1
 
 
+page_merge_timings = jlib.Timings( active=0)
+page_merge_timings_n = [0]
+
 def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots, graft_map):
     '''
     Deep-copies a specified source page to the target location.
@@ -16909,6 +16913,8 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
     we skip **link** annotations. In addition we rotate output.
     '''
     # list of object types (per page) we want to copy
+    page_merge_timings.begin('page_merge')
+    
     known_page_objs = [
         PDF_NAME('Contents'),
         PDF_NAME('Resources'),
@@ -16922,10 +16928,12 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
         ]
     page_ref = mupdf.mpdf_lookup_page_obj(doc_src, page_from)
 
+    page_merge_timings.mid()
     # make new page dict in dest doc
     page_dict = mupdf.mpdf_new_dict(doc_des, 4)
     mupdf.mpdf_dict_put(page_dict, PDF_NAME('Type'), PDF_NAME('Page'))
 
+    page_merge_timings.mid()
     # copy objects of source page into it
     for i in range( len(known_page_objs)):
         obj = mupdf.mpdf_dict_get_inheritable( page_ref, known_page_objs[i])
@@ -16935,38 +16943,56 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
 
     # Copy the annotations, but skip types Link, Popup, IRT.
     # Remove dict keys P (parent) and Popup from copied annot.
+    page_merge_timings.mid()
     if copy_annots:
         old_annots = mupdf.mpdf_dict_get( page_ref, PDF_NAME('Annots'))
         if old_annots.m_internal:
             n = mupdf.mpdf_array_len( old_annots)
             new_annots = mupdf.mpdf_dict_put_array( page_dict, PDF_NAME('Annots'), n)
-            for i in range(n):
-                o = mupdf.mpdf_array_get( old_annots, i)
-                if mupdf.mpdf_dict_gets( o, "IRT").m_internal:
-                    continue
-                subtype = mupdf.mpdf_dict_get( o, PDF_NAME('Subtype'))
-                if mupdf.mpdf_name_eq( subtype, PDF_NAME('Link')):
-                    continue
-                if mupdf.mpdf_name_eq( subtype, PDF_NAME('Popup')):
-                    continue
-                if mupdf.mpdf_name_eq( subtype, PDF_NAME('Widget')):
-                    mupdf.mfz_warn( "skipping widget annotation")
-                    continue
-                mupdf.mpdf_dict_del( o, PDF_NAME('Popup'))
-                mupdf.mpdf_dict_del( o, PDF_NAME('P'))
-                copy_o = mupdf.mpdf_graft_mapped_object( graft_map.this, o)
-                annot = mupdf.mpdf_new_indirect( doc_des, mupdf.mpdf_to_num( copy_o), 0)
-                mupdf.mpdf_array_push( new_annots, annot)
+            with page_merge_timings():
+                if 1:
+                    # Use optimisation in mupdf2.
+                    import mupdf2
+                    mupdf2.page_merge_helper(
+                            old_annots,
+                            graft_map,
+                            doc_des,
+                            new_annots,
+                            n
+                            );
+                else:
+                    for i in range(n):
+                        o = mupdf.mpdf_array_get( old_annots, i)
+                        if mupdf.mpdf_dict_gets( o, "IRT").m_internal:
+                            continue
+                        subtype = mupdf.mpdf_dict_get( o, PDF_NAME('Subtype'))
+                        if mupdf.mpdf_name_eq( subtype, PDF_NAME('Link')):
+                            continue
+                        if mupdf.mpdf_name_eq( subtype, PDF_NAME('Popup')):
+                            continue
+                        if mupdf.mpdf_name_eq( subtype, PDF_NAME('Widget')):
+                            mupdf.mfz_warn( "skipping widget annotation")
+                            continue
+                        mupdf.mpdf_dict_del( o, PDF_NAME('Popup'))
+                        mupdf.mpdf_dict_del( o, PDF_NAME('P'))
+                        copy_o = mupdf.mpdf_graft_mapped_object( graft_map.this, o)
+                        annot = mupdf.mpdf_new_indirect( doc_des, mupdf.mpdf_to_num( copy_o), 0)
+                        mupdf.mpdf_array_push( new_annots, annot)
 
+    page_merge_timings.mid()
     # rotate the page
     if rotate != -1:
         mupdf.mpdf_dict_put_int( page_dict, PDF_NAME('Rotate'), rotate)
     # Now add the page dictionary to dest PDF
     ref = mupdf.mpdf_add_object( doc_des, page_dict)
 
+    page_merge_timings.mid()
     # Insert new page at specified location
     mupdf.mpdf_insert_page( doc_des, page_to, ref)
-
+    page_merge_timings.end()
+    page_merge_timings_n[0] += 1
+    if page_merge_timings.active and page_merge_timings_n[0] % 1000 == 0:
+        jlib.log( str( page_merge_timings), nv=0)
 
 def paper_rect(s: str) -> Rect:
     """Return a Rect for the paper size indicated in string 's'. Must conform to the argument of method 'PaperSize', which will be invoked.
