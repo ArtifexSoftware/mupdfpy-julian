@@ -28,6 +28,8 @@ Arguments:
         Specify location of MuPDF library and Python files, for example:
             foo/bar/mupdf/build/shared-debug
         Also used to find mupdf_cppyy.py by --env cppyy.
+        
+        Default is: {mupdf}/build/shared-release
     
     --pymupdf <dir>
         Specify location of PyMuPDF directory, for example:
@@ -478,6 +480,16 @@ def main():
             foo = Foo2()
             t = time.time() - t
             print( f't={t}')
+        
+        elif arg == '--test-fz_warn':
+            env = state.env_vars()
+            # We deliberately put a '%' into the message to check that this
+            # doesn't cause a segv by mupdf.mfz_warn() thinking it is a
+            # variadic arg.
+            command = f'import mupdf; mupdf.mfz_warn( "test %s message")'
+            command = f'{state.env_vars()} {sys.executable} -c {shlex.quote( command)}'
+            print( f'Running: {command}')
+            subprocess.run( command, check=True, shell=1)
         
         elif arg == '--tests':
             ptest_flags = ''
