@@ -73,6 +73,7 @@ else:
     g_timings.mid()
     import mupdf
 
+
 g_timings.mid()
 
 # Names required by class method typing annotations.
@@ -12531,8 +12532,7 @@ def JM_gather_fonts(pdf, dict_, fontlist, stream_xref):
         refname = dict_.dict_get_key(i)
         fontdict = dict_.dict_get_val(i)
         if not fontdict.is_dict():
-            #fz_warn(ctx, "'%s' is no font dict (%d 0 R)", pdf_to_name(ctx, refname), pdf_to_num(ctx, fontdict));
-            print(f'{refname.to_name()} is no font dict ({fontdict.to_num()} 0 R)')
+            mupdf.mfz_warn( f"'{refname.to_name()}' is no font dict ({fontdict.to_num()} 0 R)")
             continue
 
         subtype = fontdict.dict_get(mupdf.PDF_ENUM_NAME_Subtype)
@@ -12572,10 +12572,7 @@ def JM_gather_forms(doc, dict_: mupdf.PdfObj, imagelist, stream_xref: int):
         refname = mupdf.mpdf_dict_get_key( dict_, i)
         imagedict = mupdf.mpdf_dict_get_val(dict_, i)
         if not mupdf.mpdf_is_dict(imagedict):
-            mupdf.mfz_warn("'%s' is no form dict (%d 0 R)",
-                    mupdf.mpdf_to_name(refname),
-                    mupdf.mpdf_to_num(imagedict),
-                    )
+            mupdf.mfz_warn( f"'{mupdf.mpdf_to_name(refname)}' is no form dict ({mupdf.mpdf_to_num(imagedict)} 0 R)")
             continue
 
         type_ = mupdf.mpdf_dict_get(imagedict, PDF_NAME('Subtype'))
@@ -12614,10 +12611,7 @@ def JM_gather_images(doc: mupdf.PdfDocument, dict_: mupdf.PdfObj, imagelist, str
         refname = mupdf.mpdf_dict_get_key(dict_, i)
         imagedict = mupdf.mpdf_dict_get_val(dict_, i)
         if not mupdf.mpdf_is_dict(imagedict):
-            mupdf.mfz_warn("'%s' is no image dict (%d 0 R)",
-                    mupdf.mpdf_to_name(refname),
-                    mupdf.mpdf_to_num(imagedict),
-                    )
+            mupdf.mfz_warn(f"'{mupdf.mpdf_to_name(refname)}' is no image dict ({mupdf.mpdf_to_num(imagedict)} 0 R)")
             continue
 
         type_ = mupdf.mpdf_dict_get(imagedict, PDF_NAME('Subtype'))
@@ -14253,8 +14247,7 @@ def JM_scan_resources(pdf, rsrc, liste, what, stream_xref, tracer):
     Step through /Resources, looking up image, xobject or font information
     '''
     if rsrc.mark_obj():
-        # fixme: not implemented yet: fz_warn(ctx, "Circular dependencies! Consider page cleaning.");
-        print(f'Circular dependencies! Consider page cleaning.')
+        mupdf.mfz_warn('Circular dependencies! Consider page cleaning.')
         return  # Circular dependencies!
     try:
         xobj = rsrc.dict_get(mupdf.PDF_ENUM_NAME_XObject)
@@ -14284,8 +14277,7 @@ def JM_scan_resources(pdf, rsrc, liste, what, stream_xref, tracer):
                     tracer.append(sxref_t)
                     JM_scan_resources( pdf, subrsrc, liste, what, sxref, tracer)
                 else:
-                    #fz_warn(ctx, "Circular dependencies! Consider page cleaning.");
-                    print(f'Circular dependencies! Consider page cleaning.')
+                    mupdf.mfz_warn('Circular dependencies! Consider page cleaning.');
                     return
     finally:
         rsrc.unmark_obj()
@@ -17124,7 +17116,7 @@ def pdf_lookup_page_loc_imp(doc, node, skip, parentp, indexp):
                     else:
                         a = not mupdf.mpdf_dict_get( kid, PDF_NAME('MediaBox')).m_internal
                     if a:
-                        mupdf.mfz_warn( "non-page object in page tree (%s)" % mupdf.mpdf_to_name( type_))
+                        mupdf.mfz_warn( f"non-page object in page tree ({mupdf.mpdf_to_name( type_)})")
                     if skip[0] == 0:
                         parentp[0] = node
                         indexp[0] = i
