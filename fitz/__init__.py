@@ -637,7 +637,7 @@ class Annot:
         '''
         annot = self.this
         annot_obj = mupdf.mpdf_annot_obj( annot)
-        irt = muodf.mpdf_dict_get( annot_obj, PDF_NAME('IRT'))
+        irt = mupdf.mpdf_dict_get( annot_obj, PDF_NAME('IRT'))
         if not irt.m_internal:
             return 0
         return mupdf.mpdf_to_num( irt)
@@ -6675,10 +6675,10 @@ class Page:
         return val
 
     def _other_box(self, boxtype):
-        rect = muodf.Rect( mupdf.Rect.Fixed_INFINITE)
+        rect = mupdf.Rect( mupdf.Rect.Fixed_INFINITE)
         page = self._pdf_page()
         if page.m_internal:
-            obj = muodf.mpdf_dict_gets( page.obj(), boxtype)
+            obj = mupdf.mpdf_dict_gets( page.obj(), boxtype)
             if mupdf.mpdf_is_array(obj):
                 rect = mupdf.mpdf_to_rect(obj)
         return JM_py_from_rect(rect)
@@ -15184,12 +15184,12 @@ def jm_bbox_add_rect( dev, ctx, rect, code):
 def jm_bbox_fill_image( dev, ctx, image, ctm, alpha, color_params):
     r = mupdf.Rect(mupdf.Rect.Fixed_UNIT)
     r = mupdf.transform_rect( r.internal(), ctm)
-    jm_bbox_add_rect( dev, r, "fill-image")
+    jm_bbox_add_rect( dev, ctx, r, "fill-image")
 
 
 def jm_bbox_fill_image_mask( dev, ctx, image, ctm, colorspace, color, alpha, color_params):
     try:
-        jm_bbox_add_rect( dev, mupdf.transform_rect(fz_unit_rect, ctm), "fill-imgmask")
+        jm_bbox_add_rect( dev, ctx, mupdf.transform_rect(fz_unit_rect, ctm), "fill-imgmask")
     except Exception:
         if g_exceptions_verbose:    jlib.exception_info()
         raise
@@ -15767,7 +15767,7 @@ class JM_image_reporter_Filter(mupdf.PdfFilterOptions2):
         super().__init__()
         self.use_virtual_image_filter()
 
-    def image_filter( self, ctm, name, image):
+    def image_filter( self, ctx, ctm, name, image):
         assert isinstance(ctm, mupdf.fz_matrix)
         JM_image_filter(self, mupdf.Matrix(ctm), name, image)
         if mupdf_cppyy:
