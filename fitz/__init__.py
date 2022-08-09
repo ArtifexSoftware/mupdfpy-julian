@@ -55,7 +55,7 @@ import weakref
 
 g_timings.mid()
 g_exceptions_verbose = False
-#g_exceptions_verbose = True
+g_exceptions_verbose = True
 
 mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
 if mupdf_cppyy is not None:
@@ -13755,16 +13755,20 @@ def JM_merge_resources( page, temp_res):
     return (max_alp, max_fonts) # next available numbers
 
 
-def JM_mupdf_warning( message):
+def JM_mupdf_warning( ctx, message):
     '''
     redirect MuPDF warnings
     '''
+    #sys.stderr.write( '*** JM_mupdf_warning() called\n')
+    sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_warnings:
         sys.stderr.write(f'mupdf: {message}\n')
 
 
-def JM_mupdf_error( message):
+def JM_mupdf_error( ctx, message):
+    #sys.stderr.write( '*** JM_mupdf_error() called\n')
+    sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_errors:
         sys.stderr.write(f'mupdf: {message}')
@@ -15173,17 +15177,17 @@ def jm_append_merge(out):
     trace_device.dev_pathdict = None
 
 
-def jm_bbox_add_rect(dev, rect, code):
+def jm_bbox_add_rect( dev, ctx, rect, code):
     dev.result.append( (code, JM_py_from_rect(rect)) )
 
 
-def jm_bbox_fill_image( dev, image, ctm, alpha, color_params):
+def jm_bbox_fill_image( dev, ctx, image, ctm, alpha, color_params):
     r = mupdf.Rect(mupdf.Rect.Fixed_UNIT)
     r = mupdf.transform_rect( r.internal(), ctm)
     jm_bbox_add_rect( dev, r, "fill-image")
 
 
-def jm_bbox_fill_image_mask( dev, image, ctm, colorspace, color, alpha, color_params):
+def jm_bbox_fill_image_mask( dev, ctx, image, ctm, colorspace, color, alpha, color_params):
     try:
         jm_bbox_add_rect( dev, mupdf.transform_rect(fz_unit_rect, ctm), "fill-imgmask")
     except Exception:
@@ -15191,46 +15195,46 @@ def jm_bbox_fill_image_mask( dev, image, ctm, colorspace, color, alpha, color_pa
         raise
 
 
-def jm_bbox_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, color_params):
+def jm_bbox_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
     even_odd = True if even_odd else False
     try:
-        jm_bbox_add_rect( dev, mupdf.bound_path(path, None, ctm), "fill-path")
+        jm_bbox_add_rect( dev, ctx, mupdf.bound_path(path, None, ctm), "fill-path")
     except Exception:
         if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
-def jm_bbox_fill_shade( dev, shade, ctm, alpha, color_params):
+def jm_bbox_fill_shade( ctx, dev, shade, ctm, alpha, color_params):
     try:
-        jm_bbox_add_rect( dev, mupdf.bound_shade( shade, ctm), "fill-shade")
+        jm_bbox_add_rect( dev, ctx, mupdf.bound_shade( shade, ctm), "fill-shade")
     except Exception as e:
         if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
-def jm_bbox_stroke_text( dev, text, stroke, ctm, *args):
+def jm_bbox_stroke_text( ctx, dev, text, stroke, ctm, *args):
     try:
-        m_bbox_add_rect( dev, mupdf.bound_text( text, stroke, ctm), "stroke-text")
+        m_bbox_add_rect( dev, ctx, mupdf.bound_text( text, stroke, ctm), "stroke-text")
     except Exception:
         if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
-def jm_bbox_fill_text( dev, text, ctm, *args):
+def jm_bbox_fill_text( ctx, dev, text, ctm, *args):
     try:
-        jm_bbox_add_rect( dev, mupdf.bound_text( text, None, ctm), "fill-text")
+        jm_bbox_add_rect( dev, ctx, mupdf.bound_text( text, None, ctm), "fill-text")
     except Exception:
         if g_exceptions_verbose:    jlib.exception_info()
         raise
 
 
-def jm_bbox_ignore_text( dev, text, ctm):
-    jm_bbox_add_rect( dev, mupdf.bound_text(text, None, ctm), "ignore-text")
+def jm_bbox_ignore_text( ctx, dev, text, ctm):
+    jm_bbox_add_rect( dev, ctx, mupdf.bound_text(text, None, ctm), "ignore-text")
 
 
-def jm_bbox_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, color_params):
+def jm_bbox_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
     try:
-        jm_bbox_add_rect( dev, mupdf.bound_path( path, stroke, ctm), "stroke-path")
+        jm_bbox_add_rect( dev, ctx, mupdf.bound_path( path, stroke, ctm), "stroke-path")
     except Exception:
         if g_exceptions_verbose:    jlib.exception_info()
         raise
@@ -15526,14 +15530,14 @@ def timings( fn):
             jlib.log_interval( timings_.__str__, caller=2, interval=4)
     return fn2
 
-def jm_tracedraw_fill_path(dev, path, even_odd, ctm, colorspace, color, alpha, color_params):
+def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
     even_odd = True if even_odd else False
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
         trace_device.ctm = mupdf.Matrix( ctm)  # fz_concat(ctm, trace_device_ptm);
         path_type = trace_device.FILL_PATH
-        jm_tracedraw_path( dev, path)
+        jm_tracedraw_path( dev, ctx, path)
         if trace_device.dev_pathdict is None:
             return
         item_count = len(trace_device.dev_pathdict[ dictkey_items])
@@ -15579,7 +15583,7 @@ class Walker(mupdf.PathWalker2):
         self.use_virtual_curveto()
         self.use_virtual_closepath()
 
-    def moveto(self, x, y):   # trace_moveto().
+    def moveto(self, ctx, x, y):   # trace_moveto().
         try:
             #jlib.log( '{=trace_device.ctm type(trace_device.ctm)}')
             trace_device.dev_lastpoint = mupdf.mfz_transform_point(
@@ -15598,7 +15602,7 @@ class Walker(mupdf.PathWalker2):
             if g_exceptions_verbose:    jlib.exception_info()
             raise
 
-    def lineto(self, x, y):   # trace_lineto().
+    def lineto(self, ctx, x, y):   # trace_lineto().
         try:
             p1 = mupdf.mfz_transform_point( mupdf.mfz_make_point(x, y), trace_device.ctm)
             trace_device.dev_pathrect = mupdf.mfz_include_point_in_rect( trace_device.dev_pathrect, p1)
@@ -15618,7 +15622,7 @@ class Walker(mupdf.PathWalker2):
             if g_exceptions_verbose:    jlib.exception_info()
             raise
 
-    def curveto(self, x1, y1, x2, y2, x3, y3):   # trace_curveto().
+    def curveto(self, ctx, x1, y1, x2, y2, x3, y3):   # trace_curveto().
         try:
             trace_device.dev_linecount = 0  # reset # of consec. lines
             p1 = mupdf.mfz_make_point(x1, y1)
@@ -15644,7 +15648,7 @@ class Walker(mupdf.PathWalker2):
             if g_exceptions_verbose:    jlib.exception_info()
             raise
 
-    def closepath(self):    # trace_close().
+    def closepath(self, ctx):    # trace_close().
         try:
             if trace_device.dev_linecount == 3:
                 jm_checkrect()
@@ -15654,7 +15658,7 @@ class Walker(mupdf.PathWalker2):
             if g_exceptions_verbose:    jlib.exception_info()
             raise
 
-def jm_tracedraw_path(dev, path):
+def jm_tracedraw_path(dev, ctx, path):
     global jm_tracedraw_path_walker
 
     try:
@@ -15678,7 +15682,7 @@ def jm_tracedraw_path(dev, path):
         raise
 
 
-def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, color_params):
+def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
@@ -15688,7 +15692,7 @@ def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, 
         trace_device.ctm = mupdf.Matrix( ctm)  # fz_concat(ctm, trace_device_ptm);
         path_type = trace_device.STROKE_PATH;
 
-        jm_tracedraw_path( dev, path)
+        jm_tracedraw_path( dev, ctx, path)
         if not trace_device.dev_pathdict:
             return
         trace_device.dev_pathdict[ dictkey_type] = 's'
@@ -15723,18 +15727,18 @@ def jm_tracedraw_stroke_path( dev, path, stroke, ctm, colorspace, color, alpha, 
         raise
 
 
-def jm_tracedraw_stroke_text(dev, text, stroke, ctm, colorspace, color, alpha, color_params):
+def jm_tracedraw_stroke_text(dev, ctx, text, stroke, ctm, colorspace, color, alpha, color_params):
     out = dev.out
     jm_trace_text(out, text, 1, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
 
 
-def jm_dev_linewidth(dev, path, stroke, matrix, colorspace, color, alpha, color_params):
+def jm_dev_linewidth( dev, ctx, path, stroke, matrix, colorspace, color, alpha, color_params):
     trace_device.dev_linewidth = stroke.linewidth
-    jm_increase_seqno(dev)
+    jm_increase_seqno( ctx, dev)
 
 
-def jm_increase_seqno( dev, *vargs):
+def jm_increase_seqno( dev, ctx, *vargs):
     try:
         dev.seqno += 1
     except Exception:
