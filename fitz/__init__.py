@@ -8116,8 +8116,8 @@ class Pixmap:
             if data_len < w * h:
                 THROWMSG("bad alpha values")
         if 1:
-            import mupdf2
-            mupdf2.Pixmap_set_alpha_helper(
+            #import mupdf2
+            mupdf.Pixmap_set_alpha_helper(
                     balen,
                     n,
                     data_len,
@@ -16948,8 +16948,8 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
             with page_merge_timings():
                 if 1:
                     # Use optimisation in mupdf2.
-                    import mupdf2
-                    mupdf2.page_merge_helper(
+                    #import mupdf2
+                    mupdf.page_merge_helper(
                             old_annots,
                             graft_map,
                             doc_des,
