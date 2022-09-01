@@ -41,30 +41,6 @@ OptSeq = typing.Optional[typing.Sequence]
 This is a collection of functions to extend PyMupdf.
 """
 
-# some special geometry objects
-def EMPTY_RECT():
-    return Rect(mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT)
-
-
-def INFINITE_RECT():
-    return Rect(mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT)
-
-
-def EMPTY_IRECT():
-    return IRect(mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT)
-
-
-def INFINITE_IRECT():
-    return IRect(mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MIN_INF_RECT, mupdf.FZ_MAX_INF_RECT, mupdf.FZ_MAX_INF_RECT)
-
-
-def INFINITE_QUAD():
-    return INFINITE_RECT().quad
-
-
-def EMPTY_QUAD():
-    return EMPTY_RECT().quad
-
 
 def write_text(page: fitz.Page, **kwargs) -> None:
     """Write the text of one or more fitz.TextWriter objects.
@@ -203,7 +179,7 @@ def show_pdf_page(*args, **kwargs) -> int:
     doc = page.parent
 
     if not doc.is_pdf or not src.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
 
     if rect.is_empty or rect.is_infinite:
         raise ValueError("rect must be finite and not empty")
@@ -298,7 +274,7 @@ def insert_image(page, rect, **kwargs):
     fitz.CheckParent(page)
     doc = page.parent
     if not doc.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
 
     valid_keys = {
         "alpha",
@@ -970,7 +946,7 @@ def get_links(page: fitz.Page) -> list:
         nl = getLinkDict(ln)
         links.append(nl)
         ln = ln.next
-    if links != []:
+    if links != [] and page.parent.is_pdf:
         linkxrefs = [x for x in page.annot_xrefs() if x[1] == fitz.PDF_ANNOT_LINK]
         if len(linkxrefs) == len(links):
             for i in range(len(linkxrefs)):
@@ -988,7 +964,6 @@ def get_toc(
     Args:
         simple: a bool to control output. Returns a list, where each entry consists of outline level, title, page number and link destination (if simple = False). For details see PyMuPDF's documentation.
     """
-
     def recurse(olItem, liste, lvl):
         """Recursively follow the outline item chain and record item information in a list."""
         while olItem and olItem.this.m_internal:
@@ -1025,7 +1000,6 @@ def get_toc(
         raise ValueError("document closed")
     doc.init_doc()
     olItem = doc.outline
-
     if not olItem:
         return []
     lvl = 1
@@ -1161,7 +1135,7 @@ def set_metadata(doc: fitz.Document, m: dict) -> None:
         m: a dictionary like doc.metadata.
     """
     if not doc.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
     if doc.is_closed or doc.is_encrypted:
         raise ValueError("document closed or encrypted")
     if type(m) is not dict:
@@ -1289,7 +1263,7 @@ def set_toc(
     if doc.is_closed or doc.is_encrypted:
         raise ValueError("document closed or encrypted")
     if not doc.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
     if not toc:  # remove all entries
         return len(doc._delToC())
 
@@ -3074,7 +3048,7 @@ class Shape:
         self.page = page
         self.doc = page.parent
         if not self.doc.is_pdf:
-            raise ValueError("not a PDF")
+            raise ValueError("is no PDF")
         self.height = page.mediabox_size.y
         self.width = page.mediabox_size.x
         self.x = page.cropbox_position.x
@@ -3313,7 +3287,7 @@ class Shape:
         if cnt < 4:
             raise ValueError("points too close")
         mb = rad / cnt  # revised breadth
-        matrix = fitz.Matrix(fitz.TOOLS._hor_matrix(p1, p2))  # normalize line to x-axis
+        matrix = fitz.Matrix(fitz.util_hor_matrix(p1, p2))  # normalize line to x-axis
         i_mat = ~matrix  # get original position
         points = []  # stores edges
         for i in range(1, cnt):
@@ -3342,7 +3316,7 @@ class Shape:
         if cnt < 4:
             raise ValueError("points too close")
         mb = rad / cnt  # revised breadth
-        matrix = fitz.Matrix(fitz.TOOLS._hor_matrix(p1, p2))  # normalize line to x-axis
+        matrix = fitz.Matrix(fitz.util_hor_matrix(p1, p2))  # normalize line to x-axis
         i_mat = ~matrix  # get original position
         k = 2.4142135623765633  # y of draw_curve helper point
 
@@ -3889,8 +3863,10 @@ class Shape:
 
         if width == 0:  # border color makes no sense then
             color = None
-        elif color is None:  # vice versa
+        elif color == None:  # vice versa
             width = 0
+        # if color == None and fill == None:
+        #     raise ValueError("at least one of 'color' or 'fill' must be given")
         color_str = fitz.ColorCode(color, "c")  # ensure proper color string
         fill_str = fitz.ColorCode(fill, "f")  # ensure proper fill string
 
@@ -3905,7 +3881,7 @@ class Shape:
         if alpha != None:
             self.draw_cont = "/%s gs\n" % alpha + self.draw_cont
 
-        if width != 1:
+        if width != 1 and width != 0:
             self.draw_cont += "%g w\n" % width
 
         if lineCap != 0:
@@ -4019,7 +3995,7 @@ def apply_redactions(page: fitz.Page, images: int = 2) -> bool:
     if doc.is_encrypted or doc.is_closed:
         raise ValueError("document closed or encrypted")
     if not doc.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
 
     redact_annots = []  # storage of annot values
     for annot in page.annots(types=(fitz.PDF_ANNOT_REDACT,)):  # loop redactions
@@ -4135,7 +4111,7 @@ def scrub(
             return None
 
     if not doc.is_pdf:  # only works for PDF
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
     if doc.is_encrypted or doc.is_closed:
         raise ValueError("closed or encrypted doc")
 
@@ -4155,7 +4131,7 @@ def scrub(
         if remove_links:
             links = page.get_links()  # list of all links on page
             for link in links:  # remove all links
-                page.deleteLink(link)
+                page.delete_link(link)
 
         found_redacts = False
         for annot in page.annots():
@@ -4893,7 +4869,7 @@ def has_links(doc: fitz.Document) -> bool:
     if doc.is_closed:
         raise ValueError("document closed")
     if not doc.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
     for i in range(doc.page_count):
         for item in doc.page_annot_xrefs(i):
             if item[1] == fitz.PDF_ANNOT_LINK:
@@ -4906,7 +4882,7 @@ def has_annots(doc: fitz.Document) -> bool:
     if doc.is_closed:
         raise ValueError("document closed")
     if not doc.is_pdf:
-        raise ValueError("not a PDF")
+        raise ValueError("is no PDF")
     for i in range(doc.page_count):
         for item in doc.page_annot_xrefs(i):
             if not (item[1] == fitz.PDF_ANNOT_LINK or item[1] == fitz.PDF_ANNOT_WIDGET):

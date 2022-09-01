@@ -15,7 +15,7 @@ Arguments:
                 mupdf'.
             'mupdf':
                 Use local MuPDF Python bindings, as specified by
-                --mupdf-build-dir.
+                --mupdf and --mupdf-build-dir.
             'cppyy':
                 Use local experimental cppyy Python bindings, as specified by
                 --mupdf-build-dir.
@@ -23,6 +23,8 @@ Arguments:
     --mupdf <dir>
         Specify location of local mupdf directory. This is used to find
         mupdf/scripts/platform/python/mupdfwrap_cppyy.py by '--env cppyy'.
+        
+        Default is directory mupdf/ next to the mupdfpy directory.
     
     --mupdf-build-dir <dir>
         Specify location of MuPDF library and Python files, for example:
@@ -35,8 +37,7 @@ Arguments:
         Specify location of PyMuPDF directory, for example:
             foo/bar/PyMuPDF
         
-        Default is assumed to be a PyMuPDF/ directory next to the mupdfpy
-        directory.
+        Default is directory PyMuPDF/ next to the mupdfpy directory.
     
     --run <command> ...
         Runs specified command, prefixing with settings for PYTHONPATH and
