@@ -1549,6 +1549,7 @@ class DisplayList:
                 mupdf.FzCookie(),
                 )
 
+g_Document_init_n = 0
 
 class Document:
 
@@ -1621,6 +1622,11 @@ class Document:
             rect, width, height, fontsize: layout reflowable document
             on open (e.g. EPUB). Ignored if n/a.
         """
+        global g_Document_init_n
+        g_Document_init_n += 1
+        if g_Document_init_n % 100 == 0:
+            print( f'g_Document_init_n={g_Document_init_n}')
+        
         if 1:
             self.is_closed    = False
             self.is_encrypted = False
@@ -3402,7 +3408,7 @@ class Document:
             self.Graftmaps[isrt] = _gmap
 
         #val = _fitz.Document_insert_pdf(self, docsrc, from_page, to_page, start_at, rotate, links, annots, show_progress, final, _gmap)
-        if 1:
+        if 0:
             extra.FzDocument_insert_pdf(
                     self.this,
                     docsrc.this,
@@ -14067,7 +14073,7 @@ def JM_merge_range(
     location (apage) of the target PDF.
     If spage > epage, the sequence of source pages is reversed.
     '''
-    if 1:
+    if 0:
         return extra.JM_merge_range(
                 doc_des,
                 doc_src,
