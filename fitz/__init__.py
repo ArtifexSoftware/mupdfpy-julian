@@ -54,6 +54,8 @@ import typing
 import warnings
 import weakref
 
+from . import extra
+
 g_timings.mid()
 g_exceptions_verbose = False
 g_exceptions_verbose = True
@@ -14045,6 +14047,19 @@ def JM_merge_range(
     location (apage) of the target PDF.
     If spage > epage, the sequence of source pages is reversed.
     '''
+    if 1:
+        return extra.JM_merge_range(
+                doc_des,
+                doc_src,
+                spage,
+                epage,
+                apage,
+                rotate,
+                links,
+                annots,
+                show_progress,
+                graft_map,
+                )
     afterpage = apage;
     counter = 0;  # copied pages counter
     total = mupdf.fz_absi(epage - spage) + 1   # total pages to copy
@@ -17504,6 +17519,10 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
     Modified copy of function of pdfmerge.c: we also copy annotations, but
     we skip **link** annotations. In addition we rotate output.
     '''
+    if 1:
+        #jlib.log( 'Calling C++ extra.page_merge()')
+        return extra.page_merge( doc_des, doc_src, page_from, page_to, rotate, links, copy_annots, graft_map)
+    
     # list of object types (per page) we want to copy
     page_merge_timings.begin('page_merge')
     

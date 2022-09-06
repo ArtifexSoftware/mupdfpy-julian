@@ -98,6 +98,38 @@ void page_merge(
     mupdf::pdf_insert_page( doc_des, page_to, ref);
 }
 
+//-----------------------------------------------------------------------------
+// Copy a range of pages (spage, epage) from a source PDF to a specified
+// location (apage) of the target PDF.
+// If spage > epage, the sequence of source pages is reversed.
+//-----------------------------------------------------------------------------
+void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc_src, int spage, int epage, int apage, int rotate, int links, int annots, int show_progress, mupdf::PdfGraftMap& graft_map)
+{
+    //std::cerr << "JM_merge_range() called...\n";
+    int page, afterpage;
+    afterpage = apage;
+    int counter = 0;  // copied pages counter
+    int total = fz_absi(epage - spage) + 1;  // total pages to copy
+
+    if (spage < epage) {
+        for (page = spage; page <= epage; page++, afterpage++) {
+            page_merge( doc_des, doc_src, page, afterpage, rotate, links, annots, graft_map);
+            counter++;
+            if (show_progress > 0 && counter % show_progress == 0) {
+                //PySys_WriteStdout("Inserted %i of %i pages.\n", counter, total);
+            }
+        }
+    } else {
+        for (page = spage; page >= epage; page--, afterpage++) {
+            page_merge( doc_des, doc_src, page, afterpage, rotate, links, annots, graft_map);
+            counter++;
+            if (show_progress > 0 && counter % show_progress == 0) {
+                //PySys_WriteStdout("Inserted %i of %i pages.\n", counter, total);
+            }
+        }
+    }
+}
+
 %}
 
 void page_merge(
@@ -110,3 +142,5 @@ void page_merge(
         int copy_annots,
         mupdf::PdfGraftMap& graft_map
         );
+
+void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc_src, int spage, int epage, int apage, int rotate, int links, int annots, int show_progress, mupdf::PdfGraftMap& graft_map);
