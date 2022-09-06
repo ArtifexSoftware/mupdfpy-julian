@@ -3402,33 +3402,48 @@ class Document:
             self.Graftmaps[isrt] = _gmap
 
         #val = _fitz.Document_insert_pdf(self, docsrc, from_page, to_page, start_at, rotate, links, annots, show_progress, final, _gmap)
-        doc = self.this
-        pdfout = mupdf.pdf_specifics(doc)
-        pdfsrc = mupdf.pdf_specifics(docsrc.this)
-        outCount = mupdf.fz_count_pages(doc)
-        srcCount = mupdf.fz_count_pages(docsrc.this)
+        if 1:
+            extra.FzDocument_insert_pdf(
+                    self.this,
+                    docsrc.this,
+                    from_page,
+                    to_page,
+                    start_at,
+                    rotate,
+                    links,
+                    annots,
+                    show_progress,
+                    final,
+                    _gmap,
+                    );
+        else:
+            doc = self.this
+            pdfout = mupdf.pdf_specifics(doc)
+            pdfsrc = mupdf.pdf_specifics(docsrc.this)
+            outCount = mupdf.fz_count_pages(doc)
+            srcCount = mupdf.fz_count_pages(docsrc.this)
 
-        # local copies of page numbers
-        fp = from_page
-        tp = to_page
-        sa = start_at
+            # local copies of page numbers
+            fp = from_page
+            tp = to_page
+            sa = start_at
 
-        # normalize page numbers
-        fp = max(fp, 0) # -1 = first page
-        fp = min(fp, srcCount - 1)  # but do not exceed last page
+            # normalize page numbers
+            fp = max(fp, 0) # -1 = first page
+            fp = min(fp, srcCount - 1)  # but do not exceed last page
 
-        if tp < 0:
-            tp = srcCount - 1   # -1 = last page
-        tp = min(tp, srcCount - 1)  # but do not exceed last page
+            if tp < 0:
+                tp = srcCount - 1   # -1 = last page
+            tp = min(tp, srcCount - 1)  # but do not exceed last page
 
-        if sa < 0:
-            sa = outCount   # -1 = behind last page
-        sa = min(sa, outCount)  # but that is also the limit
+            if sa < 0:
+                sa = outCount   # -1 = behind last page
+            sa = min(sa, outCount)  # but that is also the limit
 
-        if not pdfout.m_internal or not pdfsrc.m_internal:
-            RAISEPY( "source or target not a PDF", PyExc_TypeError)
-        ENSURE_OPERATION(pdfout)
-        JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
+            if not pdfout.m_internal or not pdfsrc.m_internal:
+                RAISEPY( "source or target not a PDF", PyExc_TypeError)
+            ENSURE_OPERATION(pdfout)
+            JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
 
         # End of _fitz.Document_insert_pdf().
         
@@ -3868,6 +3883,11 @@ class Document:
         """Number of pages."""
         if self.is_closed:
             raise ValueError("document closed")
+        if isinstance( self.this, mupdf.FzDocument):
+            return mupdf.fz_count_pages( self.this)
+        else:
+            return mupdf.pdf_count_pages( self.this)
+        #
         pdf = self.this.pdf_specifics()
         if pdf.m_internal:
             return mupdf.pdf_count_pages( pdf)

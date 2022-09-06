@@ -90,6 +90,8 @@ def build():
             c++
                 -fPIC
                 -shared
+                -O2
+                -DNDEBUG
                 {python_flags}
                 -I ../mupdf/platform/c++/include
                 -I ../mupdf/include

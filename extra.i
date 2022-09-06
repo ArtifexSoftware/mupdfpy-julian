@@ -130,6 +130,66 @@ void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc_src, i
     }
 }
 
+bool JM_have_operation( mupdf::PdfDocument& pdf)
+{
+    // Ensure valid journalling state
+    if (pdf.m_internal->journal and !mupdf::pdf_undoredo_step(pdf, 0))
+    {
+        return 0;
+    }
+    return 1;
+}
+
+void ENSURE_OPERATION( mupdf::PdfDocument& pdf)
+{
+    if ( !JM_have_operation( pdf))
+    {
+        throw std::runtime_error( "No journalling operation started");
+        //RAISEPY( "No journalling operation started", PyExc_RuntimeError)
+    }
+}
+
+
+void FzDocument_insert_pdf(
+        mupdf::FzDocument& doc,
+        mupdf::FzDocument& src,
+        int from_page,
+        int to_page,
+        int start_at,
+        int rotate,
+        int links,
+        int annots,
+        int show_progress,
+        int final,
+        mupdf::PdfGraftMap& graft_map
+        )
+{
+    mupdf::PdfDocument pdfout = mupdf::pdf_specifics( doc);
+    mupdf::PdfDocument pdfsrc = mupdf::pdf_specifics( src);
+    int outCount = mupdf::fz_count_pages( doc);
+    int srcCount = mupdf::fz_count_pages( src);
+
+    // local copies of page numbers
+    int fp = from_page, tp = to_page, sa = start_at;
+
+    // normalize page numbers
+    fp = std::max(fp, 0);                // -1 = first page
+    fp = std::min(fp, srcCount - 1);     // but do not exceed last page
+
+    if (tp < 0) tp = srcCount - 1;  // -1 = last page
+    tp = std::min(tp, srcCount - 1);     // but do not exceed last page
+
+    if (sa < 0) sa = outCount;      // -1 = behind last page
+    sa = std::min(sa, outCount);         // but that is also the limit
+
+        if (!pdfout.m_internal || !pdfsrc.m_internal) {
+            throw std::runtime_error( "source or target not a PDF");
+            //RAISEPY(gctx, "source or target not a PDF", PyExc_TypeError);
+        }
+        ENSURE_OPERATION( pdfout);
+        JM_merge_range( pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, graft_map);
+}
+
 %}
 
 void page_merge(
@@ -144,3 +204,17 @@ void page_merge(
         );
 
 void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc_src, int spage, int epage, int apage, int rotate, int links, int annots, int show_progress, mupdf::PdfGraftMap& graft_map);
+
+void FzDocument_insert_pdf(
+        mupdf::FzDocument& doc,
+        mupdf::FzDocument& src,
+        int from_page,
+        int to_page,
+        int start_at,
+        int rotate,
+        int links,
+        int annots,
+        int show_progress,
+        int final,
+        mupdf::PdfGraftMap& graft_map
+        );
