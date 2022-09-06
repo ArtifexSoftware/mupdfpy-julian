@@ -338,7 +338,7 @@ class Package:
                 shutil.rmtree(path, ignore_errors=True)
 
 
-    def argv_install(self, record_path):
+    def argv_install(self, record_path, root):
         '''
         Called by `handle_argv()`.
         '''
@@ -346,27 +346,29 @@ class Package:
         if self.fn_build:
             items = self.fn_build()
 
-        # We install to the first item in site.getsitepackages()[] that exists.
-        #
-        sitepackages_all = site.getsitepackages()
-        for p in sitepackages_all:
-            if os.path.exists(p):
-                sitepackages = p
-                break
-        else:
-            text = 'No item exists in site.getsitepackages():\n'
-            for i in sitepackages_all:
-                text += f'    {i}\n'
-            raise Exception(text)
-
+        if root is None:
+            # We install to the first item in site.getsitepackages()[] that exists.
+            #
+            sitepackages_all = site.getsitepackages()
+            for p in sitepackages_all:
+                if os.path.exists(p):
+                    root = p
+                    break
+            else:
+                text = 'No item exists in site.getsitepackages():\n'
+                for i in sitepackages_all:
+                    text += f'    {i}\n'
+                raise Exception(text)
+        
         record = _Record() if record_path else None
         for item in items:
             (from_abs, from_rel), (to_abs, to_rel) = self._fromto(item)
-            to_path = f'{sitepackages}/{to_rel}'
+            to_path = f'{root}/{to_rel}'
             _log(f'copying from {from_abs} to {to_path}')
+            os.makedirs( os.path.dirname( to_path), exist_ok=True)
             shutil.copy2( from_abs, f'{to_path}')
             if record:
-                # Could maybe use relative path of to_path from sitepackages/.
+                # Could maybe use relative path of to_path from root/.
                 record.add_file(from_abs, to_path)
 
         if record:
@@ -452,6 +454,7 @@ class Package:
         opt_all = None
         opt_dist_dir = 'dist'
         opt_egg_base = None
+        opt_root = None
         opt_install_headers = None
         opt_record = None
 
@@ -516,6 +519,7 @@ class Package:
             elif arg == '--compile':                            pass
             elif arg == '--dist-dir' or arg == '-d':            opt_dist_dir = args.next()
             elif arg == '--egg-base':                           opt_egg_base = args.next()
+            elif arg == '--root':                               opt_root = args.next()
             elif arg == '--install-headers':                    opt_install_headers = args.next()
             elif arg == '--python-tag':                         pass
             elif arg == '--record':                             opt_record = args.next()
@@ -531,7 +535,7 @@ class Package:
         elif command == 'clean':        self.argv_clean(opt_all)
         elif command == 'dist_info':    self.argv_dist_info(opt_egg_base)
         elif command == 'egg_info':     self.argv_egg_info(opt_egg_base)
-        elif command == 'install':      self.argv_install(opt_record)
+        elif command == 'install':      self.argv_install(opt_record, opt_root)
         elif command == 'sdist':        self.build_sdist(opt_dist_dir)
         else:
             assert 0, f'Unrecognised command: {command}'
