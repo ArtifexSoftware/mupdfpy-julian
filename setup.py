@@ -6,7 +6,9 @@ import pipcl
 import subprocess
 
 
-def fs_find_in_paths( name, paths=None):
+g_root = os.path.abspath( f'{__file__}/..')
+
+def _fs_find_in_paths( name, paths=None):
     '''
     Looks for `name` in paths and returns complete path. `paths` is list/tuple
     or colon-separated string; if `None` we use `$PATH`.
@@ -20,25 +22,10 @@ def fs_find_in_paths( name, paths=None):
         if os.path.isfile( p):
             return p
 
-
-def build():
-    os.makedirs( 'build', exist_ok=True)
-    command = textwrap.dedent(f'''
-            swig
-            -Wall
-            -c++
-            -python
-            -module extra
-            -outdir build
-            -o build/extra.cpp
-            -I../mupdf/platform/c++/include
-            -I../mupdf/include
-            extra.i
-            '''
-            ).strip().replace( '\n', " ")
-    print( f'Running: {command}')
-    subprocess.run( command, shell=True, check=True)
-    
+def _python_compile_flags():
+    '''
+    Returns compile flags from `python-config --includes`.
+    '''
     # We use python-config which appears to
     # work better than pkg-config because
     # it copes with multiple installed
@@ -54,9 +41,9 @@ def build():
     #
     python_exe = os.path.realpath( sys.executable)
     python_config = f'{python_exe}-config'
-    if not fs_find_in_paths( python_config):
+    if not _fs_find_in_paths( python_config):
         default = 'python3-config'
-        print( f'Warning, cannot find {python_config}, using {default=}.')
+        #print( f'Warning, cannot find {python_config}, using {default=}.')
         python_config = default
     # --cflags gives things like
     # -Wno-unused-result -g etc, so we just use
@@ -67,39 +54,68 @@ def build():
             capture_output=True,
             check=True,
             encoding='utf8',
-            ).stdout
+            ).stdout.strip()
+    return python_flags
 
-    command = textwrap.dedent(f'''
-            c++
-            -fPIC
-            -shared
-            -I ../mupdf/platform/c++/include
-            -I ../mupdf/include
-            {python_flags}
-            build/extra.cpp
-            -o build/_extra.so
-            -L ../mupdf/build/shared-release
-            -l mupdf
-            -l mupdfcpp
-            ''').strip().replace( '\n', " ")
-    
+
+def _run( command):
+    command = textwrap.dedent( command).strip().replace( '\n', " \\\n")
     print( f'Running: {command}')
     subprocess.run( command, shell=True, check=True)
+
+
+def build():
+    # Build fitz.extra module.
+    #os.makedirs( 'build', exist_ok=True)
+    
+    # Run swig.
+    _run( f'''
+            swig
+                -Wall
+                -c++
+                -python
+                -module extra
+                -outdir fitz
+                -o fitz/extra.cpp
+                -I../mupdf/platform/c++/include
+                -I../mupdf/include
+                extra.i
+            '''
+            )
+    
+    python_flags = _python_compile_flags()
+
+    # Compile and link swig-generated code.
+    _run( f'''
+            c++
+                -fPIC
+                -shared
+                {python_flags}
+                -I ../mupdf/platform/c++/include
+                -I ../mupdf/include
+                -L ../mupdf/build/shared-release
+                -l mupdf
+                -l mupdfcpp
+                -Wno-deprecated-declarations
+                fitz/extra.cpp
+                -o fitz/_extra.so
+            ''')
     
     return [
             'README.md',
             'fitz/__init__.py',
             'fitz/__main__.py',
+            'fitz/_extra.so',
+            'fitz/extra.py',
             'fitz/fitz.py',
             'fitz/utils.py',
-            ( 'build/extra.py', 'fitz/extra.py'),
-            ( 'build/_extra.so', 'fitz/_extra.so'),
             'test.py',
             ]
 
 
 def sdist():
-    assert 0
+    return pipcl.git_items( g_root)
+
 
 p = pipcl.Package(
         'fitz',

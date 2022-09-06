@@ -64,6 +64,15 @@ Arguments:
     
     --tests-pypy
         Experimental. Like --tests but runs tests with pypy.
+
+    --test-wheel <items>
+        items:
+            List of single-character items:
+                0:  Create new venv.
+                1:  Build mupdfpy wheel.
+                2:  Install wheel (with `pip --force-reinstall`).
+                3:  Test use of wheel.
+            `all` is treated as `0123`.
     
     --venv <name> <command>
         Run remaining args in a new test.py invocation running in a Python
@@ -512,25 +521,33 @@ def main():
             def run( command):
                 print( f'Running: {command}')
                 subprocess.run( command, shell=True, check=True)
-            if 0:
-                shutil.rmtree( 'test-venv', ignore_errors=1)
-                run( f'{sys.executable} -m venv test-venv')
-            if 0:
-                shutil.rmtree( 'build', ignore_errors=1)
-                shutil.rmtree( 'dist', ignore_errors=1)
-                run( f'{sys.executable} setup.py bdist_wheel')
-            wheels = glob.glob( 'dist/*.whl')
-            assert len( wheels) == 1
-            wheel = wheels[ 0]
-            if 1:
-                run( f'. test-venv/bin/activate && pip install --force-reinstall {wheel}')
-            
-            # Run test in subdir, otherwise `import` will look in local `fitz/`
-            # directory first.
-            #
-            os.makedirs( 'test-subdir', exist_ok=True)
-            llp = os.path.abspath( '../mupdf/build/shared-release')
-            run( f'. test-venv/bin/activate && cd test-subdir && PYTHONPATH=../../mupdf/build/shared-release LD_LIBRARY_PATH={llp} python -c "import fitz; import fitz.extra; print(\\"Have imported fitz.extra\\")"')
+            items = next( args)
+            if items == 'all':
+                items = '0123'
+            for item in items:
+                if item == '0':
+                    shutil.rmtree( 'test-venv', ignore_errors=1)
+                    run( f'{sys.executable} -m venv test-venv')
+                    run( f'. test-venv/bin/activate && pip install --upgrade pip')
+                elif item == '1':
+                    shutil.rmtree( 'build', ignore_errors=1)
+                    shutil.rmtree( 'dist', ignore_errors=1)
+                    run( f'{sys.executable} setup.py bdist_wheel')
+                elif item == '2':
+                    wheels = glob.glob( 'dist/*.whl')
+                    assert len( wheels) == 1
+                    wheel = wheels[ 0]
+                    run( f'. test-venv/bin/activate && pip install --force-reinstall {wheel}')
+                elif item == '3':
+                    # Run test in subdir, otherwise `import` will look in local `fitz/`
+                    # directory first.
+                    #
+                    os.makedirs( 'test-subdir', exist_ok=True)
+                    llp = os.path.abspath( '../mupdf/build/shared-release')
+                    run( f'. test-venv/bin/activate && cd test-subdir && PYTHONPATH=../../mupdf/build/shared-release LD_LIBRARY_PATH={llp} python -c "import fitz; import fitz.extra; print(\\"Have imported fitz.extra\\")"')
+                
+                else:
+                    raise Exception( f'Unrecognised item after {arg}: {item}')
         
         elif arg == '--run':
             command = state.env_vars() + ' '
