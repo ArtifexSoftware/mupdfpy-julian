@@ -84,6 +84,7 @@ Examples:
     
 '''
 
+import glob
 import os
 import subprocess
 import shlex
@@ -506,6 +507,30 @@ def main():
         
         elif arg == '--tests-pypy':
             run_pymupdf_tests( state, pypy=True)
+        
+        elif arg == '--test-wheel':
+            def run( command):
+                print( f'Running: {command}')
+                subprocess.run( command, shell=True, check=True)
+            if 0:
+                shutil.rmtree( 'test-venv', ignore_errors=1)
+                run( f'{sys.executable} -m venv test-venv')
+            if 0:
+                shutil.rmtree( 'build', ignore_errors=1)
+                shutil.rmtree( 'dist', ignore_errors=1)
+                run( f'{sys.executable} setup.py bdist_wheel')
+            wheels = glob.glob( 'dist/*.whl')
+            assert len( wheels) == 1
+            wheel = wheels[ 0]
+            if 1:
+                run( f'. test-venv/bin/activate && pip install --force-reinstall {wheel}')
+            
+            # Run test in subdir, otherwise `import` will look in local `fitz/`
+            # directory first.
+            #
+            os.makedirs( 'test-subdir', exist_ok=True)
+            llp = os.path.abspath( '../mupdf/build/shared-release')
+            run( f'. test-venv/bin/activate && cd test-subdir && PYTHONPATH=../../mupdf/build/shared-release LD_LIBRARY_PATH={llp} python -c "import fitz; import fitz.extra; print(\\"Have imported fitz.extra\\")"')
         
         elif arg == '--run':
             command = state.env_vars() + ' '

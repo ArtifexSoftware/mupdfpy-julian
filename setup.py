@@ -28,14 +28,15 @@ def build():
             -Wall
             -c++
             -python
-            -module fitz_extra
+            -module extra
             -outdir build
-            -o build/fitz_extra.cpp
+            -o build/extra.cpp
             -I../mupdf/platform/c++/include
             -I../mupdf/include
             extra.i
             '''
             ).strip().replace( '\n', " ")
+    print( f'Running: {command}')
     subprocess.run( command, shell=True, check=True)
     
     # We use python-config which appears to
@@ -75,10 +76,14 @@ def build():
             -I ../mupdf/platform/c++/include
             -I ../mupdf/include
             {python_flags}
-            build/fitz_extra.cpp
-            -o build/_fitz_extra.so
+            build/extra.cpp
+            -o build/_extra.so
+            -L ../mupdf/build/shared-release
+            -l mupdf
+            -l mupdfcpp
             ''').strip().replace( '\n', " ")
     
+    print( f'Running: {command}')
     subprocess.run( command, shell=True, check=True)
     
     return [
@@ -87,8 +92,8 @@ def build():
             'fitz/__main__.py',
             'fitz/fitz.py',
             'fitz/utils.py',
-            ( 'build/fitz_extra.py', 'fitz/fitz_extra.py'),
-            ( 'build/_fitz_extra.so', 'fitz/_fitz_extra.so'),
+            ( 'build/extra.py', 'fitz/extra.py'),
+            ( 'build/_extra.so', 'fitz/_extra.so'),
             'test.py',
             ]
 
