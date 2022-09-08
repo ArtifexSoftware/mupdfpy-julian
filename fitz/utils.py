@@ -884,6 +884,7 @@ def get_page_pixmap(
 
 
 def getLinkDict(ln) -> dict:
+    #jlib.log( '{=type(ln) ln}')
     nl = {"kind": ln.dest.kind, "xref": 0}
     try:
         nl["from"] = ln.rect
@@ -940,7 +941,7 @@ def get_links(page: fitz.Page) -> list:
     """
 
     fitz.CheckParent(page)
-    ln = page.first_link()
+    ln = page.first_link
     links = []
     while ln:
         nl = getLinkDict(ln)
@@ -1535,6 +1536,10 @@ def do_links(
     for i in range(len(xref_src)):
         page_src = doc2[pno_src[i]]  # load source page
         links = page_src.get_links()  # get all its links
+        #jlib.log( '{pno_src=}')
+        #jlib.log( '{type(page_src)=}')
+        #jlib.log( '{page_src=}')
+        #jlib.log( '{=i len(links)}')
         if len(links) == 0:  # no links there
             page_src = None
             continue

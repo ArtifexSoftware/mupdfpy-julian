@@ -63,45 +63,60 @@ def _run( command):
     print( f'Running: {command}')
     subprocess.run( command, shell=True, check=True)
 
+def _fs_mtime( filename, default=0):
+    '''
+    Returns mtime of file, or `default` if error - e.g. doesn't exist.
+    '''
+    try:
+        return os.path.getmtime( filename)
+    except OSError:
+        return default
+
 
 def build():
     # Build fitz.extra module.
     #os.makedirs( 'build', exist_ok=True)
     
+    path_i = 'extra.i'
+    path_cpp = 'fitz/extra.cpp'
+    path_so = 'fitz/_extra.so'
+    
     # Run swig.
-    _run( f'''
-            swig
-                -Wall
-                -c++
-                -python
-                -module extra
-                -outdir fitz
-                -o fitz/extra.cpp
-                -I../mupdf/platform/c++/include
-                -I../mupdf/include
-                extra.i
-            '''
-            )
+    if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
+        _run( f'''
+                swig
+                    -Wall
+                    -c++
+                    -python
+                    -module extra
+                    -outdir fitz
+                    -o {path_cpp}
+                    -I../mupdf/platform/c++/include
+                    -I../mupdf/include
+                    {path_i}
+                '''
+                )
     
     python_flags = _python_compile_flags()
 
     # Compile and link swig-generated code.
-    _run( f'''
-            c++
-                -fPIC
-                -shared
-                -O2
-                -DNDEBUG
-                {python_flags}
-                -I ../mupdf/platform/c++/include
-                -I ../mupdf/include
-                -L ../mupdf/build/shared-release
-                -l mupdf
-                -l mupdfcpp
-                -Wno-deprecated-declarations
-                fitz/extra.cpp
-                -o fitz/_extra.so
-            ''')
+    if _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
+        _run( f'''
+                c++
+                    -fPIC
+                    -shared
+                    -O2
+                    -DNDEBUG
+                    {python_flags}
+                    -I ../mupdf/platform/c++/include
+                    -I ../mupdf/include
+                    -L ../mupdf/build/shared-release
+                    -l mupdf
+                    -l mupdfcpp
+                    -Wno-deprecated-declarations
+                    {path_cpp}
+                    -o {path_so}
+                ''')
     
     return [
             'README.md',

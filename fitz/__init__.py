@@ -3729,6 +3729,7 @@ class Document:
         'page_id' is either a 0-based page number or a tuple (chapter, pno),
         with chapter number and page number within that chapter.
         """
+        #jlib.log( 'load_page(). backtrace: {jlib.exception_info(file="return")}')
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         if page_id is None:
@@ -7124,7 +7125,7 @@ class Page:
         '''
         First link on page
         '''
-        return self.load_links
+        return self.load_links()
 
     @property
     def first_widget(self):
@@ -7582,7 +7583,9 @@ class Page:
         #val = _fitz.Page_load_links(self)
 
         val = mupdf.fz_load_links( self.this)
-        val = Link( val)
+        #jlib.log( 'fz_load_links => {val=}')
+        #jlib.log( '{=val.m_internal_value()}')
+        val = Link( val) if val.m_internal else None
 
         if val:
             val.thisown = True
@@ -17545,7 +17548,7 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
     Modified copy of function of pdfmerge.c: we also copy annotations, but
     we skip **link** annotations. In addition we rotate output.
     '''
-    if 1:
+    if 0:
         #jlib.log( 'Calling C++ extra.page_merge()')
         return extra.page_merge( doc_des, doc_src, page_from, page_to, rotate, links, copy_annots, graft_map)
     
