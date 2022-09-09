@@ -190,6 +190,29 @@ void FzDocument_insert_pdf(
         JM_merge_range( pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, graft_map);
 }
 
+int page_xref(mupdf::FzDocument& this_doc, int pno)
+{
+    //fz_document *this_doc = (fz_document *) $self;
+    int page_count = mupdf::fz_count_pages( this_doc);
+    int n = pno;
+    while (n < 0) n += page_count;
+    mupdf::PdfDocument pdf = mupdf::pdf_specifics( this_doc);
+    assert( pdf.m_internal);
+    int xref = 0;
+    if (n >= page_count) {
+        const char* MSG_BAD_PAGENO = "bad page number(s)";
+        throw std::runtime_error( MSG_BAD_PAGENO);//, PyExc_ValueError);
+    }
+    xref = mupdf::pdf_to_num( mupdf::pdf_lookup_page_obj( pdf, n));
+    return xref;
+}
+
+
+int ll_fz_absi( int i)
+{
+    return fz_absi(i);
+}
+
 %}
 
 void page_merge(
@@ -218,3 +241,7 @@ void FzDocument_insert_pdf(
         int final,
         mupdf::PdfGraftMap& graft_map
         );
+
+int page_xref(mupdf::FzDocument& this_doc, int pno);
+
+int ll_fz_absi( int i);
