@@ -76,10 +76,17 @@ def _fs_mtime( filename, default=0):
 def build():
     # Build fitz.extra module.
     #os.makedirs( 'build', exist_ok=True)
-    
     path_i = 'extra.i'
     path_cpp = 'fitz/extra.cpp'
     path_so = 'fitz/_extra.so'
+    
+    unix_build_type = os.environ.get( 'MUPDFPY_SETUP_MUPDF_BUILD_TYPE', 'release')
+    if unix_build_type == 'release':
+        cpp_flags = '-g -O2 -DNDEBUG'
+    elif unix_build_type == 'debug':
+        cpp_flags = '-g'
+    else:
+        assert 0
     
     # Run swig.
     if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
@@ -100,22 +107,25 @@ def build():
     python_flags = _python_compile_flags()
 
     # Compile and link swig-generated code.
+    #
+    # Fun fact - on Linux, if the -L and -l options are before '{path_cpp} -o
+    # {path_so}' they seem to be ignored...
+    #
     if _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
         _run( f'''
                 c++
                     -fPIC
                     -shared
-                    -O2
-                    -DNDEBUG
+                    {cpp_flags}
                     {python_flags}
                     -I ../mupdf/platform/c++/include
                     -I ../mupdf/include
-                    -L ../mupdf/build/shared-release
-                    -l mupdf
-                    -l mupdfcpp
                     -Wno-deprecated-declarations
                     {path_cpp}
                     -o {path_so}
+                    -L ../mupdf/build/shared-{unix_build_type}
+                    -l mupdfcpp
+                    -l mupdf
                 ''')
     
     return [
