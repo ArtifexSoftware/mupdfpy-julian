@@ -44,11 +44,8 @@ class Package:
 
         p = pipcl.Package('foo', '1.2.3', fn_build=build, fn_sdist=sdist, ...)
 
-        def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-            return p.build_wheel(wheel_directory, config_settings, metadata_directory)
-
-        def build_sdist(sdist_directory, config_settings=None):
-            return p.build_sdist(sdist_directory, config_settings)
+        build_wheel = p.build_wheel
+        build_sdist = p.build_sdist
 
     Work as a setup.py script by appending::
 
@@ -60,52 +57,89 @@ class Package:
     def __init__(self,
             name,
             version,
-            root = None,
+            platform = None,
+            supported_platform = None,
             summary = None,
             description = None,
-            classifiers = None,
+            description_content_type = None,
+            keywords = None,
+            home_page = None,
+            download_url = None,
             author = None,
             author_email = None,
-            url_docs = None,
-            url_home = None,
-            url_source = None,
-            url_tracker = None,
-            url_changelog = None,
-            keywords = None,
-            platform = None,
+            maintainer = None,
+            maintainer_email = None,
             license = None,
-            license_files = None,
+            classifier = None,
+            requires_dist = None,
+            requires_python = None,
+            requires_external = None,
+            project_url = None,
+            provides_extra = None,
+            
+            root = None,
             fn_build = None,
             fn_clean = None,
             fn_sdist = None,
+            tag_python = None,
+            tag_abi = None,
+            tag_platform = None,
             ):
         '''
+        Specification of package.
+        
+        The initial args before `root` define the package
+        metadata and closely follow the definitions in:
+        https://packaging.python.org/specifications/core-metadata/
+        
         name:
             A string, the name of the Python package.
         version:
             A string containing only 0-9 and '.'.
-        root:
-            Root of package, defaults to current directory.
+        platform:
+            String or list of strings.
+        supported_platform:
+            String or list of strings.
         summary:
             A string.
         description:
             A string.
-        classifiers:
-            A list of strings.
-        url_home:
-        url_source:
-        url_docs:
-        url_tracker:
-        url_changelog:
-            A string containing a URL.
+        description_content_type:
+            String describing markup of `description` arg. For example:
+                    text/markdown; variant=GFM
         keywords:
-            A string containing space-separated keywords.
-        platform:
-            A string, used in metainfo.
+            A string containing comma-separated keywords.
+        home_page:
+            .
+        download_url:
+            Where this version can be downloaded from.
+        author:
+            .
+        author_email:
+            .
+        maintainer:
+            .
+        maintainer_email:
+            .
         license:
             License text.
-        license_files:
-            List of string names of license files.
+        classifier:
+            String or list of strings. See:
+                https://pypi.org/pypi?%3Aaction=list_classifiers
+                https://pypi.org/classifiers/
+        requires_dist:
+            String or list of strings. See: https://peps.python.org/pep-0508/
+        requires_python:
+            String or list of strings.
+        requires_external:
+            String or list of strings.
+        project_url:
+            String or list of strings, each of the form: `<name>, <url>`.
+        provides_extra:
+            String or list of strings.
+        
+        root:
+            Root of package, defaults to current directory.
         fn_build:
             A function taking no args that builds the package.
 
@@ -116,6 +150,10 @@ class Package:
             `from_` should be the path to a file; if a relative path it is
             assumed to be relative to `root`. `to_` identifies what the file
             should be called within a wheel or when installing.
+            
+            Initial `$dist-info/` in `_to` is replaced by
+            `<name>-<version>.dist-info/`; this is useful for license files
+            etc.
 
             If we are building a wheel (e.g. 'bdist_wheel' in the argv passed
             to `self.handle_argv()` or PEP-517 pip calls `self.build_wheel()`),
@@ -137,27 +175,84 @@ class Package:
             `pipcl.git_items()`, for files that should be copied into the
             sdist. Relative paths are interpreted as relative to `root`. It is
             an error if a path does not exist or is not a file.
-        '''
+        tag_python:
+            First element of wheel tag defined in
+            https://peps.python.org/pep-0425/. Default is `py<version>`.
+            
+            On OpenBSD, `cp3` makes pip fail with (for example):
+                <name>-<version>-cp3-none-openbsd_7_0_amd64.whl is not a
+                supported wheel on this platform.
+        tag_abi:
+            Second element of wheel tag defined in
+            https://peps.python.org/pep-0425/. Default is `none`.
+        tag_platform:
+            Third element of wheel tag defined in
+            https://peps.python.org/pep-0425/. Default is generated from
+            distutils.util.get_platform(), e.g. `openbsd_7_0_amd64`.
+            
+            For pure python packages use: `tag_platform='any'`
+        '''        
+        assert name
+        assert version
+        
+        def assert_str( v):
+            if v is not None:
+                assert isinstance( v, str), f'Not a string: {v!r}'
+        def assert_str_or_multi( v):
+            if v is not None:
+                assert isinstance( v, (str, tuple, list)), f'Not a string, tuple or set: {v!r}'
+        
+        assert_str( name)
+        assert_str( version)
+        assert_str_or_multi( platform)
+        assert_str_or_multi( supported_platform)
+        assert_str( summary)
+        assert_str( description)
+        assert_str( description_content_type)
+        assert_str( keywords)
+        assert_str( home_page)
+        assert_str( download_url)
+        assert_str( author)
+        assert_str( author_email)
+        assert_str( maintainer)
+        assert_str( maintainer_email)
+        assert_str( license)
+        assert_str_or_multi( classifier)
+        assert_str_or_multi( requires_dist)
+        assert_str( requires_python)
+        assert_str_or_multi( requires_external)
+        assert_str_or_multi( project_url)
+        assert_str_or_multi( provides_extra)
+        
         self.name = name
         self.version = version
-        self.root_sep = os.path.abspath(root if root else os.getcwd()) + os.sep
+        self.platform = platform
+        self.supported_platform = supported_platform
         self.summary = summary
         self.description = description
-        self.classifiers = classifiers
+        self.description_content_type = description_content_type
+        self.keywords = keywords
+        self.home_page = home_page
+        self.download_url = download_url
         self.author = author
         self.author_email  = author_email
-        self.url_docs = url_docs
-        self.url_home  = url_home
-        self.url_source = url_source
-        self.url_tracker = url_tracker
-        self.url_changelog = url_changelog
-        self.keywords = keywords
-        self.platform = platform
+        self.maintainer = maintainer
+        self.maintainer_email = maintainer_email
         self.license = license
-        self.license_files = license_files
+        self.classifier = classifier
+        self.requires_dist = requires_dist
+        self.requires_python = requires_python
+        self.requires_external = requires_external
+        self.project_url = project_url
+        self.provides_extra = provides_extra
+        
+        self.root_sep = os.path.abspath(root if root else os.getcwd()) + os.sep
         self.fn_build = fn_build
         self.fn_clean = fn_clean
         self.fn_sdist = fn_sdist
+        self.tag_python = tag_python
+        self.tag_abi = tag_abi
+        self.tag_platform = tag_platform
 
 
     def build_wheel(self, wheel_directory, config_settings=None, metadata_directory=None):
@@ -174,19 +269,32 @@ class Package:
                 f' metadata_directory={metadata_directory}'
                 )
 
-        # Find platform tag used in wheel filename, as described in
-        # PEP-0425. E.g. 'openbsd_6_8_amd64', 'win_amd64' or 'win32'.
-        #
-        tag_platform = distutils.util.get_platform().replace('-', '_').replace('.', '_')
-
         # Get two-digit python version, e.g. 3.8 for python-3.8.6.
         #
-        tag_python = ''.join(platform.python_version().split('.')[:2])
+        if self.tag_python:
+            tag_python = self.tag_python
+        else:
+            tag_python = 'cp' + ''.join(platform.python_version().split('.')[:2])
+
+        # ABI tag.
+        if self.tag_abi:
+            tag_abi = self.tag_abi
+        else:
+            tag_abi = 'none'
+        
+        # Find platform tag used in wheel filename, as described in
+        # https://peps.python.org/pep-0425/. E.g. 'openbsd_6_8_amd64',
+        # 'win_amd64' or 'win32'.
+        #
+        if self.tag_platform:
+            tag_platform = self.tag_platform
+        else:
+            tag_platform = distutils.util.get_platform().replace('-', '_').replace('.', '_')
 
         # Final tag is, for example, 'cp39-none-win32', 'cp39-none-win_amd64'
         # or 'cp38-none-openbsd_6_8_amd64'.
         #
-        tag = f'cp{tag_python}-none-{tag_platform}'
+        tag = f'{tag_python}-{tag_abi}-{tag_platform}'
 
         path = f'{wheel_directory}/{self.name}-{self.version}-{tag}.whl'
 
@@ -210,13 +318,14 @@ class Package:
                 z.writestr(to_, content)
                 record.add_content(content, to_)
 
+            dist_info_dir = self._dist_info_dir()
+            
             # Add the files returned by fn_build().
             #
             for item in items:
                 (from_abs, from_rel), (to_abs, to_rel) = self._fromto(item)
                 add_file(from_abs, to_rel)
 
-            dist_info_path = f'{self.name}-{self.version}.dist-info'
             # Add <name>-<version>.dist-info/WHEEL.
             #
             add_str(
@@ -225,25 +334,21 @@ class Package:
                     f'Root-Is-Purelib: false\n'
                     f'Tag: {tag}\n'
                     ,
-                    f'{dist_info_path}/WHEEL',
+                    f'{dist_info_dir}WHEEL',
                     )
             # Add <name>-<version>.dist-info/METADATA.
             #
-            add_str(self._metainfo(), f'{dist_info_path}/METADATA')
-            if self.license_files:
-                for license_file in self.license_files:
-                    (from_abs, from_to), (to_abs, to_rel) = self._fromto(license_file)
-                    add_file(from_abs, f'{dist_info_path}/{to_rel}')
-
+            add_str(self._metainfo(), f'{dist_info_dir}METADATA')
+            
             # Update <name>-<version>.dist-info/RECORD. This must be last.
             #
-            z.writestr(f'{dist_info_path}/RECORD', record.get())
+            z.writestr(f'{dist_info_dir}RECORD', record.get())
 
         _log( f'build_wheel(): Have created wheel: {path}')
         return os.path.basename(path)
 
 
-    def build_sdist(self, sdist_directory, config_settings=None):
+    def build_sdist(self, sdist_directory, formats, config_settings=None):
         '''
         Helper for implementing a PEP-517 backend's `build_sdist()` function.
 
@@ -254,6 +359,9 @@ class Package:
 
         Returns leafname of generated archive within `sdist_directory`.
         '''
+        _log( f'build_sdist(): formats={formats}')
+        if formats and formats != 'gztar':
+            raise Exception( f'Unsupported: formats={formats}')
         paths = []
         if self.fn_sdist:
             paths = self.fn_sdist()
@@ -404,7 +512,7 @@ class Package:
         if dirpath is None:
             dirpath = self.root_sep
         _log(f'_write_info(): creating files in directory {dirpath}')
-        os.mkdir(dirpath)
+        os.makedirs(dirpath, exist_ok=True)
         with open(os.path.join(dirpath, 'PKG-INFO'), 'w') as f:
             f.write(self._metainfo())
 
@@ -422,10 +530,11 @@ class Package:
 
     def handle_argv(self, argv):
         '''
-        Handles old-style (pre PEP-517) command line passed by old releases of pip to a
-        `setup.py` script.
+        Attempt to handles old-style (pre PEP-517) command line passed by
+        old releases of pip to a `setup.py` script, and manual running of
+        `setup.py`.
 
-        We only handle those args that seem to be used by pre-PEP-517 pip.
+        This is partial support at best.
         '''
         #_log(f'handle_argv(): argv: {argv}')
 
@@ -454,10 +563,11 @@ class Package:
         opt_all = None
         opt_dist_dir = 'dist'
         opt_egg_base = None
-        opt_root = None
+        opt_formats = None
         opt_install_headers = None
         opt_record = None
-
+        opt_root = None
+        
         args = Args(argv[1:])
 
         while 1:
@@ -519,6 +629,7 @@ class Package:
             elif arg == '--compile':                            pass
             elif arg == '--dist-dir' or arg == '-d':            opt_dist_dir = args.next()
             elif arg == '--egg-base':                           opt_egg_base = args.next()
+            elif arg == '--formats':                            opt_formats = args.next()
             elif arg == '--root':                               opt_root = args.next()
             elif arg == '--install-headers':                    opt_install_headers = args.next()
             elif arg == '--python-tag':                         pass
@@ -536,7 +647,7 @@ class Package:
         elif command == 'dist_info':    self.argv_dist_info(opt_egg_base)
         elif command == 'egg_info':     self.argv_egg_info(opt_egg_base)
         elif command == 'install':      self.argv_install(opt_record, opt_root)
-        elif command == 'sdist':        self.build_sdist(opt_dist_dir)
+        elif command == 'sdist':        self.build_sdist(opt_dist_dir, opt_formats)
         else:
             assert 0, f'Unrecognised command: {command}'
 
@@ -547,27 +658,38 @@ class Package:
         return ('{'
             f'name={self.name!r}'
             f' version={self.version!r}'
-            f' root_sep={self.root_sep!r}'
+            f' platform={self.platform!r}'
+            f' supported_platform={self.supported_platform!r}'
             f' summary={self.summary!r}'
             f' description={self.description!r}'
-            f' classifiers={self.classifiers!r}'
-            f' author={self.author!r}'
-            f' author_email ={self.author_email!r}'
-            f' url_docs={self.url_docs!r}'
-            f' url_home ={self.url_home!r}'
-            f' url_source={self.url_source!r}'
-            f' url_tracker={self.url_tracker!r}'
-            f' url_changelog={self.url_changelog!r}'
+            f' description_content_type={self.description_content_type!r}'
             f' keywords={self.keywords!r}'
-            f' platform={self.platform!r}'
+            f' home_page={self.home_page!r}'
+            f' download_url={self.download_url!r}'
+            f' author={self.author!r}'
+            f' author_email={self.author_email!r}'
+            f' maintainer={self.maintainer!r}'
+            f' maintainer_email={self.maintainer_email!r}'
             f' license={self.license!r}'
-            f' license_files={self.license_files!r}'
+            f' classifier={self.classifier!r}'
+            f' requires_dist={self.requires_dist!r}'
+            f' requires_python={self.requires_python!r}'
+            f' requires_external={self.requires_external!r}'
+            f' project_url={self.project_url!r}'
+            f' provides_extra={self.provides_extra!r}'
+            
+            f' root={self.root!r}'
             f' fn_build={self.fn_build!r}'
             f' fn_sdist={self.fn_sdist!r}'
             f' fn_clean={self.fn_clean!r}'
+            f' tag_python={self.tag_python!r}'
+            f' tag_abi={self.tag_abi!r}'
+            f' tag_platform={self.tag_platform!r}'
             '}'
             )
 
+    def _dist_info_dir( self):
+        return f'{self.name}-{self.version}.dist-info/'
 
     def _metainfo(self):
         '''
@@ -581,30 +703,43 @@ class Package:
         ret = ['']
         def add(key, value):
             if value is not None:
-                assert '\n' not in value, f'key={key} value contains newline: {value!r}'
-                ret[0] += f'{key}: {value}\n'
-        add('Metadata-Version', '1.2')
-        add('Name', self.name)
-        add('Version', self.version)
-        add('Summary', self.summary)
+                if isinstance( value, (tuple, list)):
+                    for v in value:
+                        add( key, v)
+                else:
+                    assert '\n' not in value, f'key={key} value contains newline: {value!r}'
+                    ret[0] += f'{key}: {value}\n'
         #add('Description', self.description)
-        add('Home-page', self.url_home)
-        add('Platform', self.platform)
-        add('Author', self.author)
-        add('Author-email', self.author_email)
-        if self.license:        add('License', self.license)
-        if self.url_source:     add('Home-page', f'Source, {self.url_source}')
-        if self.url_docs:       add('Home-page', f'Source, {self.url_docs}')
-        if self.url_tracker:    add('Home-page', f'Source, {self.url_tracker}')
-        if self.url_changelog:  add('Home-page', f'Source, {self.url_changelog}')
-        if self.keywords:
-            add('Keywords', self.keywords)
-        if self.classifiers:
-            classifiers2 = self.classifiers
-            if isinstance(classifiers2, str):
-                classifiers2 = classifiers2.split('\n')
-            for c in classifiers2:
-                add('Classifier', c)
+        add('Metadata-Version', '1.2')
+        
+        # These names are from:
+        # https://packaging.python.org/specifications/core-metadata/
+        #
+        for name in (
+                'Name',
+                'Version',
+                'Platform',
+                'Supported-Platform',
+                'Summary',
+                'Description-Content-Type',
+                'Keywords',
+                'Home-page',
+                'Download-URL',
+                'Author',
+                'Author-email',
+                'Maintainer',
+                'Maintainer-email',
+                'License',
+                'Classifier',
+                'Requires-Dist',
+                'Requires-Python',
+                'Requires-External',
+                'Project-URL',
+                'Provides-Extra',
+                ):
+            identifier = name.lower().replace( '-', '_')
+            add( name, getattr( self, identifier))
+        
         ret = ret[0]
 
         # Append description as the body
@@ -641,6 +776,9 @@ class Package:
         If `p` is a string we convert to `(p, p)`. Otherwise we assert that
         `p` is a tuple of two strings. Non-absolute paths are assumed to be
         relative to `self.root_sep`.
+        
+        If `to_` starts with `$dist-info/`, we replace this with
+        `self._dist_info_dir()`.
 
         `from_abs` and `to_abs` are absolute paths, asserted to be within
         `self.root_sep`.
@@ -657,6 +795,9 @@ class Package:
                 ret = from_, to_
         assert ret, 'p should be str or (str, str), but is: {p}'
         from_, to_ = ret
+        prefix = '$dist-info/'
+        if to_.startswith( prefix):
+            to_ = f'{self._dist_info_dir()}{to_[ len(prefix):]}'
         return self._path_relative_to_root(from_), self._path_relative_to_root(to_)
 
 
