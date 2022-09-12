@@ -74,19 +74,36 @@ def _fs_mtime( filename, default=0):
 
 
 def build():
+    '''
+    We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE
+    in a similar way as a normal PyMuPDF build, except that we require that
+    $PYMUPDF_SETUP_MUPDF_BUILD is set - we are not currently able to download
+    and build a hard-coded MuPDF release.
+    '''
     # Build fitz.extra module.
     #os.makedirs( 'build', exist_ok=True)
     path_i = 'extra.i'
     path_cpp = 'fitz/extra.cpp'
     path_so = 'fitz/_extra.so'
-    
-    unix_build_type = os.environ.get( 'MUPDFPY_SETUP_MUPDF_BUILD_TYPE', 'release')
+    unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
     if unix_build_type == 'release':
         cpp_flags = '-g -O2 -DNDEBUG'
     elif unix_build_type == 'debug':
         cpp_flags = '-g'
     else:
         assert 0
+    
+    mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
+    if mupdf_dir:
+        include1 = f'-I{mupdf_dir}/platform/c++/include'
+        include2 = f'-I{mupdf_dir}/include'
+        linkdir = f'-L {mupdf_dir}/build/shared-{unix_build_type}'
+    elif mupdf_dir == '':
+        include1 = ''
+        include2 = ''
+        linkdir = ''
+    else:
+        assert 0, f'No support yet for downloading mupdf'
     
     # Run swig.
     if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
@@ -98,8 +115,8 @@ def build():
                     -module extra
                     -outdir fitz
                     -o {path_cpp}
-                    -I../mupdf/platform/c++/include
-                    -I../mupdf/include
+                    {include1}
+                    {include2}
                     {path_i}
                 '''
                 )
@@ -118,12 +135,12 @@ def build():
                     -shared
                     {cpp_flags}
                     {python_flags}
-                    -I ../mupdf/platform/c++/include
-                    -I ../mupdf/include
+                    {include1}
+                    {include2}
                     -Wno-deprecated-declarations
                     {path_cpp}
                     -o {path_so}
-                    -L ../mupdf/build/shared-{unix_build_type}
+                    {linkdir}
                     -l mupdfcpp
                     -l mupdf
                 ''')
@@ -141,6 +158,10 @@ def build():
 
 
 def sdist():
+    '''
+    We are not currently able to embed a .tgz MuPDF release in the sdist, so we
+    do not look at $PYMUPDF_SETUP_MUPDF_TGZ.
+    '''
     return pipcl.git_items( g_root)
 
 
@@ -151,11 +172,9 @@ p = pipcl.Package(
         fn_sdist=sdist,
         )
 
-def build_wheel(wheel_directory, config_settings=None, metadata_directory=None):
-    return p.build_wheel(wheel_directory, config_settings, metadata_directory)
+build_wheel = p.build_wheel
+build_sdist = p.build_sdist
 
-def build_sdist(sdist_directory, config_settings=None):
-    return p.build_sdist(sdist_directory, config_settings)
 
 import sys
 if __name__ == '__main__':
