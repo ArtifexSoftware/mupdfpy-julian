@@ -203,12 +203,12 @@ class Annot:
             page = mupdf.pdf_annot_page( annot)
             apobj = mupdf.pdf_dict_getl( annot_obj, PDF_NAME('AP'), PDF_NAME('N'))
             if not apobj.m_internal:
-                RAISEPY( MSG_BAD_APN, PyExc_RuntimeError)
+                raise RuntimeError( MSG_BAD_APN)
             if not mupdf.pdf_is_stream( apobj):
-                RAISEPY( MSG_BAD_APN, PyExc_RuntimeError)
+                raise RuntimeError( MSG_BAD_APN)
             res = JM_BufferFromBytes( buffer_);
             if not res.m_internal:
-                RAISEPY( MSG_BAD_BUFFER, PyExc_ValueError)
+                raise ValueError( MSG_BAD_BUFFER)
             JM_update_stream( page.doc(), apobj, res, 1)
             if rect:
                 bbox = mupdf.pdf_dict_get_rect( annot_obj, PDF_NAME('Rect'))
@@ -289,7 +289,7 @@ class Annot:
                     PDF_NAME('N')
                     )
             if not ap.m_internal:   # should never happen
-                RAISEPY( MSG_BAD_APN, PyExc_RuntimeError)
+                raise RuntimeError( MSG_BAD_APN)
 
             resources = mupdf.pdf_dict_get( ap, PDF_NAME('Resources'))
             if not resources.m_internal:    # no Resources yet: make one
@@ -469,7 +469,7 @@ class Annot:
         annot_obj = mupdf.pdf_annot_obj(annot)
         type_ = mupdf.pdf_annot_type(annot)
         if type_ != mupdf.PDF_ANNOT_FILE_ATTACHMENT:
-            RAISEPY( MSG_BAD_ANNOT_TYPE, PyExc_TypeError)
+            raise TypeError( MSG_BAD_ANNOT_TYPE)
         stream = mupdf.pdf_dict_getl(
                 annot_obj,
                 PDF_NAME('FS'),
@@ -523,7 +523,7 @@ class Annot:
         annot_obj = mupdf.pdf_annot_obj(annot)
         type = mupdf.pdf_annot_type(annot)
         if type != mupdf.PDF_ANNOT_FILE_ATTACHMENT:
-            RAISEPY( MSG_BAD_ANNOT_TYPE, PyExc_TypeError);
+            raise TypeError( MSG_BAD_ANNOT_TYPE);
         stream = annot_obj.pdf_dict_getl(PDF_NAME('FS'), PDF_NAME('EF'), PDF_NAME('F'))
         if not stream.m_internal:
             RAISEPY( "bad PDF: file entry not found", JM_Exc_FileDataError);
@@ -573,7 +573,7 @@ class Annot:
         type = mupdf.pdf_annot_type(annot)
         sound = mupdf.pdf_dict_get(annot_obj, PDF_NAME('Sound'))
         if type != mupdf.PDF_ANNOT_SOUND or not sound.m_internal:
-            RAISEPY( MSG_BAD_ANNOT_TYPE, PyExc_TypeError);
+            raise TypeError( MSG_BAD_ANNOT_TYPE);
         if pdf_dict_get(sound, PDF_NAME(F)).m_internal:
             RAISEPY( "unsupported sound stream", JM_Exc_FileDataError);
         res = dict()
@@ -811,7 +811,7 @@ class Annot:
         annot_obj = mupdf.pdf_annot_obj(annot)
         ap = annot_obj.pdf_dict_getl(PDF_NAME('AP'), PDF_NAME('N'))
         if not ap.m_internal:
-            RAISEPY( MSG_BAD_APN, PyExc_RuntimeError)
+            raise RuntimeError( MSG_BAD_APN)
         rect = JM_rect_from_py(bbox)
         mupdf.pdf_dict_put_rect(ap, PDF_NAME('BBox'), rect)
 
@@ -823,7 +823,7 @@ class Annot:
         annot_obj = mupdf.pdf_annot_obj(annot)
         ap = annot_obj.pdf_dict_getl(PDF_NAME('AP'), PDF_NAME('N'))
         if not ap.m_internal:
-            RAISEPY( MSG_BAD_APN, PyExc_RuntimeError)
+            raise RuntimeError( MSG_BAD_APN)
         mat = JM_matrix_from_py(matrix)
         mupdf.pdf_dict_put_matrix(ap, PDF_NAME('Matrix'), mat)
 
@@ -938,12 +938,12 @@ class Annot:
         annot_obj = mupdf.pdf_annot_obj( annot)
         page = mupdf.pdf_annot_page( annot)
         if xref < 1 or xref >= mupdf.pdf_xref_len( page.doc()):
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         irt = mupdf.pdf_new_indirect( page.doc(), xref, 0)
         subt = mupdf.pdf_dict_get( irt, PDF_NAME('Subtype'))
         irt_subt = mupdf.pdf_annot_type_from_string( mupdf.pdf_to_name( subt))
         if irt_subt < 0:
-            RAISEPY( MSG_IS_NO_ANNOT, PyExc_ValueError)
+            raise ValueError( MSG_IS_NO_ANNOT)
         mupdf.pdf_dict_put( annot_obj, PDF_NAME('IRT'), irt)
 
     def set_language(self, language=None):
@@ -1029,7 +1029,7 @@ class Annot:
         rot = JM_rotate_page_matrix(pdfpage)
         r = mupdf.fz_transform_rect(JM_rect_from_py(rect), rot)
         if mupdf.fz_is_empty_rect(r) or mupdf.fz_is_infinite_rect(r):
-            RAISEPY( MSG_BAD_RECT, PyExc_ValueError)
+            raise ValueError( MSG_BAD_RECT)
         mupdf.pdf_set_annot_rect(annot, r)
 
     def set_rotation(self, rotate=0):
@@ -1368,7 +1368,7 @@ class Annot:
         pdf = mupdf.pdf_get_bound_document(annot_obj)  # the owning PDF
         type = mupdf.pdf_annot_type(annot)
         if type != mupdf.PDF_ANNOT_FILE_ATTACHMENT:
-            RAISEPY( MSG_BAD_ANNOT_TYPE, PyExc_TypeError);
+            raise TypeError( MSG_BAD_ANNOT_TYPE);
         stream = mupdf.pdf_dict_getl(annot_obj, PDF_NAME('FS'), PDF_NAME('EF'), PDF_NAME('F'))
         # the object for file content
         if not stream.m_internal:
@@ -1379,7 +1379,7 @@ class Annot:
         # file content given
         res = JM_BufferFromBytes(buffer_)
         if buffer_ and not res.m_internal:
-            RAISEPY( MSG_BAD_BUFFER, PyExc_ValueError);
+            raise ValueError( MSG_BAD_BUFFER);
         if res:
             JM_update_stream(pdf, stream, res, 1)
             # adjust /DL and /Size parameters
@@ -1724,7 +1724,7 @@ class Document:
                 magic = filetype
             # fixme: pymupdf does:
             #   handler = fz_recognize_document(gctx, filetype);
-            #   if (!handler) RAISEPY( MSG_BAD_FILETYPE, PyExc_ValueError)
+            #   if (!handler) raise ValueError( MSG_BAD_FILETYPE)
             # but prefer to leave fz_open_document_with_stream() to raise.
             doc = mupdf.fz_open_document_with_stream(magic, data)
         else:
@@ -1807,7 +1807,7 @@ class Document:
                  PDF_NAME('Font'),
                  )
         if not fonts.m_internal or not mupdf.pdf_is_dict( fonts):
-            RAISEPY( "PDF has no form fonts yet", PyExc_RuntimeError)
+            raise RuntimeError( "PDF has no form fonts yet")
         k = mupdf.pdf_new_name( name)
         v = JM_pdf_obj_from_str( pdf, font)
         mupdf.pdf_dict_put( fonts, k, v)
@@ -1822,7 +1822,7 @@ class Document:
         pdf = mupdf.pdf_specifics(doc)
         ASSERT_PDF(pdf)
         if not _INRANGE(xref, 1, mupdf.pdf_xref_len(pdf)-1):
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         mupdf.pdf_delete_object(pdf, xref)
 
     def _delete_page(self, pno):
@@ -1976,7 +1976,7 @@ class Document:
             RAISEPY( "bad PDF: no /EF object", JM_Exc_FileDataError)
         res = JM_BufferFromBytes(buffer_)
         if buffer_ and buffer_.m_internal and not res.m_internal:
-            RAISEPY( MSG_BAD_BUFFER, PyExc_TypeError)
+            raise TypeError( MSG_BAD_BUFFER)
         if res.m_internal and buffer_ and buffer_.m_internal:
             JM_update_stream(pdf, filespec, res, 1)
             # adjust /DL and /Size parameters
@@ -2018,7 +2018,7 @@ class Document:
         ASSERT_PDF(pdf);
         data = JM_BufferFromBytes(buffer_)
         if not data.m_internal:
-            RAISEPY( MSG_BAD_BUFFER, PyExc_TypeError)
+            raise TypeError( MSG_BAD_BUFFER)
         size, buffdata = data.fz_buffer_storage()
 
         names = mupdf.pdf_dict_getl(
@@ -2098,7 +2098,7 @@ class Document:
         if not n:
             return
         if n != m:
-            RAISEPY( "internal error finding outline xrefs", PyExc_IndexError);
+            raise IndexError( "internal error finding outline xrefs");
 
         # update all TOC item dictionaries
         for i in range(n):
@@ -2106,7 +2106,7 @@ class Document:
             item = items[i]
             itemdict = item[3]
             if not isinstance(itemdict, dict):
-                RAISEPY( "need non-simple TOC format", PyExc_ValueError);
+                raise ValueError( "need non-simple TOC format");
             itemdict[dictkey_xref] = xrefs[i]
             bm = mupdf.pdf_load_object(pdf, xref)
             flags = mupdf.pdf_to_int( mupdf.pdf_dict_get(bm, PDF_NAME('F')))
@@ -2252,7 +2252,7 @@ class Document:
         while n < 0:
             n += pageCount  # make it non-negative
         if n >= pageCount:
-            RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+            raise ValueError( MSG_BAD_PAGENO)
         pageref = pdf.pdf_lookup_page_obj(n)
         rsrc = pageref.pdf_dict_get_inheritable(mupdf.PDF_ENUM_NAME_Resources)
         liste = []
@@ -2289,7 +2289,7 @@ class Document:
 
         ASSERT_PDF(pdf);
         if not fontfile and not fontbuffer:
-            RAISEPY( MSG_FILE_OR_BUFFER, PyExc_ValueError)
+            raise ValueError( MSG_FILE_OR_BUFFER)
         value = JM_insert_font(pdf, None, fontfile, fontbuffer, 0, 0, 0, 0, 0, -1)
         return value
 
@@ -2524,10 +2524,10 @@ class Document:
         if config > -1:
             obj = mupdf.pdf_dict_get(ocp, PDF_NAME('Configs'))
             if not mupdf.pdf_is_array(obj):
-                RAISEPY( MSG_BAD_OC_CONFIG, PyExc_ValueError)
+                raise ValueError( MSG_BAD_OC_CONFIG)
             cfg = mupdf.pdf_array_get(obj, config)
             if not cfg.m_internal:
-                RAISEPY( MSG_BAD_OC_CONFIG, PyExc_ValueError)
+                raise ValueError( MSG_BAD_OC_CONFIG)
         else:
             cfg = mupdf.pdf_dict_get(ocp, PDF_NAME('D'))
 
@@ -2588,7 +2588,7 @@ class Document:
         #return _fitz.Document_chapter_page_count(self, chapter)
         chapters = mupdf.fz_count_chapters( self.this)
         if chapter < 0 or chapter >= chapters:
-            RAISEPY( "bad chapter number", PyExc_ValueError)
+            raise ValueError( "bad chapter number")
         pages = mupdf.fz_count_chapter_pages( self.this, chapter)
         return pages
 
@@ -2930,13 +2930,13 @@ class Document:
         smask = 0
         ASSERT_PDF(pdf);
         if not _INRANGE(xref, 1, mupdf.pdf_xref_len(pdf)-1):
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
 
         obj = mupdf.pdf_new_indirect(pdf, xref, 0)
         subtype = mupdf.pdf_dict_get(obj, PDF_NAME('Subtype'))
 
         if not mupdf.pdf_name_eq(subtype, PDF_NAME('Image')):
-            RAISEPY( "not an image", PyExc_ValueError)
+            raise ValueError( "not an image")
 
         o = mupdf.pdf_dict_geta(obj, PDF_NAME('SMask'), PDF_NAME('Mask'))
         if o.m_internal:
@@ -3042,7 +3042,7 @@ class Document:
             if (not _INRANGE(pno, 0, page_count - 1)
                     or not _INRANGE(to, -1, page_count - 1)
                     ):
-                RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+                raise ValueError( MSG_BAD_PAGENO)
 
             page1 = mupdf.pdf_resolve_indirect( mupdf.pdf_lookup_page_obj( pdf, pno))
 
@@ -3113,7 +3113,7 @@ class Document:
                     config,
                     );
         if not obj.m_internal:
-            RAISEPY( MSG_BAD_OC_CONFIG, PyExc_ValueError)
+            raise ValueError( MSG_BAD_OC_CONFIG)
         rc = JM_get_ocg_arrays( obj)
         return rc
 
@@ -3450,7 +3450,7 @@ class Document:
             sa = min(sa, outCount)  # but that is also the limit
 
             if not pdfout.m_internal or not pdfsrc.m_internal:
-                RAISEPY( "source or target not a PDF", PyExc_TypeError)
+                raise TypeError( "source or target not a PDF")
             ENSURE_OPERATION(pdfout)
             JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
 
@@ -3626,7 +3626,7 @@ class Document:
         pdf = self._this_as_pdf_document()
         ASSERT_PDF(pdf)
         if not pdf.m_internal.journal:
-            RAISEPY( "Journalling not enabled", PyExc_RuntimeError)
+            raise RuntimeError( "Journalling not enabled")
         if name:
             mupdf.pdf_begin_operation(pdf, name)
         else:
@@ -3720,7 +3720,7 @@ class Document:
             w = r.x1 - r.x0
             h = r.y1 - r.y0
         if w <= 0.0 or h <= 0.0:
-            RAISEPY( "bad page size", PyExc_ValueError)
+            raise ValueError( "bad page size")
         mupdf.fz_layout_document( doc, w, h, fontsize)
 
         self._reset_page_refs()
@@ -3769,7 +3769,7 @@ class Document:
         while pno < 0:
             pno += page_count
         if pno >= page_count:
-            RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+            raise ValueError( MSG_BAD_PAGENO)
         loc = mupdf.fz_location_from_page_number(this_doc, pno)
         return loc.chapter, loc.page
 
@@ -3839,7 +3839,7 @@ class Document:
         mediabox.y1 = height
         contents = mupdf.FzBuffer()
         if pno < -1:
-            RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+            raise ValueError( MSG_BAD_PAGENO)
         # create /Resources and /Contents objects
         #resources = pdf.add_object(pdf.new_dict(1))
         resources = mupdf.pdf_add_new_dict(pdf, 1)
@@ -3883,7 +3883,7 @@ class Document:
         while n < 0:
             n += page_count
         if n > page_count:
-            RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+            raise ValueError( MSG_BAD_PAGENO)
         page_obj = pdf_document.pdf_lookup_page_obj(n)
         annots = JM_get_annot_xref_list(page_obj)
         return annots
@@ -3917,7 +3917,7 @@ class Document:
             n += page_count
         pdf = mupdf.pdf_specifics( this_doc)
         if n >= page_count:
-            RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+            raise ValueError( MSG_BAD_PAGENO)
         ASSERT_PDF(pdf)
         pageref = mupdf.pdf_lookup_page_obj( pdf, n)
         cropbox = JM_cropbox(pageref)
@@ -3958,7 +3958,7 @@ class Document:
         pdf = mupdf.pdf_specifics(this_doc)
         xref = 0
         if n >= page_count:
-            RAISEPY( MSG_BAD_PAGENO, PyExc_ValueError)
+            raise ValueError( MSG_BAD_PAGENO)
         ASSERT_PDF(pdf)
         xref = mupdf.pdf_to_num(mupdf.pdf_lookup_page_obj(pdf, n))
         return xref
@@ -4294,7 +4294,7 @@ class Document:
                     config,
                     )
         if not obj.m_internal:
-            RAISEPY( MSG_BAD_OC_CONFIG, PyExc_ValueError)
+            raise ValueError( MSG_BAD_OC_CONFIG)
         JM_set_ocg_arrays( obj, basestate, on, off, rbgroups)
         mupdf.ll_pdf_read_ocg( pdf.m_internal)
 
@@ -4353,7 +4353,7 @@ class Document:
         if not mupdf.pdf_is_array( cfgs) or not mupdf.pdf_array_len( cfgs):
             if config < 1:
                 return
-            RAISEPY( MSG_BAD_OC_LAYER, PyExc_ValueError)
+            raise ValueError( MSG_BAD_OC_LAYER)
         if config < 0:
             return
         mupdf.pdf_select_layer_config( pdf, config)
@@ -4386,13 +4386,13 @@ class Document:
         pdf = self._this_as_pdf_document()
         xreflen = pdf.pdf_xref_len()
         if xref < 1 or xref > xreflen:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         obj = pdf.pdf_new_indirect(xref, 0)
         if not new and not obj.pdf_is_stream():
-            RAISEPY( MSG_IS_NO_DICT, PyExc_ValueError)
+            raise ValueError( MSG_IS_NO_DICT)
         res = JM_BufferFromBytes(stream)
         if not res:
-            RAISEPY( MSG_BAD_BUFFER, PyExc_TypeError)
+            raise TypeError( MSG_BAD_BUFFER)
         JM_update_stream(pdf, obj, res, compress)
         pdf.dirty = 1
 
@@ -4456,7 +4456,7 @@ class Document:
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len(pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         if xref > 0:
             obj = mupdf.pdf_load_object(pdf, xref)
         else:
@@ -4510,7 +4510,7 @@ class Document:
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len( pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         if xref > 0:
             obj = mupdf.pdf_load_object( pdf, xref)
         else:
@@ -4581,7 +4581,7 @@ class Document:
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len(pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         if xref > 0:
             obj = mupdf.pdf_load_object(pdf, xref)
         else:
@@ -4598,9 +4598,9 @@ class Document:
         pdf = self._this_as_pdf_document()
         ASSERT_PDF(pdf)
         if not key:
-            RAISEPY( "bad 'key'", PyExc_ValueError)
+            raise ValueError( "bad 'key'")
         if not value:
-            RAISEPY( "bad 'value'", PyExc_ValueError)
+            raise ValueError( "bad 'value'")
         xreflen = mupdf.pdf_xref_len(pdf)
         #if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
         #    THROWMSG("bad xref")
@@ -4609,7 +4609,7 @@ class Document:
         #if len(key) == 0:
         #    THROWMSG("bad 'key'")
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         if xref != -1:
             obj = mupdf.pdf_load_object(pdf, xref)
         else:
@@ -4637,7 +4637,7 @@ class Document:
         ASSERT_PDF(pdf)
         xreflen = mupdf.pdf_xref_len( pdf)
         if not INRANGE(xref, 1, xreflen-1) and xref != -1:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError);
+            raise ValueError( MSG_BAD_XREF);
         if xref >= 0:
             obj = mupdf.pdf_new_indirect( pdf, xref, 0)
         else:
@@ -4657,7 +4657,7 @@ class Document:
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len( pdf)
         if not INRANGE(xref, 1, xreflen-1) and xref != -1:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError);
+            raise ValueError( MSG_BAD_XREF);
         if xref >= 0:
             obj = mupdf.pdf_new_indirect( pdf, xref, 0)
         else:
@@ -4953,7 +4953,7 @@ class Font:
         lang = mupdf.fz_text_language_from_string(language)
         rc = 0
         if not isinstance(text, str):
-            RAISEPY( MSG_BAD_TEXT, PyExc_TypeError)
+            raise TypeError( MSG_BAD_TEXT)
         len_ = len(text)
         for ch in text:
             c = ord(ch)
@@ -5031,7 +5031,7 @@ class Link:
            return
         link_obj = mupdf.pdf_new_indirect( pdf, xref, 0)
         if not link_obj.m_internal:
-            RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+            raise ValueError( MSG_BAD_XREF)
         b = JM_annot_colors( link_obj)
         return b
 
@@ -5870,7 +5870,7 @@ class Page:
         ASSERT_PDF(page);
         filebuf = JM_BufferFromBytes(buffer_)
         if not filebuf.m_internal:
-            RAISEPY( MSG_BAD_BUFFER, PyExc_TypeError)
+            raise TypeError( MSG_BAD_BUFFER)
         annot = mupdf.pdf_create_annot(page, mupdf.PDF_ANNOT_FILE_ATTACHMENT)
         r = mupdf.pdf_annot_rect(annot)
         r = mupdf.fz_make_rect(p.x, p.y, p.x + r.x1 - r.x0, p.y + r.y1 - r.y0)
@@ -5909,7 +5909,7 @@ class Page:
         ntcol = JM_color_FromSequence(text_color, tcol)
         r = JM_rect_from_py(rect)
         if r.fz_is_infinite_rect() or r.fz_is_empty_rect():
-            RAISEPY( MSG_BAD_RECT, PyExc_ValueError)
+            raise ValueError( MSG_BAD_RECT)
         annot = mupdf.pdf_create_annot( page, mupdf.PDF_ANNOT_FREE_TEXT)
         annot_obj = mupdf.pdf_annot_obj( annot)
         mupdf.pdf_set_annot_contents( annot, text)
@@ -5960,7 +5960,7 @@ class Page:
         page = mupdf.pdf_page_from_fz_page(self.this)
         ASSERT_PDF(page);
         if not PySequence_Check(list):
-            RAISEPY( MSG_BAD_ARG_INK_ANNOT, PyExc_ValueError)
+            raise ValueError( MSG_BAD_ARG_INK_ANNOT)
         mupdf.pdf_page_transform(page, mupdf.FzRect(0), ctm)
         inv_ctm = mupdf.fz_invert_matrix(ctm)
         annot = mupdf.pdf_create_annot(page, mupdf.PDF_ANNOT_INK)
@@ -5976,7 +5976,7 @@ class Page:
             for i in range(n1):
                 p = sublist[i]
                 if not PySequence_Check(p) or PySequence_Size(p) != 2:
-                    RAISEPY( MSG_BAD_ARG_INK_ANNOT, PyExc_ValueError)
+                    raise ValueError( MSG_BAD_ARG_INK_ANNOT)
                 point = mupdf.fz_transform_point(JM_point_from_py(p), inv_ctm)
                 mupdf.pdf_array_push_real(stroke, point.x)
                 mupdf.pdf_array_push_real(stroke, point.y)
@@ -6005,11 +6005,11 @@ class Page:
         #return _fitz.Page__add_multiline(self, points, annot_type)
         page = self._pdf_page()
         if len(points) < 2:
-            RAISEPY( MSG_BAD_ARG_POINTS, PyExc_ValueError)
+            raise ValueError( MSG_BAD_ARG_POINTS)
         annot = mupdf.pdf_create_annot(page, annot_type)
         for p in points:
             if (PySequence_Size(p) != 2):
-                RAISEPY( MSG_BAD_ARG_POINTS, PyExc_ValueError)
+                raise ValueError( MSG_BAD_ARG_POINTS)
             point = JM_point_from_py(p)
             mupdf.pdf_add_annot_vertex(annot, point)
 
@@ -6052,7 +6052,7 @@ class Page:
         page = self._pdf_page()
         r = JM_rect_from_py(rect)
         if mupdf.fz_is_infinite_rect(r) or mupdf.fz_is_empty_rect(r):
-            RAISEPY( MSG_BAD_RECT, PyExc_ValueError)
+            raise ValueError( MSG_BAD_RECT)
         annot = mupdf.pdf_create_annot(page, annot_type)
         mupdf.pdf_set_annot_rect(annot, r)
         mupdf.pdf_update_annot(annot)
@@ -6084,7 +6084,7 @@ class Page:
         ASSERT_PDF(page)
         r = JM_rect_from_py(rect)
         if mupdf.fz_is_infinite_rect(r) or mupdf.fz_is_empty_rect(r):
-            RAISEPY( MSG_BAD_RECT, PyExc_ValueError)
+            raise ValueError( MSG_BAD_RECT)
         if _INRANGE(stamp, 0, n-1):
             name = stamp_id[stamp]
         annot = mupdf.pdf_create_annot(page, mupdf.PDF_ANNOT_STAMP)
@@ -6169,7 +6169,7 @@ class Page:
         pdf = page.doc()
         annot = JM_create_widget(pdf, page, field_type, field_name)
         if not annot.m_internal:
-            RAISEPY( "cannot create widget", PyExc_RuntimeError)
+            raise RuntimeError( "cannot create widget")
         JM_add_annot_id(annot, "W")
         return Annot(annot)
 
@@ -6280,7 +6280,7 @@ class Page:
         # store font in resources and fonts objects will contain named reference to font
         _, xref = JM_INT_ITEM(value, 0)
         if not xref:
-            RAISEPY( "cannot insert font", PyExc_RuntimeError)
+            raise RuntimeError( "cannot insert font")
         font_obj = mupdf.pdf_new_indirect(pdf, xref, 0)
         mupdf.pdf_dict_puts(fonts, fontname, font_obj)
         return value
@@ -6314,7 +6314,7 @@ class Page:
             w = mupdf.pdf_to_int( mupdf.pdf_dict_geta( ref, PDF_NAME('Width'), PDF_NAME('W')))
             h = mupdf.pdf_to_int( mupdf.pdf_dict_geta( ref, PDF_NAME('Height'), PDF_NAME('H')))
             if w + h == 0:
-                RAISEPY( MSG_IS_NO_IMAGE, PyExc_ValueError);
+                raise ValueError( MSG_IS_NO_IMAGE);
             #goto have_xref()
             do_process_pixmap = 0
             do_process_stream = 0
@@ -6409,7 +6409,7 @@ class Page:
             #cbuf1 = mupdf.fz_compressed_image_buffer(image)
             cbuf1 = mupdf.FzCompressedBuffer( mupdf.fz_compressed_image_buffer( image.m_internal))
             if not cbuf1.m_internal:
-                RAISEPY( "uncompressed image cannot have mask", PyExc_ValueError)
+                raise ValueError( "uncompressed image cannot have mask")
             bpc = image.bpc()
             colorspace = image.colorspace()
             xres, yres = mupdf.fz_image_resolution(image)
@@ -7729,7 +7729,7 @@ class Page:
         if (mupdf.fz_is_empty_rect(mediabox)
                 or mupdf.fz_is_infinite_rect(mediabox)
                 ):
-            RAISEPY( MSG_BAD_RECT, PyExc_ValueError)
+            raise ValueError( MSG_BAD_RECT)
         mupdf.pdf_dict_put_rect( page.obj(), PDF_NAME('MediaBox'), mediabox)
         mupdf.pdf_dict_del( page.obj(), PDF_NAME('CropBox'))
         mupdf.pdf_dict_del( page.obj(), PDF_NAME('ArtBox'))
@@ -7820,7 +7820,7 @@ class Pixmap:
             # copy pixmap, converting colorspace
             cs, spix = args
             if not mupdf.fz_pixmap_colorspace(spix).m_internal:
-                RAISEPY( "source colorspace must not be None", PyExc_ValueError)
+                raise ValueError( "source colorspace must not be None")
             
             if cs.m_internal:
                 self.this = fz_convert_pixmap(
@@ -7834,7 +7834,7 @@ class Pixmap:
             else:
                 self.this = mupdf.fz_new_pixmap_from_alpha_channel( spix)
                 if not self.this.m_internal:
-                    RAISEPY( MSG_PIX_NOALPHA, PyExc_RuntimeError)
+                    raise RuntimeError( MSG_PIX_NOALPHA)
 
         elif args_match(args, mupdf.FzPixmap, mupdf.FzPixmap):
             # add mask to a pixmap w/o alpha channel
@@ -7844,7 +7844,7 @@ class Pixmap:
             if not spix.m_internal: # intercept NULL for spix: make alpha only pix
                 dst = mupdf.fz_new_pixmap_from_alpha_channel( mpm)
                 if not dst.m_internal:
-                    RAISEPY( MSG_PIX_NOALPHA, PyExc_RuntimeError)
+                    raise RuntimeError( MSG_PIX_NOALPHA)
             else:
                 dst = mupdf.fz_new_pixmap_from_color_and_mask( spm, mpm)
             return dst
@@ -7873,10 +7873,10 @@ class Pixmap:
             alpha = args[1] if len(args) == 2 else 1
             src_pix = spix.this if isinstance(spix, Pixmap) else spix
             if not _INRANGE(alpha, 0, 1):
-                RAISEPY( "bad alpha value", PyExc_ValueError)
+                raise ValueError( "bad alpha value")
             cs = mupdf.fz_pixmap_colorspace(src_pix)
             if not cs.m_internal and not alpha:
-                RAISEPY( "cannot drop alpha for 'NULL' colorspace", PyExc_ValueError);
+                raise ValueError( "cannot drop alpha for 'NULL' colorspace");
             seps = mupdf.FzSeparations()
             n = mupdf.fz_pixmap_colorants(src_pix)
             w = mupdf.fz_pixmap_width(src_pix)
@@ -7958,10 +7958,10 @@ class Pixmap:
             size = 0;
             res = JM_BufferFromBytes(samples);
             if not res.m_internal:
-                RAISEPY( "bad samples data", PyExc_ValueError)
+                raise ValueError( "bad samples data")
             size, c = mupdf.fz_buffer_storage(res)
             if stride * h != size:
-                RAISEPY( "bad samples length", PyExc_ValueError)
+                raise ValueError( "bad samples length")
             pm = mupdf.fz_new_pixmap(cs, w, h, seps, alpha)
             assert 0, 'cannot memcpy from buffer to pixmap samples.'
             # do we need one of these?:
@@ -7993,7 +7993,7 @@ class Pixmap:
             else:
                 res = JM_BufferFromBytes(imagedata)
                 if not res.m_internal or not res.m_internal.len:
-                    RAISEPY( "bad image data", PyExc_ValueError)
+                    raise ValueError( "bad image data")
                 img = mupdf.fz_new_image_from_buffer(res)
 
             # Original code passed null for subarea and ctm, but that's not
@@ -8018,14 +8018,14 @@ class Pixmap:
             ASSERT_PDF(pdf)
             xreflen = mupdf.pdf_xref_len(pdf)
             if not _INRANGE(xref, 1, xreflen-1):
-                RAISEPY( MSG_BAD_XREF, PyExc_ValueError)
+                raise ValueError( MSG_BAD_XREF)
             ref = mupdf.pdf_new_indirect(pdf, xref, 0)
             type_ = mupdf.pdf_dict_get(ref, PDF_NAME('Subtype'))
             if (not mupdf.pdf_name_eq(type_, PDF_NAME('Image'))
                     and not mupdf.pdf_name_eq(type_, PDF_NAME('Alpha'))
                     and not mupdf.pdf_name_eq(type_, PDF_NAME('Luminosity'))
                     ):
-                RAISEPY( MSG_IS_NO_IMAGE, PyExc_ValueError);
+                raise ValueError( MSG_IS_NO_IMAGE);
             img = mupdf.pdf_load_image(pdf, ref)
             # Original code passed null for subarea and ctm, but that's not
             # possible with MuPDF's python bindings. The equivalent is an
@@ -8119,7 +8119,7 @@ class Pixmap:
         pm = self.this
         rc = JM_color_count( pm, clip)
         if not r:
-            RAISEPY( MSG_COLOR_COUNT_FAILED, PyExc_RuntimeError)
+            raise RuntimeError( MSG_COLOR_COUNT_FAILED)
         if not colors:
             return len( rc)
         return rc
@@ -8149,9 +8149,9 @@ class Pixmap:
         pm = self.this
         src_pix = src.this
         if not mupdf.fz_pixmap_colorspace(src_pix):
-            RAISEPY( "cannot copy pixmap with NULL colorspace", PyExc_ValueError)
+            raise ValueError( "cannot copy pixmap with NULL colorspace")
         if pm.alpha() != src_pix.alpha():
-            RAISEPY( "source and target alpha must be equal", PyExc_ValueError)
+            raise ValueError( "source and target alpha must be equal")
         mupdf.fz_copy_pixmap_rect(pm, src_pix, JM_irect_from_py(bbox), mupdf.FzDefaultColorspaces(None))
 
     @property
@@ -8381,7 +8381,7 @@ class Pixmap:
         alpha = 0
         m = 0
         if pix.alpha() == 0:
-            RAISEPY( MSG_PIX_NOALPHA, PyExc_ValueError)
+            raise ValueError( MSG_PIX_NOALPHA)
         n = mupdf.fz_pixmap_colorants(pix)
         w = mupdf.fz_pixmap_width(pix)
         h = mupdf.fz_pixmap_height(pix)
@@ -8413,7 +8413,7 @@ class Pixmap:
             else:
                 assert 0, f'unexpected type for alphavalues: {type(alphavalues)}'
             if data_len < w * h:
-                RAISEPY( "bad alpha values", PyExc_ValueError);
+                raise ValueError( "bad alpha values");
         if 1:
             #import mupdf2
             # Use C implementation for speed.
@@ -8486,13 +8486,13 @@ class Pixmap:
         #return _fitz.Pixmap_set_pixel(self, x, y, color)
         pm = self.this
         if not _INRANGE(x, 0, pm.w() - 1) or not _INRANGE(y, 0, pm.h() - 1):
-            RAISEPY( MSG_PIXEL_OUTSIDE, PyExc_ValueError)
+            raise ValueError( MSG_PIXEL_OUTSIDE)
         n = pm.n()
         c = list()
         for j in range(n):
             i = color[j]
             if not _INRANGE(i, 0, 255):
-                RAISEPY( MSG_BAD_COLOR_SEQ, PyExc_ValueError)
+                raise ValueError( MSG_BAD_COLOR_SEQ)
             c.append( ord(i))
         stride = mupdf.fz_pixmap_stride( pm)
         i = stride * y + n * x
@@ -8510,7 +8510,7 @@ class Pixmap:
             #if isinstance( i, str):
             #    i = ord( i)
             if not _INRANGE(i, 0, 255):
-                RAISEPY( MSG_BAD_COLOR_SEQ, PyExc_ValueError)
+                raise ValueError( MSG_BAD_COLOR_SEQ)
             c.append(i)
         bbox = JM_irect_from_py(bbox)
         i = JM_fill_pixmap_rect_with_color(pm, c, bbox)
@@ -15173,11 +15173,11 @@ def RAISEPY( msg, exc):
 
 def ASSERT_PDF( cond):
     if not cond:
-        RAISEPY( MSG_IS_NO_PDF, PyExc_RuntimeError)
+        raise RuntimeError( MSG_IS_NO_PDF)
 
 def ENSURE_OPERATION( pdf):
     if not JM_have_operation( pdf):
-        RAISEPY( "No journalling operation started", PyExc_RuntimeError)
+        raise RuntimeError( "No journalling operation started")
 
 
 
