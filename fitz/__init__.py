@@ -185,7 +185,7 @@ class Annot:
         r = None
         res = None
         annot = self.this
-        jlib.log( '{=type(annot) annot}')
+        #jlib.log( '{=type(annot) annot}')
         assert isinstance( annot, mupdf.PdfAnnot)
         annot_obj = mupdf.pdf_annot_obj( annot)
         ap = mupdf.pdf_dict_getl( annot_obj, PDF_NAME('AP'), PDF_NAME('N'))
@@ -3829,22 +3829,26 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #val = _fitz.Document__newPage(self, pno, width, height)
-        if isinstance(self.this, mupdf.PdfDocument):
-            pdf = self.this
+        if 0:
+            document = self.this if isinstance(self.this, mupdf.FzDocument) else self.this.super()
+            extra._newPage( document, pno, width, height)
         else:
-            pdf = mupdf.pdf_specifics( self)
-        assert isinstance(pdf, mupdf.PdfDocument)
-        mediabox = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
-        mediabox.x1 = width
-        mediabox.y1 = height
-        contents = mupdf.FzBuffer()
-        if pno < -1:
-            raise ValueError( MSG_BAD_PAGENO)
-        # create /Resources and /Contents objects
-        #resources = pdf.add_object(pdf.new_dict(1))
-        resources = mupdf.pdf_add_new_dict(pdf, 1)
-        page_obj = mupdf.pdf_add_page( pdf, mediabox, 0, resources, contents)
-        mupdf.pdf_insert_page( pdf, pno, page_obj)
+            if isinstance(self.this, mupdf.PdfDocument):
+                pdf = self.this
+            else:
+                pdf = mupdf.pdf_specifics( self)
+            assert isinstance(pdf, mupdf.PdfDocument)
+            mediabox = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
+            mediabox.x1 = width
+            mediabox.y1 = height
+            contents = mupdf.FzBuffer()
+            if pno < -1:
+                raise ValueError( MSG_BAD_PAGENO)
+            # create /Resources and /Contents objects
+            #resources = pdf.add_object(pdf.new_dict(1))
+            resources = mupdf.pdf_add_new_dict(pdf, 1)
+            page_obj = mupdf.pdf_add_page( pdf, mediabox, 0, resources, contents)
+            mupdf.pdf_insert_page( pdf, pno, page_obj)
         # fixme: pdf->dirty = 1;
 
         self._reset_page_refs()
@@ -5849,15 +5853,23 @@ class Page:
 
     def _add_caret_annot(self, point):
         #return _fitz.Page__add_caret_annot(self, point)
-        page = self._pdf_page()
-        annot = page.pdf_create_annot(mupdf.PDF_ANNOT_CARET)
-        if point:
-            p = JM_point_from_py(point)
-            r = annot.pdf_annot_rect()
-            r = mupdf.FzRect(p.x, p.y, p.x + r.x1 - r.x0, p.y + r.y1 - r.y0)
-            annot.pdf_set_annot_rect(r)
-        annot.pdf_update_annot()
-        JM_add_annot_id(annot, "A")
+        if 1:
+            if isinstance( self.this, mupdf.FzPage):
+                page = self.this;
+            else:
+                page = self.this.super()
+            #jlib.log( '{=type(point) point}')
+            annot = extra._add_caret_annot( page, JM_point_from_py(point))
+        else:
+            page = self._pdf_page()
+            annot = page.pdf_create_annot(mupdf.PDF_ANNOT_CARET)
+            if point:
+                p = JM_point_from_py(point)
+                r = annot.pdf_annot_rect()
+                r = mupdf.FzRect(p.x, p.y, p.x + r.x1 - r.x0, p.y + r.y1 - r.y0)
+                annot.pdf_set_annot_rect(r)
+            annot.pdf_update_annot()
+            JM_add_annot_id(annot, "A")
         return annot;
 
 
@@ -13181,7 +13193,7 @@ def JM_get_font(
     if ordering > -1:
         # goto have_cjk;
         data, size, index = mupdf.fz_lookup_cjk_font(ordering)
-        jlib.log( '{=ordering data size index}')
+        #jlib.log( '{=ordering data size index}')
         if data:
             font = mupdf.fz_new_font_from_memory( None, data, size, index, 0);
         if not font or not font.m_internal:
@@ -14575,7 +14587,7 @@ def JM_rotate_page_matrix(page):
     if not page.m_internal:
         return mupdf.FzMatrix()  # no valid pdf page given
     rotation = JM_page_rotation(page)
-    jlib.log( '{rotation=}')
+    #jlib.log( '{rotation=}')
     if rotation == 0:
         return mupdf.FzMatrix()  # no rotation
     cb_size = JM_cropbox_size(page.obj())

@@ -207,6 +207,97 @@ int page_xref(mupdf::FzDocument& this_doc, int pno)
     return xref;
 }
 
+void _newPage(mupdf::FzDocument& self, int pno=-1, float width=595, float height=842)
+{
+    mupdf::PdfDocument pdf = mupdf::pdf_specifics(self);
+    if (!pdf.m_internal)
+    {
+        throw std::runtime_error( "is no PDF");
+    }
+    mupdf::FzRect mediabox( 0, 0, width, height);
+    if (pno < -1)
+    {
+        throw std::runtime_error( "bad page number(s)");  // Should somehow be Python ValueError
+    }
+    ENSURE_OPERATION( pdf);
+    // create /Resources and /Contents objects
+    mupdf::PdfObj resources = mupdf::pdf_add_new_dict( pdf, 1);
+    mupdf::FzBuffer contents( (::fz_buffer*) nullptr);
+    mupdf::PdfObj page_obj = pdf_add_page( pdf, mediabox, 0, resources, contents);
+    mupdf::pdf_insert_page( pdf, pno, page_obj);
+}
+
+#include <algorithm>
+
+//------------------------------------------------------------------------
+// return the annotation names (list of /NM entries)
+//------------------------------------------------------------------------
+std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page)
+{
+    std::vector< std::string> names;
+    mupdf::PdfObj annots = mupdf::pdf_dict_get( page.obj(), PDF_NAME(Annots));
+    if (!annots.m_internal) return names;
+    int n = mupdf::pdf_array_len( annots);
+    for (int i = 0; i < n; i++) {
+        mupdf::PdfObj annot_obj = mupdf::pdf_array_get( annots, i);
+        mupdf::PdfObj name = mupdf::pdf_dict_gets( annot_obj, "NM");
+        if (name.m_internal)
+        {
+            names.push_back( mupdf::pdf_to_text_string( name));
+        }
+    }
+    return names;
+}
+
+
+//------------------------------------------------------------------------
+// Add a unique /NM key to an annotation or widget.
+// Append a number to 'stem' such that the result is a unique name.
+//------------------------------------------------------------------------
+static char JM_annot_id_stem[50] = "fitz";
+void JM_add_annot_id( mupdf::PdfAnnot& annot, const char *stem)
+{
+    mupdf::PdfPage page = mupdf::pdf_annot_page( annot);
+    mupdf::PdfObj annot_obj = mupdf::pdf_annot_obj( annot);
+    std::vector< std::string> names = JM_get_annot_id_list( page);
+    int i = 0;
+    char* stem_id = nullptr;
+    while (1)
+    {
+        free(stem_id);
+        asprintf( &stem_id,  "%s-%s%d", JM_annot_id_stem, stem, i);
+        //std::cout << "stem_id=" << stem_id << "\n";
+        if (std::find( names.begin(), names.end(), stem_id) == names.end())
+        {
+            break;
+        }
+        i += 1;
+    }
+    const char *response = stem_id;
+    mupdf::PdfObj name = mupdf::pdf_new_string( response, strlen(response));
+    free(stem_id);
+    mupdf::pdf_dict_puts( annot_obj, "NM", name);
+    page.m_internal->doc->resynth_required = 0;
+}
+
+//----------------------------------------------------------------
+// page add_caret_annot
+//----------------------------------------------------------------
+mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point)
+{
+    mupdf::PdfPage page = mupdf::pdf_page_from_fz_page(self);
+    mupdf::PdfAnnot annot = mupdf::pdf_create_annot( page, ::PDF_ANNOT_CARET);
+    if (1)
+    {
+        mupdf::FzPoint p = point;
+        mupdf::FzRect r = mupdf::pdf_annot_rect( annot);
+        r = mupdf::fz_make_rect(p.x, p.y, p.x + r.x1 - r.x0, p.y + r.y1 - r.y0);
+        mupdf::pdf_set_annot_rect( annot, r);
+    }
+    mupdf::pdf_update_annot( annot);
+    JM_add_annot_id( annot, "A");
+    return annot;
+}
 
 int ll_fz_absi( int i)
 {
@@ -243,5 +334,13 @@ void FzDocument_insert_pdf(
         );
 
 int page_xref(mupdf::FzDocument& this_doc, int pno);
+
+void _newPage(mupdf::FzDocument& self, int pno=-1, float width=595, float height=842);
+
+void JM_add_annot_id( mupdf::PdfAnnot& annot, const char *stem);
+
+std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page);
+
+mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point);
 
 int ll_fz_absi( int i);
