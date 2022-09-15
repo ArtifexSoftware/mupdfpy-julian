@@ -61,6 +61,7 @@ def _python_compile_flags():
 def _run( command):
     command = textwrap.dedent( command).strip().replace( '\n', " \\\n")
     print( f'Running: {command}')
+    sys.stdout.flush()
     subprocess.run( command, shell=True, check=True)
 
 def _fs_mtime( filename, default=0):
