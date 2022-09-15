@@ -181,19 +181,27 @@ class Annot:
         return val
 
     def _getAP(self):
-        #return _fitz.Annot__getAP(self)
-        r = None
-        res = None
-        annot = self.this
-        #jlib.log( '{=type(annot) annot}')
-        assert isinstance( annot, mupdf.PdfAnnot)
-        annot_obj = mupdf.pdf_annot_obj( annot)
-        ap = mupdf.pdf_dict_getl( annot_obj, PDF_NAME('AP'), PDF_NAME('N'))
-        if mupdf.pdf_is_stream( ap):
-            res = mupdf.pdf_load_stream( ap)
-        if res and res.m_internal:
-            r = JM_BinFromBuffer(res)
-        return r
+        #jlib.log( '{=self.this}')
+        #jlib.log( '{=self.this.m_internal}')
+        #jlib.log( '{=self.this.m_internal_value()}')
+        if 1:
+            assert isinstance( self.this, mupdf.PdfAnnot)
+            ret = extra.Annot_getAP(self.this)
+            #jlib.log( '{=type(ret) ret}')
+            return bytes( ret, 'utf8')
+        else:
+            r = None
+            res = None
+            annot = self.this
+            #jlib.log( '{=type(annot) annot}')
+            assert isinstance( annot, mupdf.PdfAnnot)
+            annot_obj = mupdf.pdf_annot_obj( annot)
+            ap = mupdf.pdf_dict_getl( annot_obj, PDF_NAME('AP'), PDF_NAME('N'))
+            if mupdf.pdf_is_stream( ap):
+                res = mupdf.pdf_load_stream( ap)
+            if res and res.m_internal:
+                r = JM_BinFromBuffer(res)
+            return r
 
     def _setAP(self, buffer_, rect=0):
         #return _fitz.Annot__setAP(self, ap, rect)
@@ -2019,7 +2027,7 @@ class Document:
         data = JM_BufferFromBytes(buffer_)
         if not data.m_internal:
             raise TypeError( MSG_BAD_BUFFER)
-        size, buffdata = data.fz_buffer_storage()
+        #size, buffdata = data.fz_buffer_storage()
 
         names = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
@@ -5854,10 +5862,13 @@ class Page:
     def _add_caret_annot(self, point):
         #return _fitz.Page__add_caret_annot(self, point)
         if 1:
-            if isinstance( self.this, mupdf.FzPage):
+            # This reduces a multi-it version of
+            # PyMuPDF/tests/test_annots.py:test_caret() from t=0.328 to
+            # t=0.197. PyMuPDF is 0.0712.  Native PyMuPDF is 0.0712.
+            if isinstance( self.this, mupdf.PdfPage):
                 page = self.this;
             else:
-                page = self.this.super()
+                page = mupdf.pdf_page_from_fz_page( self.this);
             #jlib.log( '{=type(point) point}')
             annot = extra._add_caret_annot( page, JM_point_from_py(point))
         else:
@@ -18495,25 +18506,30 @@ class TOOLS:
 
     @staticmethod
     def _parse_da(annot):
-        def Tools__parse_da(annot):
-            this_annot = annot.this
-            assert isinstance(this_annot, mupdf.PdfAnnot)
-            try:
-                da = mupdf.pdf_dict_get_inheritable(this_annot.pdf_annot_obj(), PDF_NAME('DA'))
-                if not da.m_internal:
-                    trailer = mupdf.pdf_trailer(this_annot.pdf_annot_page().doc())
-                    da = mupdf.pdf_dict_getl(trailer,
-                            PDF_NAME('Root'),
-                            PDF_NAME('AcroForm'),
-                            PDF_NAME('DA'),
-                            )
-                da_str = mupdf.pdf_to_text_string(da)
-            except Exception as e:
-                if g_exceptions_verbose:    jlib.exception_info()
-                return
-            return da_str
 
-        val = Tools__parse_da(annot)
+        if 1:
+            va = extra.Tools_parse_da( annot.this)
+        else:
+            def Tools__parse_da(annot):
+                this_annot = annot.this
+                assert isinstance(this_annot, mupdf.PdfAnnot)
+                this_annot_obj = mupdf.pdf_annot_obj( this_annot)
+                pdf = mupdf.pdf_get_bound_document( this_annot_obj)
+                try:
+                    da = mupdf.pdf_dict_get_inheritable( this_annot_obj, PDF_NAME('DA'))
+                    if not da.m_internal:
+                        trailer = mupdf.pdf_trailer(this_annot.pdf_apdf)
+                        da = mupdf.pdf_dict_getl(trailer,
+                                PDF_NAME('Root'),
+                                PDF_NAME('AcroForm'),
+                                PDF_NAME('DA'),
+                                )
+                    da_str = mupdf.pdf_to_text_string(da)
+                except Exception as e:
+                    if g_exceptions_verbose:    jlib.exception_info()
+                    return
+                return da_str
+            val = Tools__parse_da(annot)
 
         if not val:
             return ((0,), "", 0)
@@ -18558,16 +18574,19 @@ class TOOLS:
 
     def _update_da(annot, da_str):
         #return _fitz.Tools__update_da(self, annot, da_str)
-        try:
-            this_annot = annot.this
-            assert isinstance(this_annot, mupdf.PdfAnnot)
-            mupdf.pdf_dict_put_text_string(this_annot.pdf_annot_obj(), PDF_NAME('DA'), da_str)
-            mupdf.pdf_dict_del(this_annot.pdf_annot_obj(), PDF_NAME('DS'))    # /* not supported */
-            mupdf.pdf_dict_del(this_annot.pdf_annot_obj(), PDF_NAME('RC'))    # /* not supported */
-        except Exception as e:
-            if g_exceptions_verbose:    jlib.exception_info()
+        if 1:
+            extra.Tools_update_da( annot.this, da_str)
+        else:
+            try:
+                this_annot = annot.this
+                assert isinstance(this_annot, mupdf.PdfAnnot)
+                mupdf.pdf_dict_put_text_string(this_annot.pdf_annot_obj(), PDF_NAME('DA'), da_str)
+                mupdf.pdf_dict_del(this_annot.pdf_annot_obj(), PDF_NAME('DS'))    # /* not supported */
+                mupdf.pdf_dict_del(this_annot.pdf_annot_obj(), PDF_NAME('RC'))    # /* not supported */
+            except Exception as e:
+                if g_exceptions_verbose:    jlib.exception_info()
+                return
             return
-        return
 
     @staticmethod
     def gen_id():

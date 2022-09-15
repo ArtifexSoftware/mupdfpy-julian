@@ -1,5 +1,7 @@
 %module fitz_extra
 
+%include std_string.i
+
 %{
 #include "mupdf/classes2.h"
     
@@ -283,9 +285,8 @@ void JM_add_annot_id( mupdf::PdfAnnot& annot, const char *stem)
 //----------------------------------------------------------------
 // page add_caret_annot
 //----------------------------------------------------------------
-mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point)
+mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& page, mupdf::FzPoint& point)
 {
-    mupdf::PdfPage page = mupdf::pdf_page_from_fz_page(self);
     mupdf::PdfAnnot annot = mupdf::pdf_create_annot( page, ::PDF_ANNOT_CARET);
     if (1)
     {
@@ -297,6 +298,77 @@ mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point)
     mupdf::pdf_update_annot( annot);
     JM_add_annot_id( annot, "A");
     return annot;
+}
+
+const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
+{
+    const char *da_str = NULL;
+    mupdf::PdfObj this_annot_obj = mupdf::pdf_annot_obj( this_annot);
+    mupdf::PdfDocument pdf = mupdf::pdf_get_bound_document( this_annot_obj);
+    try
+    {
+        mupdf::PdfObj da = mupdf::pdf_dict_get_inheritable( this_annot_obj, PDF_NAME(DA));
+        if (!da.m_internal)
+        {
+            mupdf::PdfObj trailer = mupdf::pdf_trailer( pdf);
+            da = mupdf::pdf_dict_getl(
+                    trailer,
+                    PDF_NAME(Root),
+                    PDF_NAME(AcroForm),
+                    PDF_NAME(DA)
+                    );
+        }
+        da_str = mupdf::pdf_to_text_string( da);
+    }
+    catch( std::exception& e)
+    {
+        return NULL;
+    }
+    return da_str;
+}
+
+//----------------------------------------------------------------------------
+// Turn fz_buffer into a Python bytes object
+//----------------------------------------------------------------------------
+std::string JM_BinFromBuffer( mupdf::FzBuffer& buffer)
+{
+    if (!buffer.m_internal) return nullptr;
+    unsigned char *c = NULL;
+    size_t len = mupdf::fz_buffer_storage( buffer, &c);
+    return std::string( (char*) c, len);
+}
+
+std::string Annot_getAP( mupdf::PdfAnnot& annot)
+{
+    //std::cerr << __FILE__ << __LINE__ << ": annot.m_internal=" << annot.m_internal << "\n";
+    mupdf::PdfObj annot_obj = mupdf::pdf_annot_obj( annot);
+    ::pdf_obj* ap0 = mupdf::ll_pdf_dict_getl(
+            annot_obj.m_internal,
+            PDF_NAME(AP),
+            PDF_NAME(N),
+            nullptr
+            );
+    mupdf::PdfObj   ap( mupdf::ll_pdf_keep_obj( ap0));
+    if (mupdf::pdf_is_stream( ap))
+    {
+        mupdf::FzBuffer res = mupdf::pdf_load_stream( ap);
+        if (res.m_internal)
+        {
+            std::string r = JM_BinFromBuffer( res);
+            return r;
+        }
+    }
+    return "";
+}
+
+void Tools_update_da(struct mupdf::PdfAnnot& this_annot, const char *da_str)
+{
+    std::cerr << "Tools_update_da() ***\n";
+    *(int*)0=0;
+    mupdf::PdfObj this_annot_obj = mupdf::pdf_annot_obj( this_annot);
+    mupdf::pdf_dict_put_text_string( this_annot_obj, PDF_NAME(DA), da_str);
+    mupdf::pdf_dict_del( this_annot_obj, PDF_NAME(DS)); /* not supported */
+    mupdf::pdf_dict_del( this_annot_obj, PDF_NAME(RC)); /* not supported */
 }
 
 int ll_fz_absi( int i)
@@ -341,6 +413,10 @@ void JM_add_annot_id( mupdf::PdfAnnot& annot, const char *stem);
 
 std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page);
 
-mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point);
+mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& self, mupdf::FzPoint& point);
+
+const char* Tools_parse_da( mupdf::PdfAnnot& this_annot);
+
+std::string Annot_getAP( mupdf::PdfAnnot& annot);
 
 int ll_fz_absi( int i);
