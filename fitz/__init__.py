@@ -7,7 +7,7 @@ License:
 '''
 
 try:
-    import jlib # This is .../mupdf/scripts/jlib.py
+    import jlib__ # This is .../mupdf/scripts/jlib.py
 except ImportError:
     # Provide basic implementations of the jlib functions that we use.
     import sys
@@ -788,8 +788,11 @@ class Annot:
     def rect(self):
         """annotation rectangle"""
         CheckParent(self)
-        #val = _fitz.Annot_rect(self)
-        val = mupdf.pdf_bound_annot(self.this)
+        if 1:
+            #val = _fitz.Annot_rect(self)
+            val = extra.Annot_rect( self.this)
+        else:
+            val = mupdf.pdf_bound_annot(self.this)
         val = Rect(val)
         val *= self.parent.derotation_matrix
         return val
@@ -1084,6 +1087,13 @@ class Annot:
         it = o.pdf_to_name()
         return (type_, c, it)
 
+    @staticmethod
+    def update_timing_test():
+        total = 0
+        for i in range( 30*1000):
+            total += i
+        return total
+    
     def update(self,
             blend_mode: OptStr =None,
             opacity: OptFloat =None,
@@ -1112,6 +1122,7 @@ class Annot:
             cross_out: draw diagonal lines, 'Redact' only.
             rotate: set rotation, 'FreeText' and some others.
         """
+        Annot.update_timing_test()
         CheckParent(self)
         def color_string(cs, code):
             """Return valid PDF color operator for a given color sequence.
@@ -2081,6 +2092,10 @@ class Document:
 
     def _extend_toc_items(self, items):
         """Add color info to all items of an extended TOC list."""
+        if 1:
+            # This is hotspot in flamegraph?
+            return extra.Document_extend_toc_items( mupdf.pdf_specifics(self.this), items)
+            
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document__extend_toc_items(self, items)
@@ -3837,7 +3852,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #val = _fitz.Document__newPage(self, pno, width, height)
-        if 0:
+        if 1:
             document = self.this if isinstance(self.this, mupdf.FzDocument) else self.this.super()
             extra._newPage( document, pno, width, height)
         else:
@@ -14380,6 +14395,9 @@ def JM_point_from_py(p):
         return p
     if isinstance(p, Point):
         return mupdf.FzPoint(p.x, p.y)
+    
+    return extra.JM_point_from_py( p)
+    
     p0 = mupdf.FzPoint(0, 0)
     x = JM_FLOAT_ITEM(p, 0)
     y = JM_FLOAT_ITEM(p, 1)
@@ -17424,6 +17442,19 @@ def util_concat_matrix( m1, m2):
             )
 
 def util_invert_matrix(matrix):
+    if 1:
+        if isinstance( matrix, (tuple, list)):
+            matrix = mupdf.FzMatrix( *matrix)
+        elif isinstance( matrix, mupdf.fz_matrix):
+            matrix = mupdf.FzMatrix( matrix)
+        elif isinstance( matrix, Matrix):
+            matrix = mupdf.FzMatrix( matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
+        assert isinstance( matrix, mupdf.FzMatrix), f'type(matrix)={type(matrix)}: {matrix}'
+        ret = matrix.fz_invert_matrix()
+        if ret == matrix:
+            # Invertion not possible.
+            return 1, ()
+        return 0, (ret.a, ret.b, ret.c, ret.d, ret.e, ret.f)
     if 0:
         try:
             src = mupdf.FzMatrix(

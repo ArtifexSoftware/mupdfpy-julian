@@ -118,7 +118,7 @@ void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc_src, i
             page_merge( doc_des, doc_src, page, afterpage, rotate, links, annots, graft_map);
             counter++;
             if (show_progress > 0 && counter % show_progress == 0) {
-                //PySys_WriteStdout("Inserted %i of %i pages.\n", counter, total);
+                fprintf( stderr, "Inserted %i of %i pages.\n", counter, total);
             }
         }
     } else {
@@ -126,7 +126,7 @@ void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc_src, i
             page_merge( doc_des, doc_src, page, afterpage, rotate, links, annots, graft_map);
             counter++;
             if (show_progress > 0 && counter % show_progress == 0) {
-                //PySys_WriteStdout("Inserted %i of %i pages.\n", counter, total);
+                fprintf( stderr, "Inserted %i of %i pages.\n", counter, total);
             }
         }
     }
@@ -312,7 +312,7 @@ const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
         {
             mupdf::PdfObj trailer = mupdf::pdf_trailer( pdf);
             da = mupdf::pdf_dict_getl(
-                    trailer,
+                    &trailer,
                     PDF_NAME(Root),
                     PDF_NAME(AcroForm),
                     PDF_NAME(DA)
@@ -364,12 +364,60 @@ std::string Annot_getAP( mupdf::PdfAnnot& annot)
 void Tools_update_da(struct mupdf::PdfAnnot& this_annot, const char *da_str)
 {
     std::cerr << "Tools_update_da() ***\n";
-    *(int*)0=0;
+    abort();
     mupdf::PdfObj this_annot_obj = mupdf::pdf_annot_obj( this_annot);
     mupdf::pdf_dict_put_text_string( this_annot_obj, PDF_NAME(DA), da_str);
     mupdf::pdf_dict_del( this_annot_obj, PDF_NAME(DS)); /* not supported */
     mupdf::pdf_dict_del( this_annot_obj, PDF_NAME(RC)); /* not supported */
 }
+
+static int
+JM_FLOAT_ITEM(PyObject *obj, Py_ssize_t idx, double *result)
+{
+    PyObject *temp = PySequence_ITEM(obj, idx);
+    if (!temp) return 1;
+    *result = PyFloat_AsDouble(temp);
+    Py_DECREF(temp);
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        return 1;
+    }
+    return 0;
+}
+
+
+mupdf::FzPoint JM_point_from_py(PyObject *p)
+{
+    fz_point p0 = fz_make_point(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT);
+    double x, y;
+
+    if (!p || !PySequence_Check(p) || PySequence_Size(p) != 2)
+        return p0;
+
+    if (JM_FLOAT_ITEM(p, 0, &x) == 1) return p0;
+    if (JM_FLOAT_ITEM(p, 1, &y) == 1) return p0;
+    if (x < FZ_MIN_INF_RECT) x = FZ_MIN_INF_RECT;
+    if (y < FZ_MIN_INF_RECT) y = FZ_MIN_INF_RECT;
+    if (x > FZ_MAX_INF_RECT) x = FZ_MAX_INF_RECT;
+    if (y > FZ_MAX_INF_RECT) y = FZ_MAX_INF_RECT;
+
+    return mupdf::fz_make_point(x, y);
+}
+
+void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items)
+{
+    abort();
+}
+
+//----------------------------------------------------------------
+// annotation rectangle
+//----------------------------------------------------------------
+mupdf::FzRect Annot_rect(mupdf::PdfAnnot& annot)
+{
+    mupdf::FzRect rect = mupdf::pdf_bound_annot( annot);
+    return rect;
+}
+
 
 int ll_fz_absi( int i)
 {
@@ -418,5 +466,10 @@ mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& self, mupdf::FzPoint& point);
 const char* Tools_parse_da( mupdf::PdfAnnot& this_annot);
 
 std::string Annot_getAP( mupdf::PdfAnnot& annot);
+
+mupdf::FzPoint JM_point_from_py(PyObject *p);
+
+mupdf::FzRect Annot_rect(mupdf::PdfAnnot& annot);
+
 
 int ll_fz_absi( int i);

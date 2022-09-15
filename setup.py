@@ -87,10 +87,12 @@ def build():
     path_cpp = 'fitz/extra.cpp'
     path_so = 'fitz/_extra.so'
     unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
+    cpp_flags = '-Wall'
+    #cpp_flags += ' -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro -fwrapv'
     if unix_build_type == 'release':
-        cpp_flags = '-g -O2 -DNDEBUG'
+        cpp_flags += ' -g -O2 -DNDEBUG'
     elif unix_build_type == 'debug':
-        cpp_flags = '-g'
+        cpp_flags += ' -g'
     else:
         assert 0
     
@@ -107,7 +109,7 @@ def build():
         assert 0, f'No support yet for downloading mupdf'
     
     # Run swig.
-    if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
+    if 1 or _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
         _run( f'''
                 swig
                     -Wall
@@ -121,6 +123,8 @@ def build():
                     {path_i}
                 '''
                 )
+    else:
+        print( f'Not running swig because mtime:{path_i} < mtime:{path_cpp}')
     
     python_flags = _python_compile_flags()
 
@@ -129,7 +133,7 @@ def build():
     # Fun fact - on Linux, if the -L and -l options are before '{path_cpp} -o
     # {path_so}' they seem to be ignored...
     #
-    if _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
+    if 1 or _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
         _run( f'''
                 c++
                     -fPIC
@@ -145,6 +149,8 @@ def build():
                     -l mupdfcpp
                     -l mupdf
                 ''')
+    else:
+        print( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
     
     return [
             'README.md',
