@@ -744,12 +744,14 @@ class Annot:
 
     # PyMuPDF doesn't seem to have this .parent member, but removing it breaks
     # 11 tests...?
-    @property
-    def parent(self):
+    #@property
+    def parent_(self):
         p = self.this.pdf_annot_page()
         assert isinstance( p, mupdf.PdfPage)
         d = Document( p.doc()) if p.m_internal else None
-        return Page(p, d)
+        ret = Page(p, d)
+        #self.parent_ = ret
+        return ret
 
     @property
     def popup_rect(self):
@@ -787,14 +789,26 @@ class Annot:
     @property
     def rect(self):
         """annotation rectangle"""
-        CheckParent(self)
-        if 1:
-            #val = _fitz.Annot_rect(self)
-            val = extra.Annot_rect( self.this)
-        else:
-            val = mupdf.pdf_bound_annot(self.this)
+        #CheckParent(self)
+        #if 0:
+        #    #val = _fitz.Annot_rect(self)
+        #    val = extra.Annot_rect( self.this)
+        #elif 1:
+        #    val = extra.Annot_rect2( self.this)
+        #else:
+        #    val = mupdf.pdf_bound_annot(self.this)
+        #val = extra.Annot_rect2( self.this)
+        val = extra.Annot_rect3( self.this)
         val = Rect(val)
-        val *= self.parent.derotation_matrix
+        
+        # Caching self.parent_() reduces 1000x from 0.07 to 0.04.
+        #
+        p = getattr( self, 'parent', None)
+        if p is None:
+            p = self.parent_()
+            self.parent = p
+        #p = self.parent_()
+        val *= p.derotation_matrix
         return val
 
     @property
@@ -6166,7 +6180,7 @@ class Page:
         val = Page__add_text_marker(self, quads, annot_type)
         if not val:
             return None
-        #val.parent = weakref.proxy(self)
+        val.parent = weakref.proxy(self)
         self._annot_refs[id(val)] = val
 
         return val
@@ -6892,7 +6906,7 @@ class Page:
         if not annot:
             return None
         annot.thisown = True
-        #annot.parent = weakref.proxy(self) # owning page object
+        annot.parent = weakref.proxy(self) # owning page object
         self._annot_refs[id(annot)] = annot
         widget.parent = annot.parent
         widget._annot = annot
@@ -7073,7 +7087,7 @@ class Page:
 
         if val:
             val.thisown = True
-            #val.parent = weakref.proxy(self) # owning page object
+            val.parent = weakref.proxy(self) # owning page object
             val.parent._annot_refs[id(val)] = val
         annot._erase()
         return val
@@ -7127,6 +7141,9 @@ class Page:
     def derotation_matrix(self) -> Matrix:
         """Reflects page de-rotation."""
         #return Matrix(TOOLS._derotate_matrix(self))
+        if 1:
+            pdfpage = self._pdf_page()
+            return extra.Page_derotate_matrix( pdfpage)
         pdfpage = self._pdf_page()
         if not pdfpage.m_internal:
             return JM_py_from_matrix(mupdf.FzRect(mupdf.FzRect.UNIT))
@@ -7155,7 +7172,7 @@ class Page:
         val = Annot(annot) if annot else None
         if val:
             val.thisown = True
-            #val.parent = weakref.proxy(self) # owning page object
+            val.parent = weakref.proxy(self) # owning page object
             self._annot_refs[id(val)] = val
         return val
 
@@ -7179,8 +7196,8 @@ class Page:
 
         if val.this.m_internal:
             val.thisown = True
-            #val.parent = weakref.proxy(self) # owning page object
-            #self._annot_refs[id(val)] = val
+            val.parent = weakref.proxy(self) # owning page object
+            self._annot_refs[id(val)] = val
             widget = Widget()
             TOOLS._fill_widget(val, widget)
             val = widget
@@ -7612,7 +7629,7 @@ class Page:
         if not val:
             return val
         val.thisown = True
-        #val.parent = weakref.proxy(self)
+        val.parent = weakref.proxy(self)
         self._annot_refs[id(val)] = val
         return val
 
@@ -7659,7 +7676,7 @@ class Page:
         if not val:
             return val
         val.thisown = True
-        #val.parent = weakref.proxy(self)
+        val.parent = weakref.proxy(self)
         self._annot_refs[id(val)] = val
         widget = Widget()
         TOOLS._fill_widget(val, widget)
@@ -17026,7 +17043,7 @@ def annot_postprocess(page: "Page", annot: "Annot") -> None:
 
     Set ownership flag and store annotation in page annotation dictionary.
     """
-    #annot.parent = weakref.proxy(page)
+    annot.parent = weakref.proxy(page)
     page._annot_refs[id(annot)] = annot
     annot.thisown = True
 
@@ -17388,6 +17405,7 @@ def util_round_rect( rect):
     return JM_py_from_irect(mupdf.fz_round_rect(JM_rect_from_py(rect)))
 
 def util_transform_rect( rect, matrix):
+    return extra.util_transform_rect( rect, matrix)
     return JM_py_from_rect(mupdf.fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)))
 
 def util_intersect_rect( r1, r2):
