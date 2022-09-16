@@ -409,6 +409,15 @@ void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items)
     abort();
 }
 
+//-----------------------------------------------------------------------------
+// PySequence from fz_rect
+//-----------------------------------------------------------------------------
+static PyObject *
+JM_py_from_rect(fz_rect r)
+{
+    return Py_BuildValue("ffff", r.x0, r.y0, r.x1, r.y1);
+}
+
 //----------------------------------------------------------------
 // annotation rectangle
 //----------------------------------------------------------------
@@ -416,6 +425,195 @@ mupdf::FzRect Annot_rect(mupdf::PdfAnnot& annot)
 {
     mupdf::FzRect rect = mupdf::pdf_bound_annot( annot);
     return rect;
+}
+
+PyObject* Annot_rect2(mupdf::PdfAnnot& annot)
+{
+    mupdf::FzRect rect = mupdf::pdf_bound_annot( annot);
+    //return JM_py_from_rect( *rect.internal());
+    return JM_py_from_rect( *(::fz_rect*) &rect.x0);
+}
+
+PyObject* Annot_rect3(mupdf::PdfAnnot& annot)
+{
+    fz_rect rect = mupdf::ll_pdf_bound_annot( annot.m_internal);
+    return JM_py_from_rect( rect);
+}
+
+//-----------------------------------------------------------------------------
+// PySequence to fz_rect. Default: infinite rect
+//-----------------------------------------------------------------------------
+static fz_rect
+JM_rect_from_py(PyObject *r)
+{
+    if (!r || !PySequence_Check(r) || PySequence_Size(r) != 4)
+        return fz_infinite_rect;
+    Py_ssize_t i;
+    double f[4];
+
+    for (i = 0; i < 4; i++) {
+        if (JM_FLOAT_ITEM(r, i, &f[i]) == 1) return fz_infinite_rect;
+        if (f[i] < FZ_MIN_INF_RECT) f[i] = FZ_MIN_INF_RECT;
+        if (f[i] > FZ_MAX_INF_RECT) f[i] = FZ_MAX_INF_RECT;
+    }
+
+    return fz_make_rect((float) f[0], (float) f[1], (float) f[2], (float) f[3]);
+}
+
+//-----------------------------------------------------------------------------
+// PySequence to fz_matrix. Default: fz_identity
+//-----------------------------------------------------------------------------
+static fz_matrix
+JM_matrix_from_py(PyObject *m)
+{
+    Py_ssize_t i;
+    double a[6];
+
+    if (!m || !PySequence_Check(m) || PySequence_Size(m) != 6)
+        return fz_identity;
+
+    for (i = 0; i < 6; i++)
+        if (JM_FLOAT_ITEM(m, i, &a[i]) == 1) return fz_identity;
+
+    return fz_make_matrix((float) a[0], (float) a[1], (float) a[2], (float) a[3], (float) a[4], (float) a[5]);
+}
+
+PyObject *util_transform_rect(PyObject *rect, PyObject *matrix)
+{
+	return JM_py_from_rect(::fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)));
+}
+
+//----------------------------------------------------------------------------
+// return normalized /Rotate value:one of 0, 90, 180, 270
+//----------------------------------------------------------------------------
+int JM_norm_rotation(int rotate)
+{
+    while (rotate < 0) rotate += 360;
+    while (rotate >= 360) rotate -= 360;
+    if (rotate % 90 != 0) return 0;
+    return rotate;
+}
+
+
+//----------------------------------------------------------------------------
+// return a PDF page's /Rotate value: one of (0, 90, 180, 270)
+//----------------------------------------------------------------------------
+int JM_page_rotation(mupdf::PdfPage& page)
+{
+    int rotate = 0;
+    rotate = mupdf::pdf_to_int(
+            mupdf::pdf_dict_get_inheritable( page.obj(), PDF_NAME(Rotate))
+            );
+    rotate = JM_norm_rotation(rotate);
+    return rotate;
+}
+
+
+//----------------------------------------------------------------------------
+// return a PDF page's MediaBox
+//----------------------------------------------------------------------------
+mupdf::FzRect JM_mediabox( mupdf::PdfObj& page_obj)
+{
+   mupdf::FzRect mediabox, page_mediabox;
+
+    mediabox = mupdf::pdf_to_rect(
+            mupdf::pdf_dict_get_inheritable( page_obj, PDF_NAME(MediaBox))
+            );
+    if (mupdf::fz_is_empty_rect(mediabox) || mupdf::fz_is_infinite_rect(mediabox))
+    {
+        mediabox.x0 = 0;
+        mediabox.y0 = 0;
+        mediabox.x1 = 612;
+        mediabox.y1 = 792;
+    }
+
+    page_mediabox.x0 = mupdf::fz_min(mediabox.x0, mediabox.x1);
+    page_mediabox.y0 = mupdf::fz_min(mediabox.y0, mediabox.y1);
+    page_mediabox.x1 = mupdf::fz_max(mediabox.x0, mediabox.x1);
+    page_mediabox.y1 = mupdf::fz_max(mediabox.y0, mediabox.y1);
+
+    if (page_mediabox.x1 - page_mediabox.x0 < 1 ||
+        page_mediabox.y1 - page_mediabox.y0 < 1)
+        page_mediabox = fz_unit_rect;
+
+    return page_mediabox;
+}
+
+
+//----------------------------------------------------------------------------
+// return a PDF page's CropBox
+//----------------------------------------------------------------------------
+mupdf::FzRect JM_cropbox( mupdf::PdfObj& page_obj)
+{
+    mupdf::FzRect mediabox = JM_mediabox( page_obj);
+    mupdf::FzRect cropbox = mupdf::pdf_to_rect(
+                mupdf::pdf_dict_get_inheritable( page_obj, PDF_NAME(CropBox))
+                );
+    if (mupdf::fz_is_infinite_rect(cropbox) || mupdf::fz_is_empty_rect(cropbox))
+        cropbox = mediabox;
+    float y0 = mediabox.y1 - cropbox.y1;
+    float y1 = mediabox.y1 - cropbox.y0;
+    cropbox.y0 = y0;
+    cropbox.y1 = y1;
+    return cropbox;
+}
+
+
+//----------------------------------------------------------------------------
+// calculate width and height of the UNROTATED page
+//----------------------------------------------------------------------------
+mupdf::FzPoint JM_cropbox_size( mupdf::PdfObj& page_obj)
+{
+    mupdf::FzPoint size;
+    mupdf::FzRect rect = JM_cropbox( page_obj);
+    float w = (rect.x0 < rect.x1 ? rect.x1 - rect.x0 : rect.x0 - rect.x1);
+    float h = (rect.y0 < rect.y1 ? rect.y1 - rect.y0 : rect.y0 - rect.y1);
+    size = mupdf::fz_make_point(w, h);
+    return size;
+}
+
+
+//----------------------------------------------------------------------------
+// calculate page rotation matrices
+//----------------------------------------------------------------------------
+mupdf::FzMatrix JM_rotate_page_matrix(mupdf::PdfPage& page)
+{
+    if (!page.m_internal) return fz_identity;  // no valid pdf page given
+    int rotation = JM_page_rotation( page);
+    if (rotation == 0) return fz_identity;  // no rotation
+    mupdf::FzMatrix m;
+    auto po = page.obj();
+    mupdf::FzPoint cb_size = JM_cropbox_size( po);
+    float w = cb_size.x;
+    float h = cb_size.y;
+    if (rotation == 90)
+        m = mupdf::fz_make_matrix(0, 1, -1, 0, h, 0);
+    else if (rotation == 180)
+        m = mupdf::fz_make_matrix(-1, 0, 0, -1, w, h);
+    else
+        m = mupdf::fz_make_matrix(0, -1, 1, 0, 0, w);
+    return m;
+}
+
+
+mupdf::FzMatrix JM_derotate_page_matrix(mupdf::PdfPage& page)
+{  // just the inverse of rotation
+    return mupdf::fz_invert_matrix(JM_rotate_page_matrix( page));
+}
+
+//-----------------------------------------------------------------------------
+// PySequence from fz_matrix
+//-----------------------------------------------------------------------------
+static PyObject *
+JM_py_from_matrix(mupdf::FzMatrix m)
+{
+    return Py_BuildValue("ffffff", m.a, m.b, m.c, m.d, m.e, m.f);
+}
+
+PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage)
+{
+    if (!pdfpage.m_internal) return JM_py_from_matrix(fz_identity);
+    return JM_py_from_matrix(JM_derotate_page_matrix( pdfpage));
 }
 
 
@@ -471,5 +669,10 @@ mupdf::FzPoint JM_point_from_py(PyObject *p);
 
 mupdf::FzRect Annot_rect(mupdf::PdfAnnot& annot);
 
+PyObject *util_transform_rect(PyObject *rect, PyObject *matrix);
+
+PyObject* Annot_rect2(mupdf::PdfAnnot& annot);
+PyObject* Annot_rect3(mupdf::PdfAnnot& annot);
+PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage);
 
 int ll_fz_absi( int i);
