@@ -617,6 +617,86 @@ PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage)
     return JM_py_from_matrix(JM_derotate_page_matrix( pdfpage));
 }
 
+static int LIST_APPEND_DROP(PyObject *list, PyObject *item)
+{
+    if (!list || !PyList_Check(list) || !item) return -2;
+    int rc = PyList_Append(list, item);
+    Py_DECREF(item);
+    return rc;
+}
+
+//------------------------------------------------------------------------
+// return the xrefs and /NM ids of a page's annots, links and fields
+//------------------------------------------------------------------------
+PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj)
+{
+    PyObject *names = PyList_New(0);
+    //pdf_obj *id, *annot_obj = NULL;
+    mupdf::PdfObj annots = mupdf::pdf_dict_get( page_obj, PDF_NAME(Annots));
+    if (!annots.m_internal) return names;
+    int n = mupdf::pdf_array_len( annots);
+    for (int i = 0; i < n; i++) {
+        mupdf::PdfObj annot_obj = pdf_array_get( annots, i);
+        int xref = mupdf::pdf_to_num( annot_obj);
+        mupdf::PdfObj subtype = mupdf::pdf_dict_get( annot_obj, PDF_NAME(Subtype));
+        int type = PDF_ANNOT_UNKNOWN;
+        if (subtype.m_internal) {
+            const char *name = mupdf::pdf_to_name( subtype);
+            type = mupdf::pdf_annot_type_from_string( name);
+        }
+        mupdf::PdfObj id = mupdf::pdf_dict_gets( annot_obj, "NM");
+        LIST_APPEND_DROP(names, Py_BuildValue("iis", xref, type, mupdf::pdf_to_text_string( id)));
+    }
+    return names;
+}
+
+static const char* MSG_IS_NO_PDF = "is no PDF";
+static const char* MSG_BAD_XREF = "bad xref";
+#define EMPTY_STRING PyUnicode_FromString("")
+
+mupdf::FzBuffer JM_object_to_buffer( const mupdf::PdfObj& what, int compress, int ascii)
+{
+    mupdf::FzBuffer res = mupdf::fz_new_buffer( 512);
+    mupdf::FzOutput out( res);
+    mupdf::pdf_print_obj( out, what, compress, ascii);
+    mupdf::fz_terminate_buffer( res);
+    return res;
+}
+
+PyObject *JM_EscapeStrFromBuffer( mupdf::FzBuffer& buff)
+{
+    if (!buff.m_internal) return EMPTY_STRING;
+    unsigned char *s = NULL;
+    size_t len = mupdf::fz_buffer_storage( buff, &s);
+    PyObject *val = PyUnicode_DecodeRawUnicodeEscape((const char *) s, (Py_ssize_t) len, "replace");
+    if (!val) {
+        val = EMPTY_STRING;
+        PyErr_Clear();
+    }
+    return val;
+}
+
+PyObject* xref_object(mupdf::PdfDocument& pdf, int xref, int compressed=0, int ascii=0)
+{
+    //pdf_obj *obj = NULL;
+    //PyObject *text = NULL;
+    //fz_buffer *res=NULL;
+    
+    if (!pdf.m_internal) throw std::runtime_error( MSG_IS_NO_PDF);
+    int xreflen = mupdf::pdf_xref_len( pdf);
+    if (( xref < 1 || xref >= xreflen) and xref != -1) 
+    //if (!INRANGE(xref, 1, xreflen-1) && xref != -1)
+    {
+        throw std::runtime_error( MSG_BAD_XREF);
+        //RAISEPY( MSG_BAD_XREF, PyExc_ValueError);
+    }
+    mupdf::PdfObj obj = (xref > 0) ? mupdf::pdf_load_object( pdf, xref) : mupdf::pdf_trailer( pdf);
+    mupdf::FzBuffer res = JM_object_to_buffer( mupdf::pdf_resolve_indirect( obj), compressed, ascii);
+    PyObject* text = JM_EscapeStrFromBuffer( res);
+    return text;
+}
+
+
 
 int ll_fz_absi( int i)
 {
@@ -675,5 +755,7 @@ PyObject *util_transform_rect(PyObject *rect, PyObject *matrix);
 PyObject* Annot_rect2(mupdf::PdfAnnot& annot);
 PyObject* Annot_rect3(mupdf::PdfAnnot& annot);
 PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage);
+PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj);
+PyObject* xref_object(mupdf::PdfDocument& pdf, int xref, int compressed=0, int ascii=0);
 
 int ll_fz_absi( int i);

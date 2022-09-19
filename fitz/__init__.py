@@ -3946,6 +3946,10 @@ class Document:
         return next_loc.chapter, next_loc.page
 
     def page_annot_xrefs(self, n):
+        #if g_use_extra:
+        #    pdf = self._pdf_page()
+        #    return extra.page_annot_xrefs( pdf)
+        
         if isinstance(self.this, mupdf.PdfDocument):
             page_count = self.this.pdf_count_pages()
             pdf_document = self.this
@@ -4647,6 +4651,9 @@ class Document:
 
     def xref_object(self, xref, compressed=0, ascii=0):
         """Get xref object source as a string."""
+        if g_use_extra:
+            return extra.xref_object( self._this_as_pdf_document(), compressed, ascii)
+        
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_xref_object(self, xref, compressed, ascii)
@@ -6964,6 +6971,9 @@ class Page:
         CheckParent(self)
         #return _fitz.Page_annot_xrefs(self)
         page = self._pdf_page()
+        if g_use_extra:
+            ret = extra.JM_get_annot_xref_list(page.obj())
+            return ret
         if not page.m_internal:
             return []
         ret = JM_get_annot_xref_list(page.obj())
