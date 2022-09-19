@@ -9218,7 +9218,7 @@ class Rect:
             return Rect(self.x0 * 1./m, self.y0 * 1./m, self.x1 * 1./m, self.y1 * 1./m)
         im = util_invert_matrix(m)[1]
         if not im:
-            raise ZeroDivisionError("Matrix not invertible")
+            raise ZeroDivisionError(f"Matrix not invertible: {m}")
         r = Rect(self)
         r = r.transform(im)
         return r
@@ -17494,7 +17494,8 @@ def util_concat_matrix( m1, m2):
             )
 
 def util_invert_matrix(matrix):
-    if 1:
+    if 0:
+        # Use MuPDF's fz_invert_matrix().
         if isinstance( matrix, (tuple, list)):
             matrix = mupdf.FzMatrix( *matrix)
         elif isinstance( matrix, mupdf.fz_matrix):
@@ -17503,25 +17504,16 @@ def util_invert_matrix(matrix):
             matrix = mupdf.FzMatrix( matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
         assert isinstance( matrix, mupdf.FzMatrix), f'type(matrix)={type(matrix)}: {matrix}'
         ret = mupdf.fz_invert_matrix( matrix)
-        jlib.log( f'matrix={matrix} ret={ret} ret==matrix={ret==matrix}')
-        if ret == matrix:
+        if ret == matrix and (0
+                or abs( matrix.a - 1) >= sys.float_info.epsilon
+                or abs( matrix.b - 0) >= sys.float_info.epsilon
+                or abs( matrix.c - 0) >= sys.float_info.epsilon
+                or abs( matrix.d - 1) >= sys.float_info.epsilon
+                ):
             # Invertion not possible.
-            jlib.log( f'returning 1,()')
             return 1, ()
         return 0, (ret.a, ret.b, ret.c, ret.d, ret.e, ret.f)
-    if 0:
-        try:
-            src = mupdf.FzMatrix(
-                    matrix[0],
-                    matrix[1],
-                    matrix[2],
-                    matrix[3],
-                    matrix[4],
-                    matrix[5],
-                    )
-        except Exception as e:
-            if g_exceptions_verbose:    jlib.exception_info()
-            src = matrix
+    # Do invertion in python.
     src = JM_matrix_from_py(matrix)
     a = src.a
     det = a * src.d - src.b * src.c
