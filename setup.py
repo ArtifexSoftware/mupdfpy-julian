@@ -109,7 +109,7 @@ def build():
         assert 0, f'No support yet for downloading mupdf'
     
     # Run swig.
-    if 1 or _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
+    if 0 or _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
         _run( f'''
                 swig
                     -Wall
@@ -133,7 +133,7 @@ def build():
     # Fun fact - on Linux, if the -L and -l options are before '{path_cpp} -o
     # {path_so}' they seem to be ignored...
     #
-    if 1 or _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
+    if 0 or _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
         _run( f'''
                 c++
                     -fPIC
