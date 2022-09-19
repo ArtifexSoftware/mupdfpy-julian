@@ -6,9 +6,14 @@ License:
     SPDX-License-Identifier: GPL-3.0-only
 '''
 
-try:
-    import jlib # This is .../mupdf/scripts/jlib.py
-except ImportError:
+jlib = None
+if 0:
+    try:
+        import jlib # This is .../mupdf/scripts/jlib.py
+    except ImportError:
+        pass
+
+if not jlib:
     # Provide basic implementations of the jlib functions that we use.
     import sys
     

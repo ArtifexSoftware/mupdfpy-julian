@@ -4217,7 +4217,7 @@ def _show_fz_text( text):
         num_spans += 1
         num_chars += span.len
         span = span.next
-    return jlib.log_text( '{=num_spans num_chars}')
+    return f'num_spans={num_spans} num_chars={num_chars}'
 
 def fill_textbox(
     writer: fitz.TextWriter,
