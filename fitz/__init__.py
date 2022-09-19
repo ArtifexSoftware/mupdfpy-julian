@@ -36,7 +36,7 @@ if not jlib:
             def text( self, *args, **kwargs):       return ''
             def __str__( self):                     return ''
     
-    jlib.log( 'Failed to import jlib; using basic logging etc.')
+    #jlib.log( 'Failed to import jlib; using basic logging etc.')
 
 
 g_timings = jlib.Timings( '__init__.py', active=0)
@@ -4011,9 +4011,9 @@ class Document:
         #return _fitz.Document_page_number_from_location(self, page_id)
         chapter, pno = page_id
         loc = mupdf.fz_make_location( chapter, pno)
-        jlib.log( '{=page_id chapter pno loc}')
+        #jlib.log( '{=page_id chapter pno loc}')
         page_n = mupdf.fz_page_number_from_location( self.this, loc)
-        jlib.log( '{=page_n}')
+        #jlib.log( '{=page_n}')
         return page_n
 
     def page_xref(self, pno):
@@ -4264,7 +4264,7 @@ class Document:
             mupdf.pdf_save_document(pdf, filename, opts)
         else:
             out = JM_new_output_fileptr(filename)
-            jlib.log( '{=type(out) type(out.this)}')
+            #jlib.log( '{=type(out) type(out.this)}')
             mupdf.pdf_write_document(pdf, out, opts)
 
     def save_snapshot(self, filename):
@@ -7705,7 +7705,7 @@ class Page:
         page = mupdf.pdf_page_from_fz_page( self.this)
         ASSERT_PDF(page);
         annot = JM_get_widget_by_xref( page, xref)
-        jlib.log( '{=type(annot)}')
+        #jlib.log( '{=type(annot)}')
         val = annot
         if not val:
             return val
@@ -8006,7 +8006,7 @@ class Pixmap:
                     pm_alpha = pm.alpha()
                     src_stride = src_pix.stride()
                     src_n = src_pix.n()
-                    jlib.log( '{=pm_stride pm_n src_stride src_n}')
+                    #jlib.log( '{=pm_stride pm_n src_stride src_n}')
                     for y in range( h):
                         for x in range( w):
                             pm_i = pm_stride * y + pm_n * x
@@ -12454,9 +12454,9 @@ def JM_choice_options(annot):
     # fixme: put this in mupdf python bindings.
     #
     def pdf_choice_widget_options( annot, exportval):
-        jlib.log( '{=type(annot)}')
+        #jlib.log( '{=type(annot)}')
         optarr = mupdf.pdf_dict_get_inheritable( annot.this.pdf_annot_obj(), PDF_NAME('Opt'))
-        jlib.log( '{optarr=}')
+        #jlib.log( '{optarr=}')
         n = mupdf.pdf_array_len(optarr)
         opts = []
         if not n:
@@ -14674,7 +14674,7 @@ def JM_rotate_page_matrix(page):
     cb_size = JM_cropbox_size(page.obj())
     w = cb_size.x
     h = cb_size.y
-    jlib.log( '{=h w}')
+    #jlib.log( '{=h w}')
     if rotation == 90:
         m = mupdf.fz_make_matrix(0, 1, -1, 0, h, 0)
     elif rotation == 180:
