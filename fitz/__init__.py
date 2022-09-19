@@ -7,7 +7,7 @@ License:
 '''
 
 try:
-    import jlib__ # This is .../mupdf/scripts/jlib.py
+    import jlib # This is .../mupdf/scripts/jlib.py
 except ImportError:
     # Provide basic implementations of the jlib functions that we use.
     import sys
@@ -59,6 +59,17 @@ from . import extra
 g_timings.mid()
 g_exceptions_verbose = False
 g_exceptions_verbose = True
+
+# $MUPDFPY_USE_EXTRA overrides whether to use optimised C fns in `extra`.
+#
+g_use_extra = True
+ue = os.environ.get( 'MUPDFPY_USE_EXTRA')
+if ue == '0':
+    g_use_extra = False
+elif ue == '1':
+    g_use_extra = True
+else:
+    assert ue is None, f'Unregonised MUPDFPY_USE_EXTRA: {ue}'
 
 # Global switches
 # Switch for device hints = no cache
@@ -123,6 +134,11 @@ class Annot:
     def __init__(self, annot):
         assert isinstance( annot, mupdf.PdfAnnot)
         self.this = annot
+        if 0:
+            bt = jlib.exception_info(file="return")
+            nl = '\n'
+            jlib.log( f'Annot.__init__(). id(self)={id(self)}.{nl}Backtrace is:{nl}{bt}')
+
 
     def __repr__(self):
         parent = getattr(self, 'parent', '<>')
@@ -184,7 +200,7 @@ class Annot:
         #jlib.log( '{=self.this}')
         #jlib.log( '{=self.this.m_internal}')
         #jlib.log( '{=self.this.m_internal_value()}')
-        if 1:
+        if g_use_extra:
             assert isinstance( self.this, mupdf.PdfAnnot)
             ret = extra.Annot_getAP(self.this)
             #jlib.log( '{=type(ret) ret}')
@@ -745,12 +761,18 @@ class Annot:
     # PyMuPDF doesn't seem to have this .parent member, but removing it breaks
     # 11 tests...?
     #@property
-    def parent_(self):
-        p = self.this.pdf_annot_page()
-        assert isinstance( p, mupdf.PdfPage)
-        d = Document( p.doc()) if p.m_internal else None
-        ret = Page(p, d)
-        #self.parent_ = ret
+    def get_parent(self):
+        try:
+            ret = getattr( self, 'parent')
+        except AttributeError:
+            page = self.this.pdf_annot_page()
+            assert isinstance( page, mupdf.PdfPage)
+            document = Document( page.doc()) if page.m_internal else None
+            ret = Page(page, document)
+            #self.parent = weakref.proxy( ret)
+            self.parent = ret
+            print(f'No attribute .parent: type(self)={type(self)} id(self)={id(self)}: have set id(self.parent)={id(self.parent)}.')
+            #print( f'Have set self.parent')
         return ret
 
     @property
@@ -798,15 +820,19 @@ class Annot:
         #else:
         #    val = mupdf.pdf_bound_annot(self.this)
         #val = extra.Annot_rect2( self.this)
-        val = extra.Annot_rect3( self.this)
+        if g_use_extra:
+            val = extra.Annot_rect3( self.this)
+        else:
+            val = mupdf.pdf_bound_annot(self.this)
         val = Rect(val)
         
         # Caching self.parent_() reduces 1000x from 0.07 to 0.04.
         #
-        p = getattr( self, 'parent', None)
-        if p is None:
-            p = self.parent_()
-            self.parent = p
+        p = self.get_parent()
+        #p = getattr( self, 'parent', None)
+        #if p is None:
+        #    p = self.parent
+        #    self.parent = p
         #p = self.parent_()
         val *= p.derotation_matrix
         return val
@@ -1224,7 +1250,7 @@ class Annot:
         bfill = color_string(fill, "f")
         bstroke = color_string(stroke, "c")
 
-        p_ctm = self.parent.transformation_matrix
+        p_ctm = self.get_parent().transformation_matrix
         imat = ~p_ctm  # inverse page transf. matrix
 
         if dt:
@@ -2106,7 +2132,7 @@ class Document:
 
     def _extend_toc_items(self, items):
         """Add color info to all items of an extended TOC list."""
-        if 1:
+        if 0:
             # This is hotspot in flamegraph?
             return extra.Document_extend_toc_items( mupdf.pdf_specifics(self.this), items)
             
@@ -3448,7 +3474,7 @@ class Document:
             self.Graftmaps[isrt] = _gmap
 
         #val = _fitz.Document_insert_pdf(self, docsrc, from_page, to_page, start_at, rotate, links, annots, show_progress, final, _gmap)
-        if 1:
+        if g_use_extra:
             extra.FzDocument_insert_pdf(
                     self.this,
                     docsrc.this,
@@ -3866,7 +3892,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #val = _fitz.Document__newPage(self, pno, width, height)
-        if 1:
+        if g_use_extra:
             document = self.this if isinstance(self.this, mupdf.FzDocument) else self.this.super()
             extra._newPage( document, pno, width, height)
         else:
@@ -3987,7 +4013,8 @@ class Document:
 
     def page_xref(self, pno):
         """Get xref of page number."""
-        return extra.page_xref( self.this, pno)
+        if g_use_extra:
+            return extra.page_xref( self.this, pno)
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_page_xref(self, pno)
@@ -5890,7 +5917,7 @@ class Page:
 
     def _add_caret_annot(self, point):
         #return _fitz.Page__add_caret_annot(self, point)
-        if 1:
+        if g_use_extra:
             # This reduces a multi-it version of
             # PyMuPDF/tests/test_annots.py:test_caret() from t=0.328 to
             # t=0.197. PyMuPDF is 0.0712.  Native PyMuPDF is 0.0712.
@@ -6642,8 +6669,10 @@ class Page:
         finally:
             if old_rotation != 0:
                 self.set_rotation(old_rotation)
+        annot = Annot( annot)
         annot_postprocess(self, annot)
-        return Annot(annot)
+        assert hasattr( annot, 'parent')
+        return annot
 
     def add_circle_annot(self, rect: rect_like) -> "struct Annot *":
         """Add a 'Circle' (ellipse, oval) annotation."""
@@ -7141,7 +7170,7 @@ class Page:
     def derotation_matrix(self) -> Matrix:
         """Reflects page de-rotation."""
         #return Matrix(TOOLS._derotate_matrix(self))
-        if 1:
+        if g_use_extra:
             pdfpage = self._pdf_page()
             return extra.Page_derotate_matrix( pdfpage)
         pdfpage = self._pdf_page()
@@ -7459,7 +7488,7 @@ class Page:
         finally:
             if old_rotation != 0:
                 self.set_rotation(old_rotation)
-        #textpage.parent = weakref.proxy(self)
+        textpage.parent = weakref.proxy(self)
         textpage = TextPage(textpage)
         return textpage
 
@@ -13888,8 +13917,9 @@ def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
         buf.append_string(f'{col[0]} {col[1]} {col[2]} {col[3]} k ')
 
     buf.append_string(f'/{JM_expand_fname(fontname)} {fontsize} Tf')
-    len_, da = buf.fz_buffer_storage()
-    buf_bytes = mupdf.raw_to_python_bytes(da, len_)
+    #len_, da = buf.fz_buffer_storage()
+    #buf_bytes = mupdf.raw_to_python_bytes(da, len_)
+    buf_bytes = mupdf.fz_buffer_storage_memoryview( buf)
     buf_string = buf_bytes.decode('utf-8')
     annot.pdf_annot_obj().pdf_dict_put_text_string(mupdf.PDF_ENUM_NAME_DA, buf_string)
 
@@ -14130,7 +14160,7 @@ def JM_merge_range(
     location (apage) of the target PDF.
     If spage > epage, the sequence of source pages is reversed.
     '''
-    if 1:
+    if g_use_extra:
         return extra.JM_merge_range(
                 doc_des,
                 doc_src,
@@ -14412,8 +14442,8 @@ def JM_point_from_py(p):
         return p
     if isinstance(p, Point):
         return mupdf.FzPoint(p.x, p.y)
-    
-    return extra.JM_point_from_py( p)
+    if g_use_extra:
+        return extra.JM_point_from_py( p)
     
     p0 = mupdf.FzPoint(0, 0)
     x = JM_FLOAT_ITEM(p, 0)
@@ -17043,7 +17073,10 @@ def annot_postprocess(page: "Page", annot: "Annot") -> None:
 
     Set ownership flag and store annotation in page annotation dictionary.
     """
-    annot.parent = weakref.proxy(page)
+    #annot.parent = weakref.proxy(page)
+    assert isinstance( page, Page)
+    assert isinstance( annot, Annot)
+    annot.parent = page
     page._annot_refs[id(annot)] = annot
     annot.thisown = True
 
@@ -17405,7 +17438,8 @@ def util_round_rect( rect):
     return JM_py_from_irect(mupdf.fz_round_rect(JM_rect_from_py(rect)))
 
 def util_transform_rect( rect, matrix):
-    return extra.util_transform_rect( rect, matrix)
+    if g_use_extra:
+        return extra.util_transform_rect( rect, matrix)
     return JM_py_from_rect(mupdf.fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)))
 
 def util_intersect_rect( r1, r2):
@@ -17468,9 +17502,11 @@ def util_invert_matrix(matrix):
         elif isinstance( matrix, Matrix):
             matrix = mupdf.FzMatrix( matrix.a, matrix.b, matrix.c, matrix.d, matrix.e, matrix.f)
         assert isinstance( matrix, mupdf.FzMatrix), f'type(matrix)={type(matrix)}: {matrix}'
-        ret = matrix.fz_invert_matrix()
+        ret = mupdf.fz_invert_matrix( matrix)
+        jlib.log( f'matrix={matrix} ret={ret} ret==matrix={ret==matrix}')
         if ret == matrix:
             # Invertion not possible.
+            jlib.log( f'returning 1,()')
             return 1, ()
         return 0, (ret.a, ret.b, ret.c, ret.d, ret.e, ret.f)
     if 0:
@@ -17619,7 +17655,7 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
     Modified copy of function of pdfmerge.c: we also copy annotations, but
     we skip **link** annotations. In addition we rotate output.
     '''
-    if 1:
+    if g_use_extra:
         #jlib.log( 'Calling C++ extra.page_merge()')
         return extra.page_merge( doc_des, doc_src, page_from, page_to, rotate, links, copy_annots, graft_map)
     
@@ -18556,8 +18592,8 @@ class TOOLS:
     @staticmethod
     def _parse_da(annot):
 
-        if 1:
-            va = extra.Tools_parse_da( annot.this)
+        if g_use_extra:
+            val = extra.Tools_parse_da( annot.this)
         else:
             def Tools__parse_da(annot):
                 this_annot = annot.this
@@ -18623,7 +18659,7 @@ class TOOLS:
 
     def _update_da(annot, da_str):
         #return _fitz.Tools__update_da(self, annot, da_str)
-        if 1:
+        if g_use_extra:
             extra.Tools_update_da( annot.this, da_str)
         else:
             try:
