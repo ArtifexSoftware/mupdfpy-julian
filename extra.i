@@ -311,11 +311,12 @@ const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
         if (!da.m_internal)
         {
             mupdf::PdfObj trailer = mupdf::pdf_trailer( pdf);
-            da = mupdf::pdf_dict_getl(
-                    &trailer,
+            da = mupdf::ll_pdf_dict_getl(
+                    trailer.m_internal,
                     PDF_NAME(Root),
                     PDF_NAME(AcroForm),
-                    PDF_NAME(DA)
+                    PDF_NAME(DA),
+                    nullptr
                     );
         }
         da_str = mupdf::pdf_to_text_string( da);
