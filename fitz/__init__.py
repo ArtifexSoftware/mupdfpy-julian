@@ -7,7 +7,7 @@ License:
 '''
 
 jlib = None
-if 0:
+if 1:
     try:
         import jlib # This is .../mupdf/scripts/jlib.py
     except ImportError:
@@ -4216,24 +4216,32 @@ class Document:
         if incremental:
             if self.name != filename or self.stream:
                 raise ValueError("incremental needs original file")
-        #return _fitz.Document_save(
-        #        self,
-        #        filename,
-        #        garbage,
-        #        clean,
-        #        deflate,
-        #        deflate_images,
-        #        deflate_fonts,
-        #        incremental,
-        #        ascii,
-        #        expand,
-        #        linear,
-        #        pretty,
-        #        encryption,
-        #        permissions,
-        #        owner_pw,
-        #        user_pw,
-        #        )
+        
+        pdf = self._this_as_pdf_document()
+        
+        if g_use_extra:
+            # Not sure this is much faster.
+            #jlib.log( '{=pdf filename garbage clean deflate deflate_images deflate_fonts incremental ascii expand linear pretty encryption permissions owner_pw user_pw}')
+            return extra.Document_save(
+                    pdf,
+                    filename,
+                    garbage,
+                    clean,
+                    deflate,
+                    deflate_images,
+                    deflate_fonts,
+                    incremental,
+                    ascii,
+                    expand,
+                    linear,
+                    no_new_id,
+                    appearance,
+                    pretty,
+                    encryption,
+                    permissions,
+                    owner_pw,
+                    user_pw,
+                    )
         opts = mupdf.PdfWriteOptions()
         opts.do_incremental     = incremental
         opts.do_ascii           = ascii
@@ -4257,7 +4265,6 @@ class Document:
         if user_pw is not None:
             opts.upwd_utf8_set_value(user_pw)
 
-        pdf = self._this_as_pdf_document()
         out = None
         ASSERT_PDF(pdf)
         pdf.m_internal.resynth_required = 0
@@ -14324,7 +14331,7 @@ def JM_new_buffer_from_stext_page(page):
 
 
 def JM_new_output_fileptr(bio):
-    return JM_new_output_fileptr_Output( bio)
+    return mupdf.FzOutput( JM_new_output_fileptr_Output( bio))
 
 
 def JM_new_tracedraw_device(out):

@@ -653,6 +653,7 @@ PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj)
 static const char* MSG_IS_NO_PDF = "is no PDF";
 static const char* MSG_BAD_XREF = "bad xref";
 #define EMPTY_STRING PyUnicode_FromString("")
+#define JM_StrAsChar(x) (char *)PyUnicode_AsUTF8(x)
 
 mupdf::FzBuffer JM_object_to_buffer( const mupdf::PdfObj& what, int compress, int ascii)
 {
@@ -697,6 +698,235 @@ PyObject* xref_object(mupdf::PdfDocument& pdf, int xref, int compressed=0, int a
 }
 
 
+//-----------------------------------------------------------------------------
+// perform some cleaning if we have /EmbeddedFiles:
+// (1) remove any /Limits if /Names exists
+// (2) remove any empty /Collection
+// (3) set /PageMode/UseAttachments
+//-----------------------------------------------------------------------------
+void JM_embedded_clean( mupdf::PdfDocument& pdf)
+{
+    mupdf::PdfObj root = mupdf::pdf_dict_get( mupdf::pdf_trailer( pdf), PDF_NAME(Root));
+
+    // remove any empty /Collection entry
+    mupdf::PdfObj coll = mupdf::pdf_dict_get( root, PDF_NAME(Collection));
+    if (coll.m_internal && mupdf::pdf_dict_len( coll) == 0)
+        mupdf::pdf_dict_del( root, PDF_NAME(Collection));
+
+    mupdf::PdfObj efiles = mupdf::ll_pdf_dict_getl(
+            root.m_internal,
+            PDF_NAME(Names),
+            PDF_NAME(EmbeddedFiles),
+            PDF_NAME(Names),
+            nullptr
+            );
+    if (efiles.m_internal) {
+        mupdf::pdf_dict_put_name( root, PDF_NAME(PageMode), "UseAttachments");
+    }
+}
+
+//------------------------------------------------------------------------
+// Store ID in PDF trailer
+//------------------------------------------------------------------------
+void JM_ensure_identity( mupdf::PdfDocument& pdf)
+{
+    unsigned char rnd[16];
+    mupdf::PdfObj id = mupdf::pdf_dict_get( mupdf::pdf_trailer( pdf), PDF_NAME(ID));
+    if (!id.m_internal) {
+        mupdf::fz_memrnd( rnd, nelem(rnd));
+        id = mupdf::pdf_dict_put_array( mupdf::pdf_trailer( pdf), PDF_NAME(ID), 2);
+        mupdf::pdf_array_push( id, mupdf::pdf_new_string( (char *) rnd + 0, nelem(rnd)));
+        mupdf::pdf_array_push( id, mupdf::pdf_new_string( (char *) rnd + 0, nelem(rnd)));
+    }
+}
+
+static PyObject *JM_Exc_CurrentException = nullptr;
+#define RAISEPY(context, msg, exc) {JM_Exc_CurrentException=exc; fz_throw(context, FZ_ERROR_GENERIC, msg);}
+
+static int64_t
+JM_bytesio_tell(fz_context *ctx, void *opaque)
+{  // returns bio.tell() -> int
+    PyObject *bio = (PyObject*) opaque, *rc = NULL, *name = NULL;
+    int64_t pos = 0;
+    fz_try(ctx) {
+        name = PyUnicode_FromString("tell");
+        rc = PyObject_CallMethodObjArgs(bio, name, NULL);
+        if (!rc) {
+            RAISEPY(ctx, "could not tell Py file obj", PyErr_Occurred());
+        }
+        pos = (int64_t) PyLong_AsUnsignedLongLong(rc);
+    }
+    fz_always(ctx) {
+        Py_XDECREF(name);
+        Py_XDECREF(rc);
+        PyErr_Clear();
+    }
+    fz_catch(ctx) {
+        fz_rethrow(ctx);
+    }
+    return pos;
+}
+
+static void
+JM_bytesio_seek(fz_context *ctx, void *opaque, int64_t off, int whence)
+{  // bio.seek(off, whence=0)
+    PyObject *bio = (PyObject*) opaque, *rc = NULL, *name = NULL, *pos = NULL;
+    fz_try(ctx) {
+        name = PyUnicode_FromString("seek");
+        pos = PyLong_FromUnsignedLongLong((unsigned long long) off);
+        PyObject_CallMethodObjArgs(bio, name, pos, whence, NULL);
+        rc = PyErr_Occurred();
+        if (rc) {
+            RAISEPY(ctx, "could not seek Py file obj", rc);
+        }
+    }
+    fz_always(ctx) {
+        Py_XDECREF(rc);
+        Py_XDECREF(name);
+        Py_XDECREF(pos);
+        PyErr_Clear();
+    }
+    fz_catch(ctx) {
+        fz_rethrow(ctx);
+    }
+}
+
+//-------------------------------------
+// fz_output for Python file objects
+//-------------------------------------
+static void
+JM_bytesio_write(fz_context *ctx, void *opaque, const void *data, size_t len)
+{  // bio.write(bytes object)
+    PyObject *bio = (PyObject*) opaque, *b, *name, *rc;
+    fz_try(ctx){
+        b = PyBytes_FromStringAndSize((const char *) data, (Py_ssize_t) len);
+        name = PyUnicode_FromString("write");
+        PyObject_CallMethodObjArgs(bio, name, b, NULL);
+        rc = PyErr_Occurred();
+        if (rc) {
+            RAISEPY(ctx, "could not write to Py file obj", rc);
+        }
+    }
+    fz_always(ctx) {
+        Py_XDECREF(b);
+        Py_XDECREF(name);
+        Py_XDECREF(rc);
+        PyErr_Clear();
+    }
+    fz_catch(ctx) {
+        fz_rethrow(ctx);
+    }
+}
+
+static void
+JM_bytesio_truncate(fz_context *ctx, void *opaque)
+{  // bio.truncate(bio.tell()) !!!
+    PyObject *bio = (PyObject*) opaque, *trunc = NULL, *tell = NULL, *rctell= NULL, *rc = NULL;
+    fz_try(ctx) {
+        trunc = PyUnicode_FromString("truncate");
+        tell = PyUnicode_FromString("tell");
+        rctell = PyObject_CallMethodObjArgs(bio, tell, NULL);
+        PyObject_CallMethodObjArgs(bio, trunc, rctell, NULL);
+        rc = PyErr_Occurred();
+        if (rc) {
+            RAISEPY(ctx, "could not truncate Py file obj", rc);
+        }
+    }
+    fz_always(ctx) {
+        Py_XDECREF(tell);
+        Py_XDECREF(trunc);
+        Py_XDECREF(rc);
+        Py_XDECREF(rctell);
+        PyErr_Clear();
+    }
+    fz_catch(ctx) {
+        fz_rethrow(ctx);
+    }
+}
+
+/*
+mupdf::FzOutput
+JM_new_output_fileptr( PyObject *bio)
+{
+    mupdf::FzOutput out( 0, bio, JM_bytesio_write, NULL, NULL);
+    out.m_internal->seek = JM_bytesio_seek;
+    out.m_internal->tell = JM_bytesio_tell;
+    out.m_internal->truncate = JM_bytesio_truncate;
+    return out;
+}
+*/
+/* Deliberately returns low-level fz_output*, because mupdf::FzOutput is not
+copyable. */
+fz_output *
+JM_new_output_fileptr(PyObject *bio)
+{
+    fz_output *out = mupdf::ll_fz_new_output( 0, bio, JM_bytesio_write, NULL, NULL);
+    out->seek = JM_bytesio_seek;
+    out->tell = JM_bytesio_tell;
+    out->truncate = JM_bytesio_truncate;
+    return out;
+}
+
+
+void Document_save(
+        mupdf::PdfDocument& pdf,
+        PyObject *filename,
+        int garbage,
+        int clean,
+        int deflate,
+        int deflate_images,
+        int deflate_fonts,
+        int incremental,
+        int ascii,
+        int expand,
+        int linear,
+        int no_new_id,
+        int appearance,
+        int pretty,
+        int encryption,
+        int permissions,
+        char *owner_pw,
+        char *user_pw
+        )
+{
+    mupdf::PdfWriteOptions opts;// = pdf_default_write_options;
+    opts.do_incremental     = incremental;
+    opts.do_ascii           = ascii;
+    opts.do_compress        = deflate;
+    opts.do_compress_images = deflate_images;
+    opts.do_compress_fonts  = deflate_fonts;
+    opts.do_decompress      = expand;
+    opts.do_garbage         = garbage;
+    opts.do_pretty          = pretty;
+    opts.do_linear          = linear;
+    opts.do_clean           = clean;
+    opts.do_sanitize        = clean;
+    opts.dont_regenerate_id = no_new_id;
+    opts.do_appearance      = appearance;
+    opts.do_encrypt         = encryption;
+    opts.permissions        = permissions;
+    if (owner_pw) {
+        memcpy(&opts.opwd_utf8, owner_pw, strlen(owner_pw)+1);
+    } else if (user_pw) {
+        memcpy(&opts.opwd_utf8, user_pw, strlen(user_pw)+1);
+    }
+    if (user_pw) {
+        memcpy(&opts.upwd_utf8, user_pw, strlen(user_pw)+1);
+    }
+    fz_output *out = NULL;
+    if (!pdf.m_internal) throw std::runtime_error( MSG_IS_NO_PDF);
+    pdf.m_internal->resynth_required = 0;
+    JM_embedded_clean( pdf);
+    if (no_new_id == 0) {
+        JM_ensure_identity( pdf);
+    }
+    if (PyUnicode_Check(filename)) {
+        mupdf::pdf_save_document( pdf, JM_StrAsChar(filename), opts);
+    } else {
+        out = JM_new_output_fileptr( filename);
+        mupdf::pdf_write_document( pdf, out, opts);
+    }
+}
 
 int ll_fz_absi( int i)
 {
@@ -757,5 +987,25 @@ PyObject* Annot_rect3(mupdf::PdfAnnot& annot);
 PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage);
 PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj);
 PyObject* xref_object(mupdf::PdfDocument& pdf, int xref, int compressed=0, int ascii=0);
+void Document_save(
+        mupdf::PdfDocument& pdf,
+        PyObject *filename,
+        int garbage,
+        int clean,
+        int deflate,
+        int deflate_images,
+        int deflate_fonts,
+        int incremental,
+        int ascii,
+        int expand,
+        int linear,
+        int no_new_id,
+        int appearance,
+        int pretty,
+        int encryption,
+        int permissions,
+        char *owner_pw,
+        char *user_pw
+        );
 
 int ll_fz_absi( int i);
