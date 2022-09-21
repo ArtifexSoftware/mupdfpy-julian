@@ -311,8 +311,8 @@ const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
         if (!da.m_internal)
         {
             mupdf::PdfObj trailer = mupdf::pdf_trailer( pdf);
-            da = mupdf::ll_pdf_dict_getl(
-                    trailer.m_internal,
+            da = mupdf::pdf_dict_getl(
+                    &trailer,
                     PDF_NAME(Root),
                     PDF_NAME(AcroForm),
                     PDF_NAME(DA),
@@ -343,13 +343,12 @@ std::string Annot_getAP( mupdf::PdfAnnot& annot)
 {
     //std::cerr << __FILE__ << __LINE__ << ": annot.m_internal=" << annot.m_internal << "\n";
     mupdf::PdfObj annot_obj = mupdf::pdf_annot_obj( annot);
-    ::pdf_obj* ap0 = mupdf::ll_pdf_dict_getl(
-            annot_obj.m_internal,
+    mupdf::PdfObj ap = mupdf::pdf_dict_getl(
+            &annot_obj,
             PDF_NAME(AP),
             PDF_NAME(N),
             nullptr
             );
-    mupdf::PdfObj   ap( mupdf::ll_pdf_keep_obj( ap0));
     if (mupdf::pdf_is_stream( ap))
     {
         mupdf::FzBuffer res = mupdf::pdf_load_stream( ap);
@@ -650,6 +649,12 @@ PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj)
     return names;
 }
 
+PyObject *JM_get_annot_xref_list2( mupdf::PdfPage& page)
+{
+    mupdf::PdfObj   page_obj = page.obj();
+    return JM_get_annot_xref_list( page_obj);
+}
+
 static const char* MSG_IS_NO_PDF = "is no PDF";
 static const char* MSG_BAD_XREF = "bad xref";
 #define EMPTY_STRING PyUnicode_FromString("")
@@ -713,8 +718,8 @@ void JM_embedded_clean( mupdf::PdfDocument& pdf)
     if (coll.m_internal && mupdf::pdf_dict_len( coll) == 0)
         mupdf::pdf_dict_del( root, PDF_NAME(Collection));
 
-    mupdf::PdfObj efiles = mupdf::ll_pdf_dict_getl(
-            root.m_internal,
+    mupdf::PdfObj efiles = mupdf::pdf_dict_getl(
+            &root,
             PDF_NAME(Names),
             PDF_NAME(EmbeddedFiles),
             PDF_NAME(Names),
@@ -924,8 +929,92 @@ void Document_save(
         mupdf::pdf_save_document( pdf, JM_StrAsChar(filename), opts);
     } else {
         out = JM_new_output_fileptr( filename);
-        mupdf::pdf_write_document( pdf, out, opts);
+        mupdf::FzOutput out2( out);
+        mupdf::pdf_write_document( pdf, out2, opts);
     }
+}
+
+bool Link_is_external( mupdf::FzLink& this_link)
+{
+    const char* uri = this_link.uri();
+    if (!uri) return false;
+    return mupdf::fz_is_external_link( uri);
+}
+
+mupdf::FzLink Link_next( mupdf::FzLink& this_link)
+{
+    return this_link.next();
+}
+
+#define ASSERT_PDF(cond) if (!cond.m_internal) throw std::runtime_error( MSG_IS_NO_PDF)
+
+
+//-----------------------------------------------------------------------------
+// create PDF object from given string (new in v1.14.0: MuPDF dropped it)
+//-----------------------------------------------------------------------------
+mupdf::PdfObj JM_pdf_obj_from_str( const mupdf::PdfDocument& doc, char *src)
+{
+    mupdf::FzStream stream = mupdf::fz_open_memory( (unsigned char *)src, strlen(src));
+    mupdf::PdfLexbuf lexbuf( PDF_LEXBUF_SMALL);
+    mupdf::PdfObj result = mupdf::pdf_parse_stm_obj( doc, stream, lexbuf);
+    mupdf::pdf_lexbuf_fin( lexbuf);
+    return result;
+}
+
+/*********************************************************************/
+// Page._addAnnot_FromString
+// Add new links provided as an array of string object definitions.
+/*********************************************************************/
+PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linklist)
+{
+    //pdf_obj *annots, *annot, *ind_obj;
+    //pdf_page *page = pdf_page_from_fz_page(gctx, (fz_page *) $self);
+    PyObject *txtpy = NULL;
+    char *text = NULL;
+    int lcount = (int) PySequence_Size(linklist); // link count
+    if (lcount < 1) Py_RETURN_NONE;
+    int i = -1;
+    fz_var(text);
+
+    try
+    {
+    // insert links from the provided sources
+        ASSERT_PDF(page);
+        if (!mupdf::pdf_dict_get( page.obj(), PDF_NAME(Annots)).m_internal) {
+            mupdf::pdf_dict_put_array( page.obj(), PDF_NAME(Annots), lcount);
+        }
+        mupdf::PdfObj annots = mupdf::pdf_dict_get( page.obj(), PDF_NAME(Annots));
+        for (i = 0; i < lcount; i++) {
+            text = NULL;
+            txtpy = PySequence_ITEM(linklist, (Py_ssize_t) i);
+            text = JM_StrAsChar(txtpy);
+            Py_CLEAR(txtpy);
+            if (!text) {
+                PySys_WriteStderr("skipping bad link / annot item %i.\n", i);
+                continue;
+            }
+            try {
+                mupdf::PdfObj annot = mupdf::pdf_add_object(
+                        page.doc(),
+                        JM_pdf_obj_from_str( page.doc(), text)
+                        );
+                mupdf::PdfObj ind_obj = mupdf::pdf_new_indirect(
+                        page.doc(),
+                        mupdf::pdf_to_num( annot),
+                        0
+                        );
+                mupdf::pdf_array_push( annots, ind_obj);
+            }
+            catch( std::exception& e) {
+                PySys_WriteStderr("skipping bad link / annot item %i.\n", i);
+            }
+        }
+    }
+    catch( std::exception& e) {
+        PyErr_Clear();
+        return NULL;
+    }
+    Py_RETURN_NONE;
 }
 
 int ll_fz_absi( int i)
@@ -986,6 +1075,8 @@ PyObject* Annot_rect2(mupdf::PdfAnnot& annot);
 PyObject* Annot_rect3(mupdf::PdfAnnot& annot);
 PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage);
 PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj);
+PyObject *JM_get_annot_xref_list2( mupdf::PdfPage& page);
+
 PyObject* xref_object(mupdf::PdfDocument& pdf, int xref, int compressed=0, int ascii=0);
 void Document_save(
         mupdf::PdfDocument& pdf,
@@ -1007,5 +1098,8 @@ void Document_save(
         char *owner_pw,
         char *user_pw
         );
+bool Link_is_external( mupdf::FzLink& this_link);
+PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linklist);
+mupdf::FzLink Link_next( mupdf::FzLink& this_link);
 
 int ll_fz_absi( int i);

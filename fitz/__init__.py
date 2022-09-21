@@ -5180,6 +5180,8 @@ class Link:
         """Flag the link as external."""
         CheckParent(self)
         #return _fitz.Link_is_external(self)
+        if g_use_extra:
+            return extra.Link_is_external( self.this)
         this_link = self.this
         if not this_link.m_internal or not this_link.m_internal.uri:
             return False
@@ -5192,7 +5194,10 @@ class Link:
             return None
         CheckParent(self)
         #val = _fitz.Link_next(self)
-        val = self.this.next()
+        if 0 and g_use_extra:
+            val = extra.Link_next( self.this)
+        else:
+            val = self.this.next()
         if not val.m_internal:
             return None
         val = Link( val)
@@ -6235,6 +6240,9 @@ class Page:
         """Add links from list of object sources."""
         CheckParent(self)
         #return _fitz.Page__addAnnot_FromString(self, linklist)
+        if g_use_extra:
+            page = self._pdf_page()
+            return extra.Page_addAnnot_FromString( page, linklist)
         page = mupdf.pdf_page_from_fz_page(self.this)
         lcount = len(linklist)  # link count
         if lcount < 1:
@@ -6979,7 +6987,7 @@ class Page:
         #return _fitz.Page_annot_xrefs(self)
         page = self._pdf_page()
         if g_use_extra:
-            ret = extra.JM_get_annot_xref_list(page.obj())
+            ret = extra.JM_get_annot_xref_list2(page)
             return ret
         if not page.m_internal:
             return []
