@@ -3969,6 +3969,8 @@ class Document:
         """Number of pages."""
         if self.is_closed:
             raise ValueError("document closed")
+        if 1:
+            return extra.page_count( self.this)
         if isinstance( self.this, mupdf.FzDocument):
             return mupdf.fz_count_pages( self.this)
         else:
@@ -4658,11 +4660,10 @@ class Document:
 
     def xref_object(self, xref, compressed=0, ascii=0):
         """Get xref object source as a string."""
-        if g_use_extra:
-            return extra.xref_object( self._this_as_pdf_document(), compressed, ascii)
-        
         if self.is_closed:
             raise ValueError("document closed")
+        if g_use_extra:
+            return extra.xref_object( self.this, compressed, ascii)
         #return _fitz.Document_xref_object(self, xref, compressed, ascii)
         pdf = self._this_as_pdf_document()
         ASSERT_PDF(pdf);
@@ -6985,10 +6986,10 @@ class Page:
         """List of xref numbers of annotations, fields and links."""
         CheckParent(self)
         #return _fitz.Page_annot_xrefs(self)
-        page = self._pdf_page()
         if g_use_extra:
-            ret = extra.JM_get_annot_xref_list2(page)
+            ret = extra.JM_get_annot_xref_list2( self.this)
             return ret
+        page = self._pdf_page()
         if not page.m_internal:
             return []
         ret = JM_get_annot_xref_list(page.obj())
