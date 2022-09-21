@@ -3898,8 +3898,7 @@ class Document:
             raise ValueError("document closed or encrypted")
         #val = _fitz.Document__newPage(self, pno, width, height)
         if g_use_extra:
-            document = self.this if isinstance(self.this, mupdf.FzDocument) else self.this.super()
-            extra._newPage( document, pno, width, height)
+            extra._newPage( self.this, pno, width, height)
         else:
             if isinstance(self.this, mupdf.PdfDocument):
                 pdf = self.this
@@ -3946,9 +3945,8 @@ class Document:
         return next_loc.chapter, next_loc.page
 
     def page_annot_xrefs(self, n):
-        #if g_use_extra:
-        #    pdf = self._pdf_page()
-        #    return extra.page_annot_xrefs( pdf)
+        if g_use_extra:
+            return extra.page_annot_xrefs( self.this, n)
         
         if isinstance(self.this, mupdf.PdfDocument):
             page_count = self.this.pdf_count_pages()

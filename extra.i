@@ -4,6 +4,8 @@
 
 %{
 #include "mupdf/classes2.h"
+
+const char* MSG_BAD_PAGENO = "bad page number(s)";
     
 //----------------------------------------------------------------------------
 // Deep-copies a specified source page to the target location.
@@ -202,16 +204,14 @@ int page_xref(mupdf::FzDocument& this_doc, int pno)
     assert( pdf.m_internal);
     int xref = 0;
     if (n >= page_count) {
-        const char* MSG_BAD_PAGENO = "bad page number(s)";
         throw std::runtime_error( MSG_BAD_PAGENO);//, PyExc_ValueError);
     }
     xref = mupdf::pdf_to_num( mupdf::pdf_lookup_page_obj( pdf, n));
     return xref;
 }
 
-void _newPage(mupdf::FzDocument& self, int pno=-1, float width=595, float height=842)
+void _newPage(mupdf::PdfDocument& pdf, int pno=-1, float width=595, float height=842)
 {
-    mupdf::PdfDocument pdf = mupdf::pdf_specifics(self);
     if (!pdf.m_internal)
     {
         throw std::runtime_error( "is no PDF");
@@ -227,6 +227,12 @@ void _newPage(mupdf::FzDocument& self, int pno=-1, float width=595, float height
     mupdf::FzBuffer contents( (::fz_buffer*) nullptr);
     mupdf::PdfObj page_obj = pdf_add_page( pdf, mediabox, 0, resources, contents);
     mupdf::pdf_insert_page( pdf, pno, page_obj);
+}
+
+void _newPage(mupdf::FzDocument& self, int pno=-1, float width=595, float height=842)
+{
+    mupdf::PdfDocument pdf = mupdf::pdf_specifics(self);
+    _newPage( pdf, pno, width, height);
 }
 
 #include <algorithm>
@@ -1036,6 +1042,32 @@ int page_count( mupdf::PdfDocument& pdf)
     return page_count( document);
 }
 
+static PyObject* page_annot_xrefs( mupdf::FzDocument& document, mupdf::PdfDocument& pdf, int pno)
+{
+    int page_count = mupdf::fz_count_pages( document);
+    int n = pno;
+    while (n < 0) n += page_count;
+    PyObject *annots = NULL;
+    if (n >= page_count) {
+        throw std::runtime_error( MSG_BAD_PAGENO);
+    }
+    ASSERT_PDF(pdf);
+    annots = JM_get_annot_xref_list( mupdf::pdf_lookup_page_obj( pdf, n));
+    return annots;
+}
+
+PyObject* page_annot_xrefs( mupdf::FzDocument& document, int pno)
+{
+    mupdf::PdfDocument pdf = mupdf::pdf_specifics( document);
+    return page_annot_xrefs( document, pdf, pno);
+}
+
+PyObject* page_annot_xrefs( mupdf::PdfDocument& pdf, int pno)
+{
+    mupdf::FzDocument document = pdf.super();
+    return page_annot_xrefs( document, pdf, pno);
+}
+
 int ll_fz_absi( int i)
 {
     return fz_absi(i);
@@ -1072,6 +1104,7 @@ void FzDocument_insert_pdf(
 
 int page_xref(mupdf::FzDocument& this_doc, int pno);
 void _newPage(mupdf::FzDocument& self, int pno=-1, float width=595, float height=842);
+void _newPage(mupdf::PdfDocument& self, int pno=-1, float width=595, float height=842);
 void JM_add_annot_id( mupdf::PdfAnnot& annot, const char *stem);
 std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page);
 mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& self, mupdf::FzPoint& point);
@@ -1115,5 +1148,8 @@ PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linklist);
 mupdf::FzLink Link_next( mupdf::FzLink& this_link);
 int page_count( mupdf::FzDocument& document);
 int page_count( mupdf::PdfDocument& pdf);
+
+PyObject* page_annot_xrefs( mupdf::PdfDocument& pdf, int pno);
+PyObject* page_annot_xrefs( mupdf::FzDocument& document, int pno);
 
 int ll_fz_absi( int i);
