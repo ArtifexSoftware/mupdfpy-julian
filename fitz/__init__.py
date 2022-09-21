@@ -4217,13 +4217,11 @@ class Document:
             if self.name != filename or self.stream:
                 raise ValueError("incremental needs original file")
         
-        pdf = self._this_as_pdf_document()
-        
         if g_use_extra:
             # Not sure this is much faster.
             #jlib.log( '{=pdf filename garbage clean deflate deflate_images deflate_fonts incremental ascii expand linear pretty encryption permissions owner_pw user_pw}')
             return extra.Document_save(
-                    pdf,
+                    self.this,
                     filename,
                     garbage,
                     clean,
@@ -4242,6 +4240,8 @@ class Document:
                     owner_pw,
                     user_pw,
                     )
+        
+        pdf = self._this_as_pdf_document()
         opts = mupdf.PdfWriteOptions()
         opts.do_incremental     = incremental
         opts.do_ascii           = ascii
@@ -5941,6 +5941,8 @@ class Page:
     def _add_caret_annot(self, point):
         #return _fitz.Page__add_caret_annot(self, point)
         if g_use_extra:
+            annot = extra._add_caret_annot( self.this, JM_point_from_py(point))
+        elif g_use_extra:
             # This reduces a multi-it version of
             # PyMuPDF/tests/test_annots.py:test_caret() from t=0.328 to
             # t=0.197. PyMuPDF is 0.0712.  Native PyMuPDF is 0.0712.
@@ -6240,8 +6242,8 @@ class Page:
         CheckParent(self)
         #return _fitz.Page__addAnnot_FromString(self, linklist)
         if g_use_extra:
-            page = self._pdf_page()
-            return extra.Page_addAnnot_FromString( page, linklist)
+            #page = self._pdf_page()
+            return extra.Page_addAnnot_FromString( self.this, linklist)
         page = mupdf.pdf_page_from_fz_page(self.this)
         lcount = len(linklist)  # link count
         if lcount < 1:
@@ -7200,8 +7202,8 @@ class Page:
         """Reflects page de-rotation."""
         #return Matrix(TOOLS._derotate_matrix(self))
         if g_use_extra:
-            pdfpage = self._pdf_page()
-            return extra.Page_derotate_matrix( pdfpage)
+            #pdfpage = self._pdf_page()
+            return extra.Page_derotate_matrix( self.this)
         pdfpage = self._pdf_page()
         if not pdfpage.m_internal:
             return JM_py_from_matrix(mupdf.FzRect(mupdf.FzRect.UNIT))

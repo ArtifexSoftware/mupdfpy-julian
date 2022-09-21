@@ -306,6 +306,12 @@ mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& page, mupdf::FzPoint& point)
     return annot;
 }
 
+mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& page, mupdf::FzPoint& point)
+{
+    mupdf::PdfPage  pdf_page = mupdf::pdf_page_from_fz_page( page);
+    return _add_caret_annot( pdf_page, point);
+}
+
 const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
 {
     const char *da_str = NULL;
@@ -620,6 +626,12 @@ PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage)
 {
     if (!pdfpage.m_internal) return JM_py_from_matrix(fz_identity);
     return JM_py_from_matrix(JM_derotate_page_matrix( pdfpage));
+}
+
+PyObject *Page_derotate_matrix(mupdf::FzPage& page)
+{
+    mupdf::PdfPage pdf_page = mupdf::pdf_page_from_fz_page( page);
+    return Page_derotate_matrix( pdf_page);
 }
 
 static int LIST_APPEND_DROP(PyObject *list, PyObject *item)
@@ -948,6 +960,50 @@ void Document_save(
     }
 }
 
+void Document_save(
+        mupdf::FzDocument& document,
+        PyObject *filename,
+        int garbage,
+        int clean,
+        int deflate,
+        int deflate_images,
+        int deflate_fonts,
+        int incremental,
+        int ascii,
+        int expand,
+        int linear,
+        int no_new_id,
+        int appearance,
+        int pretty,
+        int encryption,
+        int permissions,
+        char *owner_pw,
+        char *user_pw
+        )
+{
+    mupdf::PdfDocument pdf = mupdf::pdf_document_from_fz_document( document);
+    Document_save(
+            pdf,
+            filename,
+            garbage,
+            clean,
+            deflate,
+            deflate_images,
+            deflate_fonts,
+            incremental,
+            ascii,
+            expand,
+            linear,
+            no_new_id,
+            appearance,
+            pretty,
+            encryption,
+            permissions,
+            owner_pw,
+            user_pw
+            );
+}
+
 bool Link_is_external( mupdf::FzLink& this_link)
 {
     const char* uri = this_link.uri();
@@ -1031,6 +1087,12 @@ PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linklist)
     Py_RETURN_NONE;
 }
 
+PyObject *Page_addAnnot_FromString( mupdf::FzPage& page, PyObject *linklist)
+{
+    mupdf::PdfPage pdf_page = mupdf::pdf_page_from_fz_page( page);
+    return Page_addAnnot_FromString( pdf_page, linklist);
+}
+
 int page_count( mupdf::FzDocument& document)
 {
     return mupdf::fz_count_pages( document);
@@ -1108,6 +1170,7 @@ void _newPage(mupdf::PdfDocument& self, int pno=-1, float width=595, float heigh
 void JM_add_annot_id( mupdf::PdfAnnot& annot, const char *stem);
 std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page);
 mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& self, mupdf::FzPoint& point);
+mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point);
 const char* Tools_parse_da( mupdf::PdfAnnot& this_annot);
 std::string Annot_getAP( mupdf::PdfAnnot& annot);
 mupdf::FzPoint JM_point_from_py(PyObject *p);
@@ -1116,6 +1179,7 @@ PyObject *util_transform_rect(PyObject *rect, PyObject *matrix);
 PyObject* Annot_rect2(mupdf::PdfAnnot& annot);
 PyObject* Annot_rect3(mupdf::PdfAnnot& annot);
 PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage);
+PyObject *Page_derotate_matrix(mupdf::FzPage& pdfpage);
 PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj);
 PyObject *JM_get_annot_xref_list2( mupdf::PdfPage& page);
 PyObject *JM_get_annot_xref_list2( mupdf::FzPage& page);
@@ -1143,8 +1207,30 @@ void Document_save(
         char *user_pw
         );
 
+void Document_save(
+        mupdf::FzDocument& document,
+        PyObject *filename,
+        int garbage,
+        int clean,
+        int deflate,
+        int deflate_images,
+        int deflate_fonts,
+        int incremental,
+        int ascii,
+        int expand,
+        int linear,
+        int no_new_id,
+        int appearance,
+        int pretty,
+        int encryption,
+        int permissions,
+        char *owner_pw,
+        char *user_pw
+        );
+
 bool Link_is_external( mupdf::FzLink& this_link);
 PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linklist);
+PyObject *Page_addAnnot_FromString( mupdf::FzPage& page, PyObject *linklist);
 mupdf::FzLink Link_next( mupdf::FzLink& this_link);
 int page_count( mupdf::FzDocument& document);
 int page_count( mupdf::PdfDocument& pdf);
