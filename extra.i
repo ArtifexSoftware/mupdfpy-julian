@@ -711,10 +711,8 @@ PyObject* xref_object(mupdf::PdfDocument& pdf, int xref, int compressed=0, int a
     if (!pdf.m_internal) throw std::runtime_error( MSG_IS_NO_PDF);
     int xreflen = mupdf::pdf_xref_len( pdf);
     if (( xref < 1 || xref >= xreflen) and xref != -1) 
-    //if (!INRANGE(xref, 1, xreflen-1) && xref != -1)
     {
         throw std::runtime_error( MSG_BAD_XREF);
-        //RAISEPY( MSG_BAD_XREF, PyExc_ValueError);
     }
     mupdf::PdfObj obj = (xref > 0) ? mupdf::pdf_load_object( pdf, xref) : mupdf::pdf_trailer( pdf);
     mupdf::FzBuffer res = JM_object_to_buffer( mupdf::pdf_resolve_indirect( obj), compressed, ascii);

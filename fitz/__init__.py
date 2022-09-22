@@ -76,6 +76,18 @@ elif ue == '1':
 else:
     assert ue is None, f'Unregonised MUPDFPY_USE_EXTRA: {ue}'
 
+if 0:
+    # Get backtraces for code that looks at g_use_extra.
+    class UseExtra:
+        def __init__( self, value):
+            self.value = value
+        def __bool__( self):
+            bt = jlib.exception_info( file='return')
+            jlib.log( 'UseExtra:\n{bt}')
+            return self.value
+    g_use_extra = UseExtra( g_use_extra)
+
+
 # Global switches
 # Switch for device hints = no cache
 no_device_caching = 0
@@ -4661,7 +4673,8 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         if g_use_extra:
-            return extra.xref_object( self.this, compressed, ascii)
+            ret = extra.xref_object( self.this, xref, compressed, ascii)
+            return ret
         #return _fitz.Document_xref_object(self, xref, compressed, ascii)
         pdf = self._this_as_pdf_document()
         ASSERT_PDF(pdf);
@@ -12853,7 +12866,7 @@ def JM_embedded_clean(pdf):
 
 def JM_EscapeStrFromBuffer(buff):
     if not buff.m_internal:
-         return ''
+        return ''
     s = buff.fz_buffer_extract_copy()
     val = PyUnicode_DecodeRawUnicodeEscape(s, errors='replace')
     return val;
