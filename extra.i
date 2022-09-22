@@ -416,9 +416,228 @@ mupdf::FzPoint JM_point_from_py(PyObject *p)
     return mupdf::fz_make_point(x, y);
 }
 
+static int LIST_APPEND_DROP(PyObject *list, PyObject *item)
+{
+    if (!list || !PyList_Check(list) || !item) return -2;
+    int rc = PyList_Append(list, item);
+    Py_DECREF(item);
+    return rc;
+}
+
+//-----------------------------------------------------------------------------
+// Functions converting betwenn PySequences and fitz geometry objects
+//-----------------------------------------------------------------------------
+static int
+JM_INT_ITEM(PyObject *obj, Py_ssize_t idx, int *result)
+{
+    PyObject *temp = PySequence_ITEM(obj, idx);
+    if (!temp) return 1;
+    if (PyLong_Check(temp)) {
+        *result = (int) PyLong_AsLong(temp);
+        Py_DECREF(temp);
+    } else if (PyFloat_Check(temp)) {
+        *result = (int) PyFloat_AsDouble(temp);
+        Py_DECREF(temp);
+    } else {
+        Py_DECREF(temp);
+        return 1;
+    }
+    if (PyErr_Occurred()) {
+        PyErr_Clear();
+        return 1;
+    }
+    return 0;
+}
+
+
+//----------------------------------------------------------------------------
+// Return list of outline xref numbers. Recursive function. Arguments:
+// 'obj' first OL item
+// 'xrefs' empty Python list
+//----------------------------------------------------------------------------
+PyObject *JM_outline_xrefs( mupdf::PdfObj obj, PyObject* xrefs)
+{
+    //pdf_obj *first, *parent, *thisobj;
+    if (!obj.m_internal) return xrefs;
+    PyObject *newxref = NULL;
+    mupdf::PdfObj thisobj = obj;
+    while (thisobj.m_internal) {
+        int nxr = mupdf::pdf_to_num( thisobj);
+        newxref = PyLong_FromLong((long) nxr);
+        if (PySequence_Contains(xrefs, newxref)
+                or mupdf::pdf_dict_get( thisobj, PDF_NAME(Type)).m_internal
+                )
+        {
+            // circular ref or top of chain: terminate
+            Py_DECREF(newxref);
+            break;
+        }
+        LIST_APPEND_DROP(xrefs, newxref);
+        mupdf::PdfObj first = mupdf::pdf_dict_get( thisobj, PDF_NAME(First));  // try go down
+        if (mupdf::pdf_is_dict( first)) xrefs = JM_outline_xrefs( first, xrefs);
+        thisobj = mupdf::pdf_dict_get( thisobj, PDF_NAME(Next));  // try go next
+        mupdf::PdfObj parent = mupdf::pdf_dict_get( thisobj, PDF_NAME(Parent));  // get parent
+        if (!mupdf::pdf_is_dict( thisobj)) {
+            thisobj = parent;
+        }
+    }
+    return xrefs;
+}
+
+PyObject* dictkey_align = PyUnicode_InternFromString("align");
+PyObject* dictkey_ascender = PyUnicode_InternFromString("ascender");
+PyObject* dictkey_bbox = PyUnicode_InternFromString("bbox");
+PyObject* dictkey_blocks = PyUnicode_InternFromString("blocks");
+PyObject* dictkey_bpc = PyUnicode_InternFromString("bpc");
+PyObject* dictkey_c = PyUnicode_InternFromString("c");
+PyObject* dictkey_chars = PyUnicode_InternFromString("chars");
+PyObject* dictkey_color = PyUnicode_InternFromString("color");
+PyObject* dictkey_colorspace = PyUnicode_InternFromString("colorspace");
+PyObject* dictkey_content = PyUnicode_InternFromString("content");
+PyObject* dictkey_creationDate = PyUnicode_InternFromString("creationDate");
+PyObject* dictkey_cs_name = PyUnicode_InternFromString("cs-name");
+PyObject* dictkey_da = PyUnicode_InternFromString("da");
+PyObject* dictkey_dashes = PyUnicode_InternFromString("dashes");
+//PyObject* dictkey_desc = PyUnicode_InternFromString("desc");
+PyObject* dictkey_desc = PyUnicode_InternFromString("descender");
+PyObject* dictkey_descender = PyUnicode_InternFromString("descender");
+PyObject* dictkey_dir = PyUnicode_InternFromString("dir");
+PyObject* dictkey_effect = PyUnicode_InternFromString("effect");
+PyObject* dictkey_ext = PyUnicode_InternFromString("ext");
+PyObject* dictkey_filename = PyUnicode_InternFromString("filename");
+PyObject* dictkey_fill = PyUnicode_InternFromString("fill");
+PyObject* dictkey_flags = PyUnicode_InternFromString("flags");
+PyObject* dictkey_font = PyUnicode_InternFromString("font");
+PyObject* dictkey_glyph = PyUnicode_InternFromString("glyph");
+PyObject* dictkey_height = PyUnicode_InternFromString("height");
+PyObject* dictkey_id = PyUnicode_InternFromString("id");
+PyObject* dictkey_image = PyUnicode_InternFromString("image");
+PyObject* dictkey_items = PyUnicode_InternFromString("items");
+PyObject* dictkey_length = PyUnicode_InternFromString("length");
+PyObject* dictkey_lines = PyUnicode_InternFromString("lines");
+PyObject* dictkey_matrix = PyUnicode_InternFromString("transform");
+PyObject* dictkey_modDate = PyUnicode_InternFromString("modDate");
+PyObject* dictkey_name = PyUnicode_InternFromString("name");
+PyObject* dictkey_number = PyUnicode_InternFromString("number");
+PyObject* dictkey_origin = PyUnicode_InternFromString("origin");
+PyObject* dictkey_rect = PyUnicode_InternFromString("rect");
+PyObject* dictkey_size = PyUnicode_InternFromString("size");
+PyObject* dictkey_smask = PyUnicode_InternFromString("smask");
+PyObject* dictkey_spans = PyUnicode_InternFromString("spans");
+PyObject* dictkey_stroke = PyUnicode_InternFromString("stroke");
+PyObject* dictkey_style = PyUnicode_InternFromString("style");
+PyObject* dictkey_subject = PyUnicode_InternFromString("subject");
+PyObject* dictkey_text = PyUnicode_InternFromString("text");
+PyObject* dictkey_title = PyUnicode_InternFromString("title");
+PyObject* dictkey_type = PyUnicode_InternFromString("type");
+PyObject* dictkey_ufilename = PyUnicode_InternFromString("ufilename");
+PyObject* dictkey_width = PyUnicode_InternFromString("width");
+PyObject* dictkey_wmode = PyUnicode_InternFromString("wmode");
+PyObject* dictkey_xref = PyUnicode_InternFromString("xref");
+PyObject* dictkey_xres = PyUnicode_InternFromString("xres");
+PyObject* dictkey_yres = PyUnicode_InternFromString("yres");
+
+static int DICT_SETITEM_DROP(PyObject *dict, PyObject *key, PyObject *value)
+{
+    if (!dict || !PyDict_Check(dict) || !key || !value) return -2;
+    int rc = PyDict_SetItem(dict, key, value);
+    Py_DECREF(value);
+    return rc;
+}
+
 void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items)
 {
-    abort();
+    PyObject *item=NULL, *itemdict=NULL, *xrefs=nullptr, *bold, *italic, *collapse, *zoom;
+    zoom = PyUnicode_FromString("zoom");
+    bold = PyUnicode_FromString("bold");
+    italic = PyUnicode_FromString("italic");
+    collapse = PyUnicode_FromString("collapse");
+    
+    try
+    {
+        int xref = 0;
+        Py_ssize_t i, m, n;
+        mupdf::PdfObj root;
+        mupdf::PdfObj olroot;
+        mupdf::PdfObj first;
+        
+        root = mupdf::pdf_dict_get( mupdf::pdf_trailer( pdf), PDF_NAME(Root));
+        if (!root.m_internal) goto end;
+        olroot = mupdf::pdf_dict_get( root, PDF_NAME(Outlines));
+        if (!olroot.m_internal) goto end;
+        first = mupdf::pdf_dict_get( olroot, PDF_NAME(First));
+        if (!first.m_internal) goto end;
+        xrefs = PyList_New(0);  // pre-allocate an empty list
+        xrefs = JM_outline_xrefs( first, xrefs);
+        n = PySequence_Size(xrefs);
+        m = PySequence_Size(items);
+        if (!n) goto end;
+        fflush(stderr);
+        if (n != m) {
+            throw std::runtime_error("internal error finding outline xrefs");
+        }
+
+        // update all TOC item dictionaries
+        for (i = 0; i < n; i++) {
+            JM_INT_ITEM(xrefs, i, &xref);
+            item = PySequence_ITEM(items, i);
+            itemdict = PySequence_ITEM(item, 3);
+            if (!itemdict || !PyDict_Check(itemdict)) {
+                throw std::runtime_error( "need non-simple TOC format");
+            }
+            PyDict_SetItem(itemdict, dictkey_xref, PySequence_ITEM(xrefs, i));
+            mupdf::PdfObj bm = mupdf::pdf_load_object( pdf, xref);
+            int flags = mupdf::pdf_to_int( mupdf::pdf_dict_get( bm, PDF_NAME(F)));
+            if (flags == 1) {
+                PyDict_SetItem(itemdict, italic, Py_True);
+            } else if (flags == 2) {
+                PyDict_SetItem(itemdict, bold, Py_True);
+            } else if (flags == 3) {
+                PyDict_SetItem(itemdict, italic, Py_True);
+                PyDict_SetItem(itemdict, bold, Py_True);
+            }
+            int count = mupdf::pdf_to_int( mupdf::pdf_dict_get( bm, PDF_NAME(Count)));
+            if (count < 0) {
+                PyDict_SetItem(itemdict, collapse, Py_True);
+            } else if (count > 0) {
+                PyDict_SetItem(itemdict, collapse, Py_False);
+            }
+            mupdf::PdfObj col = mupdf::pdf_dict_get( bm, PDF_NAME(C));
+            if (mupdf::pdf_is_array( col) && mupdf::pdf_array_len( col) == 3) {
+                PyObject *color = PyTuple_New(3);
+                PyTuple_SET_ITEM(color, 0, Py_BuildValue("f", mupdf::pdf_to_real( pdf_array_get( col, 0))));
+                PyTuple_SET_ITEM(color, 1, Py_BuildValue("f", mupdf::pdf_to_real( pdf_array_get( col, 1))));
+                PyTuple_SET_ITEM(color, 2, Py_BuildValue("f", mupdf::pdf_to_real( pdf_array_get( col, 2))));
+                DICT_SETITEM_DROP(itemdict, dictkey_color, color);
+            }
+            float z=0;
+            mupdf::PdfObj obj = mupdf::pdf_dict_get( bm, PDF_NAME(Dest));
+            if (!obj.m_internal || !mupdf::pdf_is_array( obj)) {
+                obj = mupdf::pdf_dict_getl( &bm, PDF_NAME(A), PDF_NAME(D), NULL);
+            }
+            if (mupdf::pdf_is_array( obj) && mupdf::pdf_array_len( obj) == 5) {
+                z = mupdf::pdf_to_real( mupdf::pdf_array_get( obj, 4));
+            }
+            DICT_SETITEM_DROP(itemdict, zoom, Py_BuildValue("f", z));
+            PyList_SetItem(item, 3, itemdict);
+            PyList_SetItem(items, i, item);
+        }
+        end:;
+    }
+    catch( std::exception& e)
+    {
+    }
+    Py_CLEAR(xrefs);
+    Py_CLEAR(bold);
+    Py_CLEAR(italic);
+    Py_CLEAR(collapse);
+    Py_CLEAR(zoom);
+}
+
+void Document_extend_toc_items(mupdf::FzDocument& document, PyObject *items)
+{
+    mupdf::PdfDocument  pdf = mupdf::pdf_document_from_fz_document( document);
+    return Document_extend_toc_items( pdf, items);
 }
 
 //-----------------------------------------------------------------------------
@@ -634,13 +853,6 @@ PyObject *Page_derotate_matrix(mupdf::FzPage& page)
     return Page_derotate_matrix( pdf_page);
 }
 
-static int LIST_APPEND_DROP(PyObject *list, PyObject *item)
-{
-    if (!list || !PyList_Check(list) || !item) return -2;
-    int rc = PyList_Append(list, item);
-    Py_DECREF(item);
-    return rc;
-}
 
 //------------------------------------------------------------------------
 // return the xrefs and /NM ids of a page's annots, links and fields
@@ -1128,6 +1340,12 @@ PyObject* page_annot_xrefs( mupdf::PdfDocument& pdf, int pno)
     return page_annot_xrefs( document, pdf, pno);
 }
 
+bool Outline_is_external( mupdf::FzOutline& outline)
+{
+    if (!outline.m_internal->uri)   return false;
+    return mupdf::fz_is_external_link( outline.uri());
+}
+
 int ll_fz_absi( int i)
 {
     return fz_absi(i);
@@ -1235,5 +1453,8 @@ int page_count( mupdf::PdfDocument& pdf);
 
 PyObject* page_annot_xrefs( mupdf::PdfDocument& pdf, int pno);
 PyObject* page_annot_xrefs( mupdf::FzDocument& document, int pno);
+bool Outline_is_external( mupdf::FzOutline& outline);
+void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items);
+void Document_extend_toc_items(mupdf::FzDocument& document, PyObject *items);
 
 int ll_fz_absi( int i);

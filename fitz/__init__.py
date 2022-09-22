@@ -7,7 +7,7 @@ License:
 '''
 
 jlib = None
-if 1:
+if 0:
     try:
         import jlib # This is .../mupdf/scripts/jlib.py
     except ImportError:
@@ -2149,12 +2149,10 @@ class Document:
 
     def _extend_toc_items(self, items):
         """Add color info to all items of an extended TOC list."""
-        if 0:
-            # This is hotspot in flamegraph?
-            return extra.Document_extend_toc_items( mupdf.pdf_specifics(self.this), items)
-            
         if self.is_closed:
             raise ValueError("document closed")
+        if g_use_extra:
+            return extra.Document_extend_toc_items( mupdf.pdf_specifics(self.this), items)
         #return _fitz.Document__extend_toc_items(self, items)
         pdf = mupdf.pdf_specifics(self.this)
         zoom = "zoom"
@@ -5854,6 +5852,8 @@ class Outline:
     @property
     def is_external(self):
         #return _fitz.Outline_isExternal(self)
+        if g_use_extra:
+            return extra.Outline_is_external( self.this)
         ol = self.this
         if not ol.m_internal:
             return False
