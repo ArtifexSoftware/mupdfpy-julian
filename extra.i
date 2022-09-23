@@ -2,10 +2,59 @@
 
 %include std_string.i
 
+%include exception.i
+%exception {
+    try {
+        $action
+    }
+
+/* this might not be ok on windows.
+catch (Swig::DirectorException &e) {
+    SWIG_fail;
+}*/
+
+catch(std::exception& e) {
+    SWIG_exception(SWIG_RuntimeError, e.what());
+}
+catch(...) {
+        SWIG_exception(SWIG_RuntimeError, "Unknown exception");
+    }
+}
+
 %{
 #include "mupdf/classes2.h"
 
-const char* MSG_BAD_PAGENO = "bad page number(s)";
+static const char MSG_BAD_ANNOT_TYPE[] = "bad annot type";
+static const char MSG_BAD_APN[] = "bad or missing annot AP/N";
+static const char MSG_BAD_ARG_INK_ANNOT[] = "arg must be seq of seq of float pairs";
+static const char MSG_BAD_ARG_POINTS[] = "bad seq of points";
+static const char MSG_BAD_BUFFER[] = "bad type: 'buffer'";
+static const char MSG_BAD_COLOR_SEQ[] = "bad color sequence";
+static const char MSG_BAD_DOCUMENT[] = "cannot open broken document";
+static const char MSG_BAD_FILETYPE[] = "bad filetype";
+static const char MSG_BAD_LOCATION[] = "bad location";
+static const char MSG_BAD_OC_CONFIG[] = "bad config number";
+static const char MSG_BAD_OC_LAYER[] = "bad layer number";
+static const char MSG_BAD_OC_REF[] = "bad 'oc' reference";
+static const char MSG_BAD_PAGEID[] = "bad page id";
+static const char MSG_BAD_PAGENO[] = "bad page number(s)";
+static const char MSG_BAD_PDFROOT[] = "PDF has no root";
+static const char MSG_BAD_RECT[] = "rect is infinite or empty";
+static const char MSG_BAD_TEXT[] = "bad type: 'text'";
+static const char MSG_BAD_XREF[] = "bad xref";
+static const char MSG_COLOR_COUNT_FAILED[] = "color count failed";
+static const char MSG_FILE_OR_BUFFER[] = "need font file or buffer";
+static const char MSG_FONT_FAILED[] = "cannot create font";
+static const char MSG_IS_NO_ANNOT[] = "is no annotation";
+static const char MSG_IS_NO_IMAGE[] = "is no image";
+static const char MSG_IS_NO_PDF[] = "is no PDF";
+static const char MSG_IS_NO_DICT[] = "object is no PDF dict";
+static const char MSG_PIX_NOALPHA[] = "source pixmap has no alpha";
+static const char MSG_PIXEL_OUTSIDE[] = "pixel(s) outside image";
+
+#define EMPTY_STRING PyUnicode_FromString("")
+#define JM_StrAsChar(x) (char *)PyUnicode_AsUTF8(x)
+
     
 //----------------------------------------------------------------------------
 // Deep-copies a specified source page to the target location.
@@ -891,11 +940,6 @@ PyObject *JM_get_annot_xref_list2( mupdf::FzPage& page)
     return JM_get_annot_xref_list2( pdf_page);
 }
 
-static const char* MSG_IS_NO_PDF = "is no PDF";
-static const char* MSG_BAD_XREF = "bad xref";
-#define EMPTY_STRING PyUnicode_FromString("")
-#define JM_StrAsChar(x) (char *)PyUnicode_AsUTF8(x)
-
 mupdf::FzBuffer JM_object_to_buffer( const mupdf::PdfObj& what, int compress, int ascii)
 {
     mupdf::FzBuffer res = mupdf::fz_new_buffer( 512);
@@ -1346,6 +1390,91 @@ bool Outline_is_external( mupdf::FzOutline& outline)
     return mupdf::fz_is_external_link( outline.uri());
 }
 
+mupdf::FzDocument Document_init(
+        const char *filename,
+        PyObject *stream,
+        const char *filetype,
+        PyObject *rect,
+        float width,
+        float height,
+        float fontsize
+        )
+{
+    mupdf::FzDocument doc( (fz_document*) nullptr);
+    
+    char *c = NULL;
+    char *magic = NULL;
+    size_t len = 0;
+    float w = width, h = height;
+    fz_rect r = JM_rect_from_py(rect);
+    if (!fz_is_infinite_rect(r))
+    {
+        w = r.x1 - r.x0;
+        h = r.y1 - r.y0;
+    }
+    if (stream != Py_None)
+    { // stream given, **MUST** be bytes!
+        c = PyBytes_AS_STRING(stream); // just a pointer, no new obj
+        len = (size_t) PyBytes_Size(stream);
+        mupdf::FzStream data = mupdf::fz_open_memory( (const unsigned char *) c, len);
+        magic = (char *)filename;
+        if (!magic) magic = (char *)filetype;
+        const fz_document_handler* handler = mupdf::ll_fz_recognize_document( magic);
+        if (!handler)
+        {
+            throw std::runtime_error( MSG_BAD_FILETYPE);
+        }
+        doc = mupdf::fz_open_document_with_stream( magic, data);
+    }
+    else
+    {
+        if (filename && strlen(filename))
+        {
+            if (!filetype || strlen(filetype) == 0)
+            {
+                doc = mupdf::fz_open_document( filename);
+            }
+            else
+            {
+                const fz_document_handler* handler = mupdf::ll_fz_recognize_document( filetype);
+                if (!handler)
+                {
+                    throw std::runtime_error( MSG_BAD_FILETYPE);
+                }
+                if (handler->open)
+                {
+                    doc = mupdf::FzDocument( mupdf::ll_fz_document_open_fn_call( handler->open, filename));
+                }
+                else if (handler->open_with_stream)
+                {
+                    mupdf::FzStream data = mupdf::fz_open_file( filename);
+                    doc = mupdf::FzDocument(
+                            mupdf::ll_fz_document_open_with_stream_fn_call(
+                                handler->open_with_stream,
+                                data.m_internal
+                                )
+                            );
+                }
+            }
+        }
+        else
+        {
+            mupdf::PdfDocument pdf = mupdf::pdf_create_document();
+            doc = pdf.super();
+        }
+    }
+    if (w > 0 && h > 0)
+    {
+        mupdf::fz_layout_document( doc, w, h, fontsize);
+    }
+    else
+    if (mupdf::fz_is_document_reflowable( doc))
+    {
+        mupdf::fz_layout_document( doc, 400, 600, 11);
+    }
+    return doc;
+}
+
 int ll_fz_absi( int i)
 {
     return fz_absi(i);
@@ -1456,5 +1585,15 @@ PyObject* page_annot_xrefs( mupdf::FzDocument& document, int pno);
 bool Outline_is_external( mupdf::FzOutline& outline);
 void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items);
 void Document_extend_toc_items(mupdf::FzDocument& document, PyObject *items);
+
+mupdf::FzDocument Document_init(
+        const char *filename,
+        PyObject *stream,
+        const char *filetype,
+        PyObject *rect,
+        float width,
+        float height,
+        float fontsize
+        );
 
 int ll_fz_absi( int i);
