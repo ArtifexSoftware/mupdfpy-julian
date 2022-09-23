@@ -1872,7 +1872,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document__addFormFont(self, name, font)
-        pdf = mupdf.pdf_specifics(doc)
+        pdf = mupdf.pdf_specifics(self.this)
         if not pdf.m_internal:
             return
         fonts = mupdf.pdf_dict_getl(
@@ -2152,7 +2152,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         if g_use_extra:
-            return extra.Document_extend_toc_items( mupdf.pdf_specifics(self.this), items)
+            return extra.Document_extend_toc_items( self.this, items)
         #return _fitz.Document__extend_toc_items(self, items)
         pdf = mupdf.pdf_specifics(self.this)
         zoom = "zoom"
@@ -3977,7 +3977,7 @@ class Document:
         """Number of pages."""
         if self.is_closed:
             raise ValueError("document closed")
-        if 1:
+        if g_use_extra:
             return extra.page_count( self.this)
         if isinstance( self.this, mupdf.FzDocument):
             return mupdf.fz_count_pages( self.this)
@@ -4730,7 +4730,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_xref_stream(self, xref)
-        pdf = pdf_specifics(gctx, self.this)
+        pdf = mupdf.pdf_specifics( self.this)
         ASSERT_PDF(pdf)
         xreflen = mupdf.pdf_xref_len( pdf)
         if not INRANGE(xref, 1, xreflen-1) and xref != -1:
