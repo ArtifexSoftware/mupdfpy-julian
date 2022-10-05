@@ -39,8 +39,8 @@ if not jlib:
     #jlib.log( 'Failed to import jlib; using basic logging etc.')
 
 
-g_timings = jlib.Timings( '__init__.py', active=0)
-g_timings.mid()
+#g_timings = jlib.Timings( '__init__.py', active=0)
+#g_timings.mid()
 
 import atexit
 import base64
@@ -61,7 +61,7 @@ import weakref
 
 from . import extra
 
-g_timings.mid()
+#g_timings.mid()
 g_exceptions_verbose = False
 g_exceptions_verbose = True
 
@@ -115,11 +115,11 @@ if mupdf_cppyy is not None:
     mupdf = mupdf_cppyy.cppyy.gbl.mupdf
 else:
     # Use SWIG bindings.
-    g_timings.mid()
+    #g_timings.mid()
     import mupdf
 
 
-g_timings.mid()
+#g_timings.mid()
 
 # Names required by class method typing annotations.
 OptBytes = typing.Optional[typing.ByteString]
@@ -138,10 +138,15 @@ point_like = 'point_like'
 quad_like = 'quad_like'
 rect_like = 'rect_like'
 
+
+# We probably don't need these - underlying Python bindings already
+# convert fz_throw exception FZ_ERROR_* into matching classes such as
+# mupdf::FzErrorTrylater.
 def FITZEXCEPTION( e):
     raise RuntimeError( str( e))
 
 def FITZEXCEPTION2( e):
+    print(f'FITZEXCEPTION2: type(e)={type(e)} str(e)={str(e)} repr(e)={repr(e)}', file=sys.stderr)
     if str(e) == MSG_BAD_FILETYPE:
         raise ValueError( str(e))
     else:
@@ -152,6 +157,70 @@ def FITZEXCEPTION2( e):
 # Classes
 #
 #g_timings.mid()
+
+import time
+test_n = 1000 * 1000
+
+class Test1Wrap:
+    def __init__( self):
+        self.this = extra.Test1()
+        self.this.x = 3
+        print(f'Test1Wrap constructor')
+    def test1( self):
+        return extra.test1( self.this)
+    def test( self):
+        total = 0
+        t = time.time()
+        for i in range( test_n):
+            total += self.test1()
+        t = time.time() - t
+        print(f'Test1Wrap.test(): t={t}')
+        return total
+
+
+class Test2Wrap( extra.Test2):
+    def __init__( self):
+        print(f'Test2Wrap constructor')
+    def test2( self):
+        return extra.test2( super(Test2Wrap, self))
+    def test( self):
+        total = 0
+        t = time.time()
+        for i in range( test_n):
+            total += self.test2()
+        t = time.time() - t
+        print(f'Test2Wrap.test(): t={t}')
+        return total
+
+if 0:
+    test1 = Test1Wrap()
+    test2 = Test2Wrap()
+    print(f'type(test1.this)={type(test1.this)}')
+    print(f'type(test2)={type(test2)}')
+    print(f'dir(test2): {dir(test2)}')
+    print(f'type(super(Test2Wrap, test2))={type(super(Test2Wrap, test2))}')
+    #print(f'type(test2.Test2)={type(test2.Test2)}')
+
+    test1.test()
+    test2.test()
+
+if 0:
+    test1 = Test1Wrap()
+    n = 1000*1000
+    
+    t = time.time()
+    total = 0
+    for i in range(n):
+        total += extra.test1( test1)
+    t = time.time() - t
+    print(f't={t} total={total}')
+    
+    t = time.time()
+    total = 0
+    for i in range(n):
+        total += extra.test1( test1.this)
+    t = time.time() - t
+    print(f't={t} total={total}')
 
 class Annot:
 
@@ -1085,14 +1154,14 @@ class Annot:
         '''
         Create annotation 'Popup' or update rectangle.
         '''
-        jlib.log( '{rect=}')
+        #jlib.log( '{rect=}')
         CheckParent(self)
         annot = self.this
         pdfpage = mupdf.pdf_annot_page( annot)
         rot = JM_rotate_page_matrix(pdfpage)
-        jlib.log( '{rot=}')
+        #jlib.log( '{rot=}')
         r = mupdf.fz_transform_rect(JM_rect_from_py(rect), rot)
-        jlib.log( '{r=}')
+        #jlib.log( '{r=}')
         mupdf.pdf_set_annot_popup(annot, r)
 
     def set_rect(self, rect):
@@ -1634,8 +1703,21 @@ class DisplayList:
 
 #g_Document_init_n = 0
 
-class Document:
+# todo:
+#   Compare timings of:
+#       1. extra.foo(self)
+#       2. extra.foo(self.this)
+#
+#   Try:
+#       class FzDocumentFz(mupdf.FzDocument)
+#       class PdfDocument(mupdf.PdfDocument)
+#       - maybe this will avoid slowness associated with
+#       evaluating self.this ?
 
+class Document:
+    
+    __slots__ = ('this', 'page_count2', 'this_is_pdf', '__dict__')
+    
     def __contains__(self, loc) -> bool:
         page_count = self.this.fz_count_pages()
         if type(loc) is int:
@@ -1723,6 +1805,7 @@ class Document:
         if isinstance(filename, mupdf.PdfDocument):
             pdf_document = filename
             self.this = pdf_document
+            self.this_is_pdf = True
             return
         
         if not filename or type(filename) is str:
@@ -1867,6 +1950,26 @@ class Document:
                     _ = self.convert_to_pdf()  # this seems to always work
                 except Exception:
                     raise FileDataError("cannot open broken document") from None
+
+        self.this_is_pdf = isinstance( self.this, mupdf.PdfDocument)
+        print(f'self.this_is_pdf={self.this_is_pdf}')
+        if self.this_is_pdf:
+            #self.page_count_internal2 = fitz.extra.page_count_pdf
+            #self.page_count_internal = lambda self: self.page_count_internal2( self.this)
+            #self.page_count = property( fitz.extra.page_count_pdf)
+            self.page_count2 = fitz.extra.page_count_pdf
+        else:
+            #self.page_count_internal2 = fitz.extra.page_count_fz
+            
+            # calling `self.page_count2(self)` is significantly faster than
+            # `self.page_count`, where page_count() simply does `return
+            # self.page_count2(self)` - e.g. reduces timing test from 3.35s to
+            # 2.89s.
+            #
+            self.page_count2 = fitz.extra.page_count_fz
+            #self.page_count = property( lambda: fitz.extra.page_count_fz(self))
+            #self.page_count2 = fitz.extra.page_count_fz2
+        #self.page_count_internal = lambda self: self.page_count_internal2( self.this)
 
     def __len__(self) -> int:
         return self.page_count
@@ -2391,7 +2494,6 @@ class Document:
             ol = mupdf.fz_load_outline( doc)
         except Exception as e:
             if 0 and g_exceptions_verbose:    jlib.exception_info()
-            jlib.log( f'Ignoring exception from mupdf.fz_load_outline(doc): {e}')
             return
         return Outline( ol)
 
@@ -3951,7 +4053,7 @@ class Document:
             page_id = (0, page_id)
         if page_id not in self:
             raise ValueError("page id not in document")
-        if tuple(page_id)  == self.lastLocation:
+        if tuple(page_id)  == self.last_location:
             return ()
         #return _fitz.Document_nextLocation(self, page_id)
         this_doc = self._this_as_document()
@@ -3987,8 +4089,22 @@ class Document:
     @property
     def page_count(self):
         """Number of pages."""
-        if self.is_closed:
-            raise ValueError("document closed")
+        #if self.is_closed:
+        #    raise ValueError("document closed")
+        return self.page_count2(self)
+        #return self.page_count2(self.this)
+        
+        #return self.page_count_internal2( self.this)
+        #return self.page_count_internal(self)
+        if self.this_is_pdf:
+            return extra.page_count_pdf( self)
+        else:
+            return extra.page_count_fz( self)
+        if isinstance( self.this, mupdf.FzDocument):
+            return extra.page_count_fz( self.this)
+        else:
+            #assert isinstance( self.this, mupdf.PdfDocument)
+            return extra.page_count_pdf( self.this)
         if g_use_extra:
             return extra.page_count( self.this)
         if isinstance( self.this, mupdf.FzDocument):
@@ -5300,6 +5416,8 @@ class Link:
         """Uri string."""
         CheckParent(self)
         this_link = self.this
+        if 1:
+            return this_link.m_internal.uri if this_link.m_internal else ''
         return this_link.uri() if this_link.m_internal else ''
 
 
@@ -5604,7 +5722,9 @@ class linkDest:
                 self.kind = LINK_NAMED
                 self.named = self.uri
         if obj.is_external:
-            if self.uri.startswith(("http://", "https://", "mailto:", "ftp://")):
+            if not self.uri:
+                pass
+            elif self.uri.startswith(("http://", "https://", "mailto:", "ftp://")):
                 self.isUri = True
                 self.kind = LINK_URI
             elif self.uri.startswith("file://"):
@@ -5841,8 +5961,10 @@ class Widget:
         TOOLS._save_widget(self._annot, self)
         self._text_da = ""
 
+from . import _extra
 
 class Outline:
+    __slots__ = [ 'this']
     def __init__(self, ol):
         self.this = ol
 
@@ -5864,12 +5986,19 @@ class Outline:
     @property
     def is_external(self):
         #return _fitz.Outline_isExternal(self)
-        if g_use_extra:
+        if 1 or g_use_extra:
+            #print( f'type(self)={type(self)} type(self.this)={type(self.this)}', file=sys.stderr)
+            
+            # calling _extra.* here appears to save significant time in
+            # test_toc.py:test_full_toc, 1.2s=>0.94s.
+            #
+            return _extra.Outline_is_external( self.this)
+            
             return extra.Outline_is_external( self.this)
         ol = self.this
         if not ol.m_internal:
             return False
-        uri = ol.uri()
+        uri = ol.m_internal.uri if 1 else ol.uri()
         if uri is None:
             return False
         return mupdf.fz_is_external_link(uri)
@@ -5877,6 +6006,8 @@ class Outline:
     @property
     def is_open(self):
         #return _fitz.Outline_is_open(self)
+        if 1:
+            return self.this.m_internal.is_open
         return self.this.is_open()
 
     @property
@@ -5892,11 +6023,15 @@ class Outline:
     @property
     def page(self):
         #return _fitz.Outline_page(self)
+        if 1:
+            return self.this.m_internal.page.page
         return self.this.page().page;
 
     @property
     def title(self):
         #return _fitz.Outline_title(self)
+        if 1:
+            return self.this.m_internal.title
         return self.this.title()
 
     @property
@@ -5905,16 +6040,22 @@ class Outline:
         ol = self.this
         if not ol.m_internal:
             return None
+        if 1:
+            return ol.m_internal.uri
         return JM_UnicodeFromStr(ol.uri())
 
     @property
     def x(self):
         #return _fitz.Outline_x(self)
+        if 1:
+            return self.this.m_internal.x
         return self.this.x();
 
     @property
     def y(self):
         #return _fitz.Outline_x(self)
+        if 1:
+            return self.this.m_internal.y
         return self.this.y();
 
 
@@ -8087,7 +8228,7 @@ class Pixmap:
                             tptr += 1
                         sptr += n + src_pix_alpha
             t = time.time() - t
-            jlib.log( '{t=}')
+            #jlib.log( '{t=}')
             self.this = pm
 
         elif args_match(args, mupdf.FzColorspace, int, int, None, int):
@@ -11112,7 +11253,7 @@ class IRect:
 
 # Data
 #
-g_timings.mid()
+#g_timings.mid()
 
 if 1:
     # Import some mupdf constants
@@ -11387,7 +11528,7 @@ csCMYK = Colorspace(CS_CMYK)
 # These don't appear to be visible in native fitz module, but are used
 # internally.
 #
-g_timings.mid()
+#g_timings.mid()
 dictkey_align = "align"
 dictkey_align = "ascender"
 dictkey_bbox = "bbox"
@@ -11440,7 +11581,7 @@ dictkey_xref = "xref"
 dictkey_xres = "xres"
 dictkey_yres = "yres"
 
-g_timings.mid()
+#g_timings.mid()
 fitz_fontdescriptors = dict()
 
 no_device_caching = 0   # Switch for device hints = no cache
@@ -16381,7 +16522,7 @@ def planish_line(p1: point_like, p2: point_like) -> Matrix:
     p2 = Point(p2)
     return Matrix(util_hor_matrix(p1, p2))
 
-g_timings.mid()
+#g_timings.mid()
 class JM_image_reporter_Filter(mupdf.PdfFilterOptions2):
     def __init__(self):
         super().__init__()
@@ -16488,7 +16629,7 @@ class JM_new_tracetext_device_Device(mupdf.FzDevice2):
 
 
 
-g_timings.mid()
+#g_timings.mid()
 def _get_glyph_text() -> bytes:
     '''
     Adobe Glyph List function
@@ -16960,7 +17101,7 @@ def _get_glyph_text() -> bytes:
     )).decode().splitlines()
 
 
-g_timings.mid()
+#g_timings.mid()
 def CheckMarkerArg(quads: typing.Any) -> tuple:
     if CheckRect(quads):
         r = Rect(quads)
@@ -18776,9 +18917,9 @@ class TOOLS:
 # We cannot import utils earlier because it imports this fitz.py file itself
 # and uses some fitz.* types in function typing.
 #
-g_timings.mid()
+#g_timings.mid()
 import fitz.utils
-g_timings.mid()
+#g_timings.mid()
 
 pdfcolor = dict(
     [
@@ -19187,5 +19328,5 @@ def restore_aliases():
 if 0:
     restore_aliases()
 
-g_timings.end()
-jlib.log( '{g_timings.text(g_timings.root_item, precision=3)}')
+#g_timings.end()
+#jlib.log( '{g_timings.text(g_timings.root_item, precision=3)}')
