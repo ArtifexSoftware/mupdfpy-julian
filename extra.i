@@ -2,7 +2,6 @@
 
 %include std_string.i
 
-#if 0
 %include exception.i
 %exception {
     try {
@@ -13,9 +12,6 @@
 catch (Swig::DirectorException &e) {
     SWIG_fail;
 }*/
-/*catch(mupdf::FzErrorBase& e) {
-    throw;
-}*/
 catch(std::exception& e) {
     SWIG_exception(SWIG_RuntimeError, e.what());
 }
@@ -23,10 +19,10 @@ catch(...) {
         SWIG_exception(SWIG_RuntimeError, "Unknown exception");
     }
 }
-#endif
 
 %{
 #include "mupdf/classes2.h"
+#include "mupdf/exceptions.h"
 
 const char MSG_BAD_ANNOT_TYPE[] = "bad annot type";
 const char MSG_BAD_APN[] = "bad or missing annot AP/N";
@@ -1402,10 +1398,11 @@ static int page_count_fz2( void* document)
 {
     //return 1;
     mupdf::FzDocument* document2 = (mupdf::FzDocument*) document;
-    ::fz_document* document3 = document2->m_internal;
-    static fz_context* ctx = mupdf::internal_context_get();
+    return mupdf::fz_count_pages( *document2);
+    //::fz_document* document3 = document2->m_internal;
+    //static fz_context* ctx = mupdf::internal_context_get();
     //return 1;
-    return ::fz_count_pages( ctx, document3);
+    //return ::fz_count_pages( ctx, document3);
     //return ::fz_count_pages( ctx, document.m_internal);
     //return mupdf::fz_count_pages( document);
 }
@@ -1413,9 +1410,9 @@ static int page_count_fz2( void* document)
 static int page_count_fz( mupdf::FzDocument& document)
 {
     //return 1;
-    static fz_context* ctx = mupdf::internal_context_get();
-    return ::fz_count_pages( ctx, document.m_internal);
-    //return mupdf::fz_count_pages( document);
+    //static fz_context* ctx = mupdf::internal_context_get();
+    //return ::fz_count_pages( ctx, document.m_internal);
+    return mupdf::fz_count_pages( document);
 }
 
 static int page_count_pdf( mupdf::PdfDocument& pdf)

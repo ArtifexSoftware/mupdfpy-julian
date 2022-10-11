@@ -91,10 +91,14 @@ def build():
     #cpp_flags += ' -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro -fwrapv'
     if unix_build_type == 'release':
         cpp_flags += ' -g -O2 -DNDEBUG'
-    elif unix_build_type == 'debug':
+    elif unix_build_type in ('debug', 'memento'):
         cpp_flags += ' -g'
+        if unix_build_type == 'memento':
+            cpp_flags += ' -DMEMENTO'
     else:
         assert 0
+    
+    cpp_flags += ' -DSWIGINTERN='
     
     mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
     if mupdf_dir:

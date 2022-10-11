@@ -146,7 +146,7 @@ def FITZEXCEPTION( e):
     raise RuntimeError( str( e))
 
 def FITZEXCEPTION2( e):
-    print(f'FITZEXCEPTION2: type(e)={type(e)} str(e)={str(e)} repr(e)={repr(e)}', file=sys.stderr)
+    #print(f'FITZEXCEPTION2: type(e)={type(e)} str(e)={str(e)} repr(e)={repr(e)}', file=sys.stderr)
     if str(e) == MSG_BAD_FILETYPE:
         raise ValueError( str(e))
     else:
@@ -1952,7 +1952,7 @@ class Document:
                     raise FileDataError("cannot open broken document") from None
 
         self.this_is_pdf = isinstance( self.this, mupdf.PdfDocument)
-        print(f'self.this_is_pdf={self.this_is_pdf}')
+        #print(f'self.this_is_pdf={self.this_is_pdf}')
         if self.this_is_pdf:
             #self.page_count_internal2 = fitz.extra.page_count_pdf
             #self.page_count_internal = lambda self: self.page_count_internal2( self.this)
