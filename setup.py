@@ -3,7 +3,21 @@
 import os
 import textwrap
 import pipcl
+import platform
 import subprocess
+import sys
+
+
+_log_prefix = None
+def log( text):
+    global _log_prefix
+    if not _log_prefix:
+        p = os.path.abspath( __file__)
+        p, p1 = os.path.split( p)
+        p, p0 = os.path.split( p)
+        _log_prefix = os.path.join( p0, p1)
+    print(f'{_log_prefix}: {text}', file=sys.stderr)
+    sys.stderr.flush()
 
 
 g_root = os.path.abspath( f'{__file__}/..')
@@ -74,6 +88,129 @@ def _fs_mtime( filename, default=0):
         return default
 
 
+mupdf_tgz = os.path.abspath( f'{__file__}/../mupdf.tgz')
+
+def get_mupdf_tgz():
+    '''
+    Creates .tgz file containing MuPDF source, for inclusion in an sdist.
+    
+    What we do depends on environmental variable PYMUPDF_SETUP_MUPDF_TGZ; see
+    docs at start of this file for details.
+
+    Returns name of top-level directory within the .tgz file.
+    '''
+    mupdf_url_or_local = os.environ.get(
+            'PYMUPDF_SETUP_MUPDF_TGZ',
+            'https://mupdf.com/downloads/archive/mupdf-1.21.0-source.tar.gz',
+            )
+    log( f'mupdf_url_or_local={mupdf_url_or_local!r}')
+    if mupdf_url_or_local == '':
+        # No mupdf in sdist.
+        log( 'mupdf_url_or_local is empty string so removing any mupdf_tgz={mupdf_tgz}')
+        remove( mupdf_tgz)
+        return
+    
+    if '://' in mupdf_url_or_local:
+        # Download from URL into <mupdf_tgz>.
+        mupdf_url = mupdf_url_or_local
+        mupdf_url_leaf = os.path.basename( mupdf_url)
+        leaf = '.tar.gz'
+        assert mupdf_url_leaf.endswith(leaf), f'Unrecognised suffix in mupdf_url={mupdf_url!r}'
+        mupdf_local = mupdf_url_leaf[ : -len(leaf)] + '/'
+        assert mupdf_local.startswith( 'mupdf-')
+        log(f'Downloading from: {mupdf_url}')
+        remove( mupdf_url_leaf)
+        urllib.request.urlretrieve( mupdf_url, mupdf_url_leaf)
+        assert os.path.exists( mupdf_url_leaf)
+        tar_check( mupdf_url_leaf, 'r:gz', mupdf_local)
+        if mupdf_url_leaf != mupdf_tgz:
+            remove( mupdf_tgz)
+            os.rename( mupdf_url_leaf, mupdf_tgz)
+        return mupdf_local
+    
+    else:
+        # Create archive <mupdf_tgz> contining local mupdf directory's git
+        # files.
+        mupdf_local = mupdf_url_or_local
+        if not mupdf_local.endswith( '/'):
+            mupdf_local += '/'
+        assert os.path.isdir( mupdf_local), f'Not a directory: {mupdf_local!r}'
+        log( f'Creating .tgz from git files in: {mupdf_local}')
+        remove( mupdf_tgz)
+        with tarfile.open( mupdf_tgz, 'w:gz') as f:
+            for name in get_gitfiles( mupdf_local, submodules=True):
+                path = os.path.join( mupdf_local, name)
+                if os.path.isfile( path):
+                    f.add( path, f'mupdf/{name}', recursive=False)
+        return mupdf_local
+
+
+def get_mupdf():
+    '''
+    Downloads and/or extracts mupdf and returns location of mupdf directory.
+
+    Exact behaviour depends on environmental variable
+    PYMUPDF_SETUP_MUPDF_BUILD; see docs at start of this file for details.
+    '''
+    path = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
+    if path is None:
+        # Default.
+        if os.path.exists( mupdf_tgz):
+            log( f'mupdf_tgz already exists: {mupdf_tgz}')
+        else:
+            get_mupdf_tgz()
+        return tar_extract( mupdf_tgz, exists='return')
+    
+    elif path == '':
+        # Use system mupdf.
+        log( f'PYMUPDF_SETUP_MUPDF_BUILD="", using system mupdf')
+        return None
+    
+    git_prefix = 'git:'
+    if path.startswith( git_prefix):
+        # Get git clone of mupdf.
+        #
+        # `mupdf_url_or_local` is taken to be portion of a `git clone` command,
+        # for example:
+        #
+        #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master git://git.ghostscript.com/mupdf.git"
+        #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch 1.20.x https://github.com/ArtifexSoftware/mupdf.git"
+        #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master https://github.com/ArtifexSoftware/mupdf.git"
+        #
+        # One would usually also set PYMUPDF_SETUP_MUPDF_TGZ= (empty string) to
+        # avoid the need to download a .tgz into an sdist.
+        #
+        command_suffix = path[ len(git_prefix):]
+        path = 'mupdf'
+        assert not os.path.exists( path), \
+                f'Cannot use git clone because local directory already exists: {path}'
+        command = (''
+                + f'git clone'
+                + f' --recursive'
+                #+ f' --single-branch'
+                #+ f' --recurse-submodules'
+                + f' --depth 1'
+                + f' --shallow-submodules'
+                #+ f' --branch {branch}'
+                #+ f' git://git.ghostscript.com/mupdf.git'
+                + f' {command_suffix}'
+                + f' {path}'
+                )
+        log( f'Running: {command}')
+        subprocess.run( command, shell=True, check=True)
+
+        # Show sha of checkout.
+        command = f'cd {path} && git show --pretty=oneline|head -n 1'
+        log( f'Running: {command}')
+        subprocess.run( command, shell=True, check=False)
+    
+    if 1:
+        # Use custom mupdf directory.
+        log( f'Using custom mupdf directory from $PYMUPDF_SETUP_MUPDF_BUILD: {path}')
+        assert os.path.isdir( path), f'$PYMUPDF_SETUP_MUPDF_BUILD is not a directory: {path}'
+        return path
+
+
 def build():
     '''
     We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE
@@ -81,6 +218,65 @@ def build():
     $PYMUPDF_SETUP_MUPDF_BUILD is set - we are not currently able to download
     and build a hard-coded MuPDF release.
     '''
+    # Build mupdf.
+    
+    mupdf_local = get_mupdf()
+    if mupdf_local:
+        if not mupdf_local.endswith( '/'):
+            mupdf_local += '/'
+    
+    if mupdf_local:
+        log( f'Building mupdf.')
+        #shutil.copy2( 'fitz/_config.h', f'{mupdf_local}include/mupdf/fitz/config.h')
+    
+        if platform.system() == 'Windows' or platform.system().startswith('CYGWIN'):
+            # Windows build.
+            devenv = os.environ.get('PYMUPDF_SETUP_DEVENV')
+            if not devenv:
+                # Search for devenv in some known locations.
+                devenv = glob.glob('C:/Program Files (x86)/Microsoft Visual Studio/2019/*/Common7/IDE/devenv.com')
+                if devenv:
+                    devenv = devenv[0]
+            if not devenv:
+                devenv = 'devenv.com'
+                log( f'Cannot find devenv.com in default locations, using: {devenv!r}')
+            windows_config = 'Win32' if word_size()==32 else 'x64'
+            command = (
+                    f'cd {mupdf_local}&&'
+                    f'"{devenv}"'
+                    f' platform/win32/mupdf.sln'
+                    f' /Build "ReleaseTesseract|{windows_config}"'
+                    f' /Project mupdf'
+                    )
+        else:
+            # Unix build.
+            flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
+            flags += ' verbose=yes'
+            env = ''
+            make = 'make'
+            if os.uname()[0] == 'Linux':
+                env += ' CFLAGS="-fPIC"'
+            if os.uname()[0] in ('OpenBSD', 'FreeBSD'):
+                make = 'gmake'
+                env += ' CFLAGS="-fPIC" CXX=clang++'
+            unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
+            assert unix_build_type in ('debug', 'memento', 'release')
+            flags += f' build={unix_build_type}'
+            if 0:
+                command = f'cd {mupdf_local} && {env} {make} {flags}'
+            else:
+                command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/shared-{unix_build_type} -b all'
+            command += f' && echo "build/{unix_build_type}:"'
+            command += f' && ls -l build/{unix_build_type}'
+        
+        log( f'Building MuPDF by running: {command}')
+        subprocess.run( command, shell=True, check=True)
+        log( f'Finished building mupdf.')
+    else:
+        # Use installed MuPDF.
+        log( f'Using system mupdf.')
+    
+    
     # Build fitz.extra module.
     #os.makedirs( 'build', exist_ok=True)
     path_i = 'extra.i'
