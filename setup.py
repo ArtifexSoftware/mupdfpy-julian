@@ -214,9 +214,8 @@ def get_mupdf():
 def build():
     '''
     We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE
-    in a similar way as a normal PyMuPDF build, except that we require that
-    $PYMUPDF_SETUP_MUPDF_BUILD is set - we are not currently able to download
-    and build a hard-coded MuPDF release.
+    in a similar way as a normal PyMuPDF build, except that
+    PYMUPDF_SETUP_MUPDF_BUILD_TYPE must start with `shared-` or `fpic-`.
     '''
     # Build mupdf.
     
@@ -224,6 +223,9 @@ def build():
     if mupdf_local:
         if not mupdf_local.endswith( '/'):
             mupdf_local += '/'
+    
+    unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'shared-release')
+    assert unix_build_type.startswith( ( 'shared-', 'fpic-')), f'PYMUPDF_SETUP_MUPDF_BUILD_TYPE must start with `shared-` or `fpic-`'
     
     if mupdf_local:
         log( f'Building mupdf.')
@@ -259,15 +261,9 @@ def build():
             if os.uname()[0] in ('OpenBSD', 'FreeBSD'):
                 make = 'gmake'
                 env += ' CFLAGS="-fPIC" CXX=clang++'
-            unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
-            assert unix_build_type in ('debug', 'memento', 'release')
-            flags += f' build={unix_build_type}'
-            if 0:
-                command = f'cd {mupdf_local} && {env} {make} {flags}'
-            else:
-                command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/fpic-{unix_build_type} -b all'
-            command += f' && echo "build/fpic-{unix_build_type}:"'
-            command += f' && ls -l build/fpic-{unix_build_type}'
+            command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/{unix_build_type} -b all'
+            command += f' && echo "build/{unix_build_type}:"'
+            command += f' && ls -l build/{unix_build_type}'
         
         log( f'Building MuPDF by running: {command}')
         subprocess.run( command, shell=True, check=True)
@@ -282,17 +278,18 @@ def build():
     path_i = 'extra.i'
     path_cpp = 'fitz/extra.cpp'
     path_so = 'fitz/_extra.so'
-    unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
+    unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'shared-release')
     cpp_flags = '-Wall'
     #cpp_flags += ' -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro -fwrapv'
-    if unix_build_type == 'release':
+    unix_build_type_flags = unix_build_type.split( '-')
+    if 'release' in unix_build_type_flags:
         cpp_flags += ' -g -O2 -DNDEBUG'
-    elif unix_build_type in ('debug', 'memento'):
+    elif 'debug' in unix_build_type_flags or 'memento' in unix_build_type_flags:
         cpp_flags += ' -g'
         if unix_build_type == 'memento':
             cpp_flags += ' -DMEMENTO'
     else:
-        assert 0
+        assert 0, f'Unrecognised PYMUPDF_SETUP_MUPDF_BUILD_TYPE: {unix_build_type}'
     
     cpp_flags += ' -DSWIGINTERN='
     
@@ -300,7 +297,7 @@ def build():
     if mupdf_dir:
         include1 = f'-I{mupdf_dir}/platform/c++/include'
         include2 = f'-I{mupdf_dir}/include'
-        linkdir = f'-L {mupdf_dir}/build/fpic-{unix_build_type}'
+        linkdir = f'-L {mupdf_dir}/build/{unix_build_type}'
     elif mupdf_dir == '':
         include1 = ''
         include2 = ''
@@ -334,6 +331,13 @@ def build():
     # {path_so}' they seem to be ignored...
     #
     if 0 or _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
+        libs = list()
+        libs.append( 'mupdfcpp')
+        if unix_build_type.startswith( 'shared-'):
+            libs.append( 'mupdf')
+        libs_text = ''
+        for lib in libs:
+            libs_text += f' -l {lib}'
         _run( f'''
                 c++
                     -fPIC
@@ -345,8 +349,8 @@ def build():
                     -Wno-deprecated-declarations
                     {path_cpp}
                     -o {path_so}
-                    -L {mupdf_dir}/build/fpic-{unix_build_type}
-                    -l mupdfcpp
+                    -L {mupdf_dir}/build/{unix_build_type}
+                    {libs_text}
                 ''')
     else:
         log( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
