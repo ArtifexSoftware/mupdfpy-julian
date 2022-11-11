@@ -57,7 +57,7 @@ def _python_compile_flags():
     python_config = f'{python_exe}-config'
     if not _fs_find_in_paths( python_config):
         default = 'python3-config'
-        #print( f'Warning, cannot find {python_config}, using {default=}.')
+        #log( f'Warning, cannot find {python_config}, using {default=}.')
         python_config = default
     # --cflags gives things like
     # -Wno-unused-result -g etc, so we just use
@@ -74,7 +74,7 @@ def _python_compile_flags():
 
 def _run( command):
     command = textwrap.dedent( command).strip().replace( '\n', " \\\n")
-    print( f'Running: {command}')
+    log( f'Running: {command}')
     sys.stdout.flush()
     subprocess.run( command, shell=True, check=True)
 
@@ -265,9 +265,9 @@ def build():
             if 0:
                 command = f'cd {mupdf_local} && {env} {make} {flags}'
             else:
-                command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/shared-{unix_build_type} -b all'
-            command += f' && echo "build/{unix_build_type}:"'
-            command += f' && ls -l build/{unix_build_type}'
+                command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/fpic-{unix_build_type} -b all'
+            command += f' && echo "build/fpic-{unix_build_type}:"'
+            command += f' && ls -l build/fpic-{unix_build_type}'
         
         log( f'Building MuPDF by running: {command}')
         subprocess.run( command, shell=True, check=True)
@@ -300,7 +300,7 @@ def build():
     if mupdf_dir:
         include1 = f'-I{mupdf_dir}/platform/c++/include'
         include2 = f'-I{mupdf_dir}/include'
-        linkdir = f'-L {mupdf_dir}/build/shared-{unix_build_type}'
+        linkdir = f'-L {mupdf_dir}/build/fpic-{unix_build_type}'
     elif mupdf_dir == '':
         include1 = ''
         include2 = ''
@@ -324,7 +324,7 @@ def build():
                 '''
                 )
     else:
-        print( f'Not running swig because mtime:{path_i} < mtime:{path_cpp}')
+        log( f'Not running swig because mtime:{path_i} < mtime:{path_cpp}')
     
     python_flags = _python_compile_flags()
 
@@ -345,12 +345,11 @@ def build():
                     -Wno-deprecated-declarations
                     {path_cpp}
                     -o {path_so}
-                    {linkdir}
+                    -L {mupdf_dir}/build/fpic-{unix_build_type}
                     -l mupdfcpp
-                    -l mupdf
                 ''')
     else:
-        print( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
+        log( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
     
     return [
             'README.md',
