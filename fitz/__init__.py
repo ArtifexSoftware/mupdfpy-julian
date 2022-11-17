@@ -1864,11 +1864,7 @@ class Document:
             msg = "cannot open empty document"
             raise EmptyFileError(msg)
         # this = _fitz.new_Document(filename, stream, filetype, rect, width, height, fontsize)
-        if 0:
-            pass
-            #self.this = mupdf.FzDocument(None)
-            self.this = mupdf_FzDocument(None)
-        elif 1:#g_use_extra:
+        if g_use_extra:
             # Not sure this is any quicker.
             try:
                 self.this = extra.Document_init( filename, stream, filetype, rect, width, height, fontsize)
@@ -2413,7 +2409,6 @@ class Document:
 
     def _getMetadata(self, key):
         """Get metadata."""
-        #self._getMetadata = extra.getMetadata
         return extra.getMetadata(self, key)
         if self.is_closed:
             raise ValueError("document closed")
@@ -4021,8 +4016,6 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_needs_pass(self)
-        if not self.this:
-            return False
         document = self.this if isinstance(self.this, mupdf.FzDocument) else self.this.super()
         ret = mupdf.fz_needs_password( document)
         return ret
