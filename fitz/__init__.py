@@ -1714,6 +1714,8 @@ class DisplayList:
 #       - maybe this will avoid slowness associated with
 #       evaluating self.this ?
 
+extra_Document_init = extra.Document_init
+
 class Document:
     
     __slots__ = ('this', 'page_count2', 'this_is_pdf', '__dict__')
@@ -1832,7 +1834,7 @@ class Document:
         else:
             self.stream = None
 
-        if filename and stream is None:
+        if filename and self.stream is None:
             from_file = True
             self.name = filename
         else:
@@ -1861,10 +1863,10 @@ class Document:
             msg = "cannot open empty document"
             raise EmptyFileError(msg)
         # this = _fitz.new_Document(filename, stream, filetype, rect, width, height, fontsize)
-        if  g_use_extra:
+        if 1:#g_use_extra:
             # Not sure this is any quicker.
             try:
-                self.this = extra.Document_init( filename, stream, filetype, rect, width, height, fontsize)
+                self.this = extra_Document_init( filename, stream, filetype, rect, width, height, fontsize)
             except Exception as e:
                 FITZEXCEPTION2(e)
         else:
@@ -7448,6 +7450,7 @@ class Page:
 
     def get_cdrawings(self):
         """Extract drawing paths from the page."""
+        print(f'get_cdrawings()', file=sys.stderr)
         CheckParent(self)
         old_rotation = self.rotation
         if old_rotation != 0:
@@ -7468,6 +7471,7 @@ class Page:
 
         if old_rotation != 0:
             self.set_rotation(old_rotation)
+        print(f'~get_cdrawings()', file=sys.stderr)
         return val
 
     def get_contents(self):
@@ -7510,6 +7514,7 @@ class Page:
         of the C version to respective Point / Rect / Quad objects.
         It also adds default items that are missing in original path types.
         """
+        print(f'get_drawings()', file=sys.stderr)
         allkeys = (
                 ("closePath", False), ("fill", None),
                 ("color", None), ("width", 0), ("lineCap", [0]),
@@ -7538,6 +7543,7 @@ class Page:
                 npath[k] = npath.get(k, v)
             paths.append(npath)
         val = None
+        print(f'~get_drawings()', file=sys.stderr)
         return paths
 
     def get_fonts(self, full=False):
@@ -15873,26 +15879,26 @@ def jm_append_merge(out):
     len_ = len(out)
     if len_ == 0:   # 1st path
         out.append(trace_device.dev_pathdict)
-        trace_device.dev_pathdict = None
+        trace_device.dev_pathdict = dict()
         return
     thistype = trace_device.dev_pathdict[ dictkey_type]
     if thistype != "f" and thistype != "s":
         out.append(trace_device.dev_pathdict)
-        trace_device.dev_pathdict = None
+        trace_device.dev_pathdict = dict()
         return
     prev = out[ len_-1] # get prev path
     #jlib.log( '{prev=}')
     prevtype = prev[ dictkey_type]
     if prevtype != "f" and prevtype != "s" or prevtype == thistype:
         out.append(trace_device.dev_pathdict)
-        trace_device.dev_pathdict = None
+        trace_device.dev_pathdict = dict()
         return
     
     previtems = prev[ dictkey_items]
     thisitems = trace_device.dev_pathdict[ dictkey_items]
     if previtems != thisitems:
         out.append(trace_device.dev_pathdict)
-        trace_device.dev_pathdict = None
+        trace_device.dev_pathdict = dict()
         return
     #rc = PyDict_Merge(trace_device.dev_pathdict, prev, 0);  // merge, do not override
     try:
@@ -15913,7 +15919,7 @@ def jm_append_merge(out):
         print("could not merge stroke and fill path", file=sys.stderr)
     #append:;
     out.append( trace_device.dev_pathdict)
-    trace_device.dev_pathdict = None
+    trace_device.dev_pathdict = dict()
 
 
 def jm_bbox_add_rect( dev, ctx, rect, code):
@@ -16280,19 +16286,19 @@ def timings( fn):
     return fn2
 
 def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
-    #jlib.log('{trace_device.dev_pathdict=}')
+    print(f'jm_tracedraw_fill_path(): trace_device.dev_pathdict={trace_device.dev_pathdict=}', file=sys.stderr)
     even_odd = True if even_odd else False
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
         trace_device.ctm = mupdf.FzMatrix( ctm)  # fz_concat(ctm, trace_device_ptm);
-        path_type = trace_device.FILL_PATH
+        trace_device.path_type = trace_device.FILL_PATH
         jm_tracedraw_path( dev, ctx, path)
         if trace_device.dev_pathdict is None:
             return
-        item_count = len(trace_device.dev_pathdict[ dictkey_items])
-        if item_count == 0:
-            return
+        #item_count = len(trace_device.dev_pathdict[ dictkey_items])
+        #if item_count == 0:
+        #    return
         trace_device.dev_pathdict[ dictkey_type] ="f"
         trace_device.dev_pathdict[ "even_odd"] = even_odd
         trace_device.dev_pathdict[ "fill_opacity"] = alpha
@@ -16441,7 +16447,7 @@ def jm_tracedraw_path(dev, ctx, path):
 
 
 def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
-    #jlib.log('{trace_device.dev_pathdict=}')
+    print(f'jm_tracedraw_stroke_path(): trace_device.dev_pathdict={trace_device.dev_pathdict}', file=sys.stderr)
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
@@ -16449,8 +16455,10 @@ def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, al
         if abs(ctm.a) == abs(ctm.d):
             trace_device.dev_pathfactor = abs(ctm.a)
         trace_device.ctm = mupdf.FzMatrix( ctm)  # fz_concat(ctm, trace_device_ptm);
-        path_type = trace_device.STROKE_PATH;
+        trace_device.path_type = trace_device.STROKE_PATH;
 
+        if trace_device.dev_pathdict is None:
+            trace_device.dev_pathdict = dict()
         if trace_device.dev_pathdict is not None:
             trace_device.dev_pathdict['closePath'] = False
         jm_tracedraw_path( dev, ctx, path)
@@ -19327,6 +19335,24 @@ def restore_aliases():
 
 if 0:
     restore_aliases()
+
+def test_py():
+    return 0
+
+def test_py_c():
+    return test_c()
+
+if 0:
+    def test_c():
+        return extra.test_c
+    def test1():
+        return mupdf.fz_test1()
+    def test2():
+        return mupdf.fz_test2()
+else:
+    test_c = extra.test_c
+    test1 = mupdf.fz_test1
+    test2 = mupdf.fz_test2
 
 #g_timings.end()
 #jlib.log( '{g_timings.text(g_timings.root_item, precision=3)}')

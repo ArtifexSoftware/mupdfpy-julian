@@ -291,7 +291,7 @@ def build():
     else:
         assert 0, f'Unrecognised PYMUPDF_SETUP_MUPDF_BUILD_TYPE: {unix_build_type}'
     
-    cpp_flags += ' -DSWIGINTERN='
+    #cpp_flags += ' -DSWIGINTERN='
     
     mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
     if mupdf_dir:

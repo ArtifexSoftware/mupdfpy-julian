@@ -137,7 +137,7 @@ static void page_merge(
 
     for (i = 0; i < known_page_objs_num; i++)
     {
-        mupdf::PdfObj   known_page_obj( mupdf::PdfObj( known_page_objs[i]));
+        mupdf::PdfObj   known_page_obj( known_page_objs[i]);
         mupdf::PdfObj   obj = mupdf::pdf_dict_get_inheritable( page_ref, known_page_obj);
         if (obj.m_internal)
         {
@@ -1694,3 +1694,33 @@ mupdf::FzDocument Document_init(
         );
 
 int ll_fz_absi( int i);
+
+%pythoncode %{
+
+def test_py():
+    return 0
+
+%}
+
+%{
+int test_c()
+{
+    return 0;
+}
+
+int test1()
+{
+    return fz_test1();
+}
+    
+int test2()
+{
+    return mupdf::fz_test2();
+}
+%}
+
+int test_c();
+
+int test1();
+    
+int test2();
