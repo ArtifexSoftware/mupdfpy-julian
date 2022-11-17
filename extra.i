@@ -1558,6 +1558,14 @@ int ll_fz_absi( int i)
     return fz_absi(i);
 }
 
+static std::string getMetadata(mupdf::FzDocument& doc, const char *key)
+{
+    int out;
+    std::string value = doc.fz_lookup_metadata( key, &out);
+    return value;
+}
+
+
 %}
 
 typedef struct
@@ -1694,6 +1702,8 @@ mupdf::FzDocument Document_init(
         );
 
 int ll_fz_absi( int i);
+
+static std::string getMetadata(mupdf::FzDocument& doc, const char *key);
 
 %pythoncode %{
 
