@@ -23,6 +23,7 @@ if not jlib:
             print( text, file=sys.stderr)
         @staticmethod
         def exception_info():
+            import traceback
             return traceback.print_exc()
     
         class Timings:
@@ -43,18 +44,17 @@ if not jlib:
 #g_timings.mid()
 
 import atexit
-import base64
+#import base64
 import binascii
-import gzip
-import hashlib
-import importlib
+#import gzip
+#import importlib
 #import inspect # Slow, so try to avoid needing it.
 import math
 import os
 import re
 import sys
-import textwrap
-import traceback
+#import textwrap
+#import traceback
 import typing
 import warnings
 import weakref
@@ -110,6 +110,7 @@ if mupdf_cppyy is not None:
     if mupdf_cppyy == '':
         import mupdf_cppyy
     else:
+        import importlib
         mupdf_cppyy = importlib.machinery.SourceFileLoader( 'mupdf_cppyy', mupdf_cppyy).load_module()
     
     mupdf = mupdf_cppyy.cppyy.gbl.mupdf
@@ -16661,6 +16662,8 @@ def _get_glyph_text() -> bytes:
     '''
     Adobe Glyph List function
     '''
+    import base64
+    import gzip
     return gzip.decompress(base64.b64decode(
     b'H4sIABmRaF8C/7W9SZfjRpI1useviPP15utzqroJgBjYWhEkKGWVlKnOoapVO0YQEYSCJE'
     b'IcMhT569+9Ppibg8xevHdeSpmEXfPBfDZ3N3f/t7u//r//k/zb3WJ4eTv2T9vzXTaZZH/N'
@@ -17177,6 +17180,7 @@ def DUMMY(*args, **kw):
 
 def ConversionHeader(i: str, filename: OptStr ="unknown"):
     t = i.lower()
+    import textwrap
     html = textwrap.dedent("""
             <!DOCTYPE html>
             <html>

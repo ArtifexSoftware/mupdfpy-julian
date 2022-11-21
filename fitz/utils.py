@@ -7,14 +7,14 @@
 # maintained and developed by Artifex Software, Inc. https://artifex.com.
 # ------------------------------------------------------------------------
 import io
-import json
+#import json
 import math
 import os
-import random
-import string
+#import random
+#import string
 import typing
-import warnings
-import tempfile
+#import warnings
+#import tempfile    # slow, e.g. 14ms.
 
 import fitz.fitz
 jlib = fitz.jlib
@@ -4621,6 +4621,7 @@ def get_ocmd(doc: fitz.Document, xref: int) -> dict:
             .replace("/Or", '"or",')
         )
         ve = ve.replace(" 0 R]", "]").replace(" 0 R", ",").replace("][", "],[")
+        import json
         try:
             ve = json.loads(ve)
         except:
@@ -4767,7 +4768,7 @@ def construct_label(style, prefix, pno) -> str:
 def integerToLetter(i) -> str:
     """Returns letter sequence string for integer i."""
     # William Chapman, Jorj McKie, 2021-01-06
-
+    import string
     ls = string.ascii_uppercase
     m = int((i - 1) / 26)  # how many times over
     n = (i % 26) - 1  # remainder
@@ -5149,6 +5150,8 @@ def subset_fonts(doc: fitz.Document) -> None:
         and in the FontDescriptor object as the '/FontName' value.
         """
         # The following generates a prefix like 'ABCDEF+'
+        import random
+        import string
         prefix = "".join(random.choices(tuple(string.ascii_uppercase), k=6)) + "+"
         font_str = doc.xref_object(new_xref, compressed=True)
         font_str = font_str.replace("/BaseFont/", "/BaseFont/" + prefix)
@@ -5179,6 +5182,7 @@ def subset_fonts(doc: fitz.Document) -> None:
             if g_exceptions_verbose:    jlib.exception_info()
             print("This method requires fontTools to be installed.")
             raise
+        import tempfile
         tmp_dir = tempfile.gettempdir()
         oldfont_path = f"{tmp_dir}/oldfont.ttf"
         newfont_path = f"{tmp_dir}/newfont.ttf"
