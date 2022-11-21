@@ -1820,7 +1820,7 @@ def insert_page(
     height: float = 842,
     fontname: str = "helv",
     fontfile: OptStr = None,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
 ) -> int:
     """Create a new PDF page and insert some text.
 
@@ -1846,7 +1846,7 @@ def draw_line(
     page: fitz.Page,
     p1: point_like,
     p2: point_like,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     dashes: OptStr = None,
     width: float = 1,
     lineCap: int = 0,
@@ -1882,7 +1882,7 @@ def draw_squiggle(
     p1: point_like,
     p2: point_like,
     breadth: float = 2,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     dashes: OptStr = None,
     width: float = 1,
     lineCap: int = 0,
@@ -1918,7 +1918,7 @@ def draw_zigzag(
     p1: point_like,
     p2: point_like,
     breadth: float = 2,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     dashes: OptStr = None,
     width: float = 1,
     lineCap: int = 0,
@@ -1952,7 +1952,7 @@ def draw_zigzag(
 def draw_rect(
     page: fitz.Page,
     rect: rect_like,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     fill: OptSeq = None,
     dashes: OptStr = None,
     width: float = 1,
@@ -1987,7 +1987,7 @@ def draw_rect(
 def draw_quad(
     page: fitz.Page,
     quad: quad_like,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     fill: OptSeq = None,
     dashes: OptStr = None,
     width: float = 1,
@@ -2060,7 +2060,7 @@ def draw_circle(
     page: fitz.Page,
     center: point_like,
     radius: float,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     fill: OptSeq = None,
     morph: OptSeq = None,
     dashes: OptStr = None,
@@ -2131,7 +2131,7 @@ def draw_curve(
     p1: point_like,
     p2: point_like,
     p3: point_like,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     fill: OptSeq = None,
     dashes: OptStr = None,
     width: float = 1,
@@ -2171,7 +2171,7 @@ def draw_bezier(
     p2: point_like,
     p3: point_like,
     p4: point_like,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     fill: OptSeq = None,
     dashes: OptStr = None,
     width: float = 1,
@@ -2210,7 +2210,7 @@ def draw_sector(
     center: point_like,
     point: point_like,
     beta: float,
-    color: OptSeq = None,
+    color: OptSeq = (0,),
     fill: OptSeq = None,
     dashes: OptStr = None,
     fullSector: bool = True,
@@ -3844,7 +3844,7 @@ class Shape:
     def finish(
         self,
         width: float = 1,
-        color: OptSeq = None,
+        color: OptSeq = (0,),
         fill: OptSeq = None,
         lineCap: int = 0,
         lineJoin: int = 0,
@@ -5342,7 +5342,8 @@ def subset_fonts(doc: fitz.Document) -> None:
     # -----------------
     repl_fontnames(doc)  # populate font information
     if not font_buffers:  # nothing found to do
-        print("No fonts to subset.")
+        if verbose:
+            print(f'No fonts to subset.')
         return 0
 
     old_fontsize = 0
@@ -5374,9 +5375,11 @@ def subset_fonts(doc: fitz.Document) -> None:
         fontname = list(name_set)[0]
         if new_buffer == None or len(new_buffer) >= len(old_buffer):
             # subset was not created or did not get smaller
-            print("Cannot subset '%s'." % fontname)
+            if verbose:
+                print(f'Cannot subset {fontname!r}.')
             continue
-        print("Built subset of font '%s'." % fontname)
+        if verbose:
+            print('Built subset of font {fontname!r}.')
         val = doc._insert_font(fontbuffer=new_buffer)  # store subset font in PDF
         new_xref = val[0]  # get its xref
         set_subset_fontname(new_xref)  # tag fontname as subset font

@@ -1181,7 +1181,13 @@ class Annot:
         """Set annotation rotation."""
         CheckParent(self)
         #return _fitz.Annot_set_rotation(self, rotate)
+        
         annot = self.this
+        type_ = mupdf.pdf_annot_type( annot);
+        if type_ in ( mupdf.PDF_ANNOT_LINE, mupdf.PDF_ANNOT_POLY_LINE, PDF_ANNOT_POLYGON):
+            fz_warn( f'setting rectangle ignored for annot type {mupdf.pdf_string_from_annot_type( type_)}')
+            return
+        
         type = mupdf.pdf_annot_type(annot)
         if type not in (
                 mupdf.PDF_ANNOT_CARET,
@@ -15534,8 +15540,6 @@ def CheckFont(page: "struct Page *", fontname: str) -> tuple:
     """
     for f in page.get_fonts():
         if f[4] == fontname:
-            return f
-        if f[3].lower() == fontname.lower():
             return f
 
 
