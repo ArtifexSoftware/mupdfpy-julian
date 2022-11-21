@@ -13581,11 +13581,11 @@ def JM_get_fontbuffer(doc, xref):
 
         if mupdf.pdf_name_eq(obj, PDF_NAME('Type1C')):
             pass    # Prev code did: ext = "cff", but this has no effect.
-        else if mupdf.pdf_name_eq(obj, PDF_NAME('CIDFontType0C')):
+        elif mupdf.pdf_name_eq(obj, PDF_NAME('CIDFontType0C')):
             pass    # Prev code did: ext = "cid", but this has no effect.
         elif mupdf.pdf_name_eq(obj, PDF_NAME('OpenType')):
             pass    # Prev code did: ext = "otf", but this has no effect. */
-        else
+        else:
             print('warning: unhandled font type {pdf_to_name(ctx, obj)!r}')
 
     if not stream:
@@ -15899,6 +15899,77 @@ def get_pdf_str(s: str) -> str:
     return "(" + r + ")"
 
 
+def css_for_pymupdf_font(
+    fontcode: str, *, CSS: OptStr = None, archive: AnyType = None, name: OptStr = None
+) -> str:
+    """Create @font-face items for the given fontcode of pymupdf-fonts.
+
+    Adds @font-face support for fonts contained in package pymupdf-fonts.
+
+    Creates a CSS font-family for all fonts starting with string 'fontcode'.
+
+    Note:
+        The font naming convention in package pymupdf-fonts is "fontcode<sf>",
+        where the suffix "sf" is either empty or one of "it", "bo" or "bi".
+        These suffixes thus represent the regular, italic, bold or bold-italic
+        variants of a font. For example, font code "notos" refers to fonts
+        "notos" - "Noto Sans Regular"
+        "notosit" - "Noto Sans Italic"
+        "notosbo" - "Noto Sans Bold"
+        "notosbi" - "Noto Sans Bold Italic"
+
+        This function creates four CSS @font-face definitions and collectively
+        assigns the font-family name "notos" to them (or the "name" value).
+
+    All fitting font buffers of the pymupdf-fonts package are placed / added
+    to the archive provided as parameter.
+    To use the font in fitz.Story, execute 'set_font(fontcode)'. The correct
+    font weight (bold) or style (italic) will automatically be selected.
+    Expects and returns the CSS source, with the new CSS definitions appended.
+
+    Args:
+        fontcode: (str) font code for naming the font variants to include.
+                  E.g. "fig" adds notos, notosi, notosb, notosbi fonts.
+                  A maximum of 4 font variants is accepted.
+        CSS: (str) CSS string to add @font-face definitions to.
+        archive: (Archive, mandatory) where to place the font buffers.
+        name: (str) use this as family-name instead of 'fontcode'.
+    Returns:
+        Modified CSS, with appended @font-face statements for each font variant
+        of fontcode.
+        Fontbuffers associated with "fontcode" will be added to 'archive'.
+    """
+    # @font-face template string
+    CSSFONT = "\n@font-face {font-family: %s; src: url(%s);%s%s}\n"
+
+    if not type(archive) is Archive:
+        raise ValueError("'archive' must be an Archive")
+    if CSS == None:
+        CSS = ""
+
+    # select font codes starting with the pass-in string
+    font_keys = [k for k in fitz_fontdescriptors.keys() if k.startswith(fontcode)]
+    if font_keys == []:
+        raise ValueError(f"No font code '{fontcode}' found in pymupdf-fonts.")
+    if len(font_keys) > 4:
+        raise ValueError("fontcode too short")
+    if name == None:  # use this name for font-family
+        name = fontcode
+
+    for fkey in font_keys:
+        font = fitz_fontdescriptors[fkey]
+        bold = font["bold"]  # determine font property
+        italic = font["italic"]  # determine font property
+        fbuff = font["loader"]()  # load the fontbuffer
+        archive.add(fbuff, fkey)  # update the archive
+        bold_text = "font-weight: bold;" if bold else ""
+        italic_text = "font-style: italic;" if italic else ""
+        CSS += CSSFONT % (name, fkey, bold_text, italic_text)
+    return CSS
+
+
+
+
 def get_text_length(text: str, fontname: str ="helv", fontsize: float =11, encoding: int =0) -> float:
     """Calculate length of a string for a built-in font.
 
@@ -16357,6 +16428,9 @@ def timings( fn):
             jlib.log_interval( timings_.__str__, caller=2, interval=4)
     return fn2
 
+def jm_tracedraw_drop_device(dev, ctx):
+    dev.out = None
+ 
 def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
     print(f'jm_tracedraw_fill_path(): trace_device.dev_pathdict={trace_device.dev_pathdict=}', file=sys.stderr)
     even_odd = True if even_odd else False
@@ -16665,6 +16739,8 @@ class JM_new_output_fileptr_Output(mupdf.FzOutput2):
 class JM_new_tracedraw_device_Device(mupdf.FzDevice2):
     def __init__(self, out):
         super().__init__()
+        # fixme: this results in "Unexpected call of unimplemented virtual_fnptrs fn FzDevice2::drop_device().".
+        #self.use_virtual_drop_device()
         self.use_virtual_fill_path()
         self.use_virtual_stroke_path()
         self.use_virtual_fill_text()
@@ -16676,6 +16752,7 @@ class JM_new_tracedraw_device_Device(mupdf.FzDevice2):
         self.out = out
         self.seqno = 0
 
+    #drop_device = jm_tracedraw_drop_device
     fill_path = jm_tracedraw_fill_path
     stroke_path = jm_tracedraw_stroke_path
     fill_text = jm_increase_seqno
@@ -17504,6 +17581,15 @@ def get_pdf_str(s: str) -> str:
     return "(" + r + ")"
 
 
+class ElementPosition(object):
+    """Convert a dictionary with element position information to an object."""
+    def __init__(self):
+        pass
+
+def make_story_elpos():
+    return ElementPosition()
+
+ 
 def get_highlight_selection(page, start: point_like =None, stop: point_like =None, clip: rect_like =None) -> list:
     """Return rectangles of text lines between two points.
 
@@ -18522,6 +18608,14 @@ def vdist(dir, a, b):
     dx = b.x - a.x
     dy = b.y - a.y
     return mupdf.fz_abs(dx * dir.y + dy * dir.x)
+
+
+
+
+
+
+
+
 
 #g_timings.mid()
 class TOOLS:
