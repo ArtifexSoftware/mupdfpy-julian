@@ -48,7 +48,7 @@ import binascii
 import gzip
 import hashlib
 import importlib
-import inspect
+#import inspect # Slow, so try to avoid needing it.
 import math
 import os
 import re
@@ -117,7 +117,7 @@ else:
     # Use SWIG bindings.
     #g_timings.mid()
     import mupdf
-
+    mupdf.reinit_singlethreaded()
 
 #g_timings.mid()
 
@@ -11269,16 +11269,31 @@ if 1:
     self = sys.modules[__name__]
     #print( f'__name__={__name__}')
     #print( f'self={self}')
-    for name, value in inspect.getmembers(mupdf):
-        if name.startswith(('PDF_', 'UCDN_SCRIPT_')):
-            if name.startswith('PDF_ENUM_NAME_'):
-                # Not a simple enum.
-                pass
-            else:
-                assert not inspect.isroutine(value)
-                #print(f'fitz/__init__.py: importing {name}')
-                setattr(self, name, value)
-                #print(f'fitz/__init__.py: getattr( self, name, None)={getattr( self, name, None)}')
+    t0 = time.time()
+    if 1:
+        for name, value in mupdf.__dict__.items():
+            if name.startswith(('PDF_', 'UCDN_SCRIPT_')):
+                if name.startswith('PDF_ENUM_NAME_'):
+                    # Not a simple enum.
+                    pass
+                else:
+                    #assert not inspect.isroutine(value)
+                    #print(f'fitz/__init__.py: importing {name}')
+                    setattr(self, name, value)
+                    #print(f'fitz/__init__.py: getattr( self, name, None)={getattr( self, name, None)}')
+    else:
+        # This is slow due to importing inspect, e.g. 0.019 instead of 0.004.
+        for name, value in inspect.getmembers(mupdf):
+            if name.startswith(('PDF_', 'UCDN_SCRIPT_')):
+                if name.startswith('PDF_ENUM_NAME_'):
+                    # Not a simple enum.
+                    pass
+                else:
+                    #assert not inspect.isroutine(value)
+                    #print(f'fitz/__init__.py: importing {name}')
+                    setattr(self, name, value)
+                    #print(f'fitz/__init__.py: getattr( self, name, None)={getattr( self, name, None)}')
+    
     # This is a macro so not preserved in mupdf C++/Python bindings.
     #
     PDF_SIGNATURE_DEFAULT_APPEARANCE = (0
@@ -11289,9 +11304,9 @@ if 1:
             | PDF_SIGNATURE_SHOW_GRAPHIC_NAME
             | PDF_SIGNATURE_SHOW_LOGO
             )
-    
-    #UCDN_SCRIPT_ADLAM = mupdf.UCDN_SCRIPT_ADLAM
-    #setattr(self, 'UCDN_SCRIPT_ADLAM', mupdf.UCDN_SCRIPT_ADLAM)
+
+        #UCDN_SCRIPT_ADLAM = mupdf.UCDN_SCRIPT_ADLAM
+        #setattr(self, 'UCDN_SCRIPT_ADLAM', mupdf.UCDN_SCRIPT_ADLAM)
     
     assert mupdf.UCDN_EAST_ASIAN_H == 1
     assert PDF_TX_FIELD_IS_MULTILINE == mupdf.PDF_TX_FIELD_IS_MULTILINE
@@ -11299,6 +11314,8 @@ if 1:
     #print( f'fitz/__init__.py: UCDN_SCRIPT_ADLAM={UCDN_SCRIPT_ADLAM}')
     assert UCDN_SCRIPT_ADLAM == mupdf.UCDN_SCRIPT_ADLAM
     del self
+    t = time.time() - t0
+    #print( f'Time to add mupdf.PDF_* and mupdf.UCDN_SCRIPT_* to fizt: {t=}')
 
 #g_timings.mid()
 _adobe_glyphs = {}
