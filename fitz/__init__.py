@@ -13539,6 +13539,61 @@ def JM_get_font(
         #jlib.log( '{font.m_internal.name}')
         return font
 
+def JM_get_fontbuffer(doc, xref):
+    '''
+    Return the contents of a font file, identified by xref
+    '''
+    if xref < 1:
+        return
+    #pdf_obj *o, *obj = NULL, *desft, *stream = NULL;
+    o = mupdf.pdf_load_object(doc, xref)
+    desft = mupdf.pdf_dict_get(o, PDF_NAME('DescendantFonts'))
+    if desft.m_internal:
+        obj = mupdf.pdf_resolve_indirect(mupdf.pdf_array_get(desft, 0))
+        obj = mupdf.pdf_dict_get(obj, PDF_NAME('FontDescriptor'))
+    else:
+        obj = mupdf.pdf_dict_get(o, PDF_NAME('FontDescriptor'))
+
+    if not obj.m_internal:
+        print(f"invalid font - FontDescriptor missing")
+        return
+
+    o = obj
+
+    stream = None
+
+    obj = mupdf.pdf_dict_get(o, PDF_NAME('FontFile'))
+    if obj.m_internal:
+        stream = obj    # ext = "pfa"
+
+    obj = mupdf.pdf_dict_get(o, PDF_NAME('FontFile2'))
+    if obj.m_internal:
+        stream = obj    # ext = "ttf"
+
+    obj = mupdf.pdf_dict_get(o, PDF_NAME('FontFile3'))
+    if obj.m_internal:
+        stream = obj
+
+        obj = mupdf.pdf_dict_get(obj, PDF_NAME('Subtype'))
+        if obj.m_internal and not mupdf.pdf_is_name(obj):
+            print("invalid font descriptor subtype")
+            return
+
+        if mupdf.pdf_name_eq(obj, PDF_NAME('Type1C')):
+            pass    # Prev code did: ext = "cff", but this has no effect.
+        else if mupdf.pdf_name_eq(obj, PDF_NAME('CIDFontType0C')):
+            pass    # Prev code did: ext = "cid", but this has no effect.
+        elif mupdf.pdf_name_eq(obj, PDF_NAME('OpenType')):
+            pass    # Prev code did: ext = "otf", but this has no effect. */
+        else
+            print('warning: unhandled font type {pdf_to_name(ctx, obj)!r}')
+
+    if not stream:
+        print('warning: unhandled font type')
+        return 
+
+    return mupdf.pdf_load_stream(stream)
+
 
 def JM_get_resource_properties(ref):
     '''
@@ -16046,43 +16101,18 @@ def jm_checkquad():
         lp = JM_point_from_py( line[ 2])
     if lp.x != f[0] or lp.y != f[1]:
         # not a polygon!
-        trace_device.dev_linecount -= 1
+        #trace_device.dev_linecount -= 1
         return 0
     trace_device.dev_linecount = 0   # reset this
-    if (0
-            or f[1] != f[3]
-            or f[2] != f[4]
-            or f[5] != f[7]
-            or f[6] != f[0]
-            ):
-        # not a rect
-        #goto make_quad;
-        #make_quad:;
-        # relationship of float array to quad points:
-        # (0, 1) = ul, (2, 3) = ll, (6, 7) = ur, (4, 5) = lr
-        q = mupdf.fz_make_quad(f[0], f[1], f[6], f[7], f[2], f[3], f[4], f[5])
-        rect = ( 'qu', JM_py_from_quad(q))
-    else:
-        # Have a rect, check orientation
-        if f[0] < f[2]: # move left to right
-            if f[3] > f[5]: # move upwards
-                orientation = 1
-            else :
-                orientation = -1
-        else:   # move right to left
-            if f[3] < f[5]: # move downwards
-                orientation = 1
-            else:
-                orientation = -1
-        # Replace the 4 "l" items by one "re" item.
-        r = mupdf.fz_make_rect(f[0], f[1], f[0], f[1])
-        r = mupdf.fz_include_point_in_rect(r, mupdf.fz_make_point(f[2], f[3]))
-        r = mupdf.fz_include_point_in_rect(r, mupdf.fz_make_point(f[4], f[5]))
-        r = mupdf.fz_include_point_in_rect(r, mupdf.fz_make_point(f[6], f[7]))
-        rect = ( 're', JM_py_from_rect(r), orientation)
-        #goto finish;
     
-    #finish:;
+    PyTuple_SET_ITEM(rect, 0, PyUnicode_FromString("qu"));
+    
+    # relationship of float array to quad points:
+    # (0, 1) = ul, (2, 3) = ll, (6, 7) = ur, (4, 5) = lr
+    
+    q = mupdf.fz_make_quad(f[0], f[1], f[6], f[7], f[2], f[3], f[4], f[5])
+    rect = ('qu', JM_py_from_quad(q))
+    
     items[ len_ - 4] = rect  # replace item -4 by rect
     del items[ len_ - 3 : len_]  # delete remaining 3 items
     return 1
@@ -16160,7 +16190,7 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     #PyObject *chars = PyTuple_New(span->len);
     join = mupdf.fz_concat(span.m_internal.trm, ctm)
     dir = mupdf.fz_transform_vector( mupdf.fz_make_point(1, 0), join)
-    fsize = math.sqrt( dir.x * dir.x + dir.y * dir.y)
+    fsize = math.sqrt( abs( join.a * join.d))
     space_adv = 0;
     asc = JM_font_ascender( span.m_internal.font)
     dsc = JM_font_descender( span.m_internal.font)
@@ -16417,7 +16447,7 @@ class Walker(mupdf.FzPathWalker2):
             items = trace_device.dev_pathdict[ dictkey_items]
             items.append( list_)
             trace_device.dev_linecount += 1 # counts consecutive lines
-            if trace_device.dev_linecount >= 4 and trace_device.path_type != trace_device.FILL_PATH:
+            if trace_device.dev_linecount == 4 and trace_device.path_type != trace_device.FILL_PATH:
                 # shrink to "re" or "qu" item
                 jm_checkquad()
         except Exception as e:
@@ -16459,6 +16489,7 @@ class Walker(mupdf.FzPathWalker2):
                     return
             else:
                 trace_device.dev_pathdict[ "closePath"] = True
+                dev_linecount = 0   # reset # of consec. lines
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
