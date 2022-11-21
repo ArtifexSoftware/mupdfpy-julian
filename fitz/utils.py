@@ -815,29 +815,29 @@ def get_page_text(
     """
     return doc[pno].get_text(option, clip=clip, flags=flags, sort=sort)
 
-def get_pixmap(page: fitz.Page, *args, **kw) -> fitz.Pixmap:
+def get_pixmap(
+        page: fitz.Page,
+        *,
+        matrix: matrix_like=fitz.Identity,
+        dpi=None,
+        colorspace: fitz.Colorspace=fitz.csRGB,
+        clip: rect_like=None,
+        alpha: bool=False,
+        annots: bool=True,
+        ) -> fitz.Pixmap:
     """Create pixmap of page.
 
     Keyword args:
-        matrix: fitz.Matrix for transformation (default: fitz.Identity).
+        matrix: Matrix for transformation (default: Identity).
         dpi: desired dots per inch. If given, matrix is ignored.
-        colorspace: (str/fitz.Colorspace) cmyk, rgb, gray - case ignored, default fitz.csRGB.
+        colorspace: (str/Colorspace) cmyk, rgb, gray - case ignored, default csRGB.
         clip: (irect-like) restrict rendering to this area.
         alpha: (bool) whether to include alpha channel
         annots: (bool) whether to also render annotations
     """
-    if args:
-        raise ValueError("method accepts keywords only")
-    fitz.CheckParent(page)
-    matrix = kw.get("matrix", fitz.Identity)
-    dpi = kw.get("dpi", None)
     if dpi:
         zoom = dpi / 72
-        matrix = fitz.Matrix(zoom, zoom)
-    colorspace = kw.get("colorspace", fitz.csRGB)
-    clip = kw.get("clip")
-    alpha = bool(kw.get("alpha", False))
-    annots = bool(kw.get("annots", True))
+        matrix = Matrix(zoom, zoom)
 
     if type(colorspace) is str:
         if colorspace.upper() == "GRAY":
@@ -845,7 +845,7 @@ def get_pixmap(page: fitz.Page, *args, **kw) -> fitz.Pixmap:
         elif colorspace.upper() == "CMYK":
             colorspace = csCMYK
         else:
-            colorspace = fitz.csRGB
+            colorspace = csRGB
     if colorspace.n not in (1, 3, 4):
         raise ValueError("unsupported colorspace")
 
@@ -860,7 +860,9 @@ def get_pixmap(page: fitz.Page, *args, **kw) -> fitz.Pixmap:
 def get_page_pixmap(
     doc: fitz.Document,
     pno: int,
+    *,
     matrix: matrix_like = fitz.Identity,
+    dpi=None,
     colorspace: fitz.Colorspace = fitz.csRGB,
     clip: rect_like = None,
     alpha: bool = False,
@@ -879,7 +881,7 @@ def get_page_pixmap(
         annots: (bool) also render annotations
     """
     return doc[pno].get_pixmap(
-        matrix=matrix, colorspace=colorspace, clip=clip, alpha=alpha, annots=annots
+        matrix=matrix, dpi=dpi, colorspace=colorspace, clip=clip, alpha=alpha, annots=annots
     )
 
 
