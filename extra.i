@@ -952,20 +952,20 @@ static PyObject *Page_derotate_matrix(mupdf::FzPage& page)
 static PyObject *JM_get_annot_xref_list( const mupdf::PdfObj& page_obj)
 {
     PyObject *names = PyList_New(0);
-    //pdf_obj *id, *annot_obj = NULL;
     mupdf::PdfObj annots = mupdf::pdf_dict_get( page_obj, PDF_NAME(Annots));
-    if (!annots.m_internal) return names;
-    int n = mupdf::pdf_array_len( annots);
+    int n = mupdf::pdf_array_len(annots);
     for (int i = 0; i < n; i++) {
-        mupdf::PdfObj annot_obj = pdf_array_get( annots, i);
-        int xref = mupdf::pdf_to_num( annot_obj);
+        mupdf::PdfObj annot_obj = mupdf::pdf_array_get( annots, i);
+        int xref = mupdf::pdf_to_num(annot_obj);
         mupdf::PdfObj subtype = mupdf::pdf_dict_get( annot_obj, PDF_NAME(Subtype));
-        int type = PDF_ANNOT_UNKNOWN;
-        if (subtype.m_internal) {
-            const char *name = mupdf::pdf_to_name( subtype);
-            type = mupdf::pdf_annot_type_from_string( name);
+        if (!subtype.m_internal) {
+            continue;  // subtype is required
         }
-        mupdf::PdfObj id = mupdf::pdf_dict_gets( annot_obj, "NM");
+        int type = mupdf::pdf_annot_type_from_string( mupdf::pdf_to_name( subtype));
+        if (type == PDF_ANNOT_UNKNOWN) {
+            continue;  // only accept valid annot types
+        }
+        mupdf::PdfObj   id = mupdf::pdf_dict_gets(annot_obj, "NM");
         LIST_APPEND_DROP(names, Py_BuildValue("iis", xref, type, mupdf::pdf_to_text_string( id)));
     }
     return names;

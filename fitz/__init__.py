@@ -6542,6 +6542,8 @@ class Page:
         page = self.this
         options = mupdf.FzStextOptions(flags)
         rect = JM_rect_from_py(clip)
+        # Default to page's rect if `clip` not specified, for #2048.
+        rect = mupdf.fz_bound_page(page) if clip is None else JM_rect_from_py(clip)
         ctm = JM_matrix_from_py(matrix)
         tpage = mupdf.FzStextPage(rect)
         dev = mupdf.fz_new_stext_device(tpage, options)
@@ -13444,6 +13446,8 @@ def JM_get_annot_xref_list( page_obj):
     '''
     return the xrefs and /NM ids of a page's annots, links and fields
     '''
+    return extra.JM_get_annot_xref_list( page_obj)
+    
     names = []
     annots = mupdf.pdf_dict_get( page_obj, PDF_NAME('Annots'))
     if not annots.m_internal:
@@ -16355,7 +16359,7 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     # make the span dictionary
     span_dict = dict()
     span_dict[ 'dir'] = JM_py_from_point(dir)
-    span_dict[ dictkey_font] =fontname
+    span_dict[ dictkey_font] = JM_EscapeStrFromStr(fontname)
     span_dict[ dictkey_wmode] = span.m_internal.wmode
     span_dict[ dictkey_flags] =fflags
     span_dict[ "bidi_lvl"] =span.m_internal.bidi_level
