@@ -4769,12 +4769,16 @@ def integerToLetter(i) -> str:
     """Returns letter sequence string for integer i."""
     # William Chapman, Jorj McKie, 2021-01-06
     import string
-    ls = string.ascii_uppercase
-    m = int((i - 1) / 26)  # how many times over
-    n = (i % 26) - 1  # remainder
+    n, a = 1, i
+    while pow(26, n) <= a:
+        a -= int(math.pow(26, n))
+        n += 1
+
     str_t = ""
-    for _ in range(0, m + 1):
-        str_t = str_t + ls[n]
+    for j in reversed(range(n)):
+        f, g = divmod(a, int(math.pow(26, j)))
+        str_t += ls[f]
+        a = g
     return str_t
 
 

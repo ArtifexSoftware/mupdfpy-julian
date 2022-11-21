@@ -1644,15 +1644,24 @@ class Colorspace:
         return self._name()
 
 
-class Device:
+class DeviceWrapper:
     def __init__(self, *args):
-        assert 0, '_fitz.new_Device() not found in PyMuPDF?'
-        this = _fitz.new_Device(*args)
-        try:
-            self.this.append(this)
-        except __builtin__.Exception:
-            if g_exceptions_verbose:    jlib.exception_info()
-            self.this = this
+        if args_match( args, fitz.Pixmap, None):
+            pm, clip = args
+            bbox = JM_irect_from_py( clip)
+            if mupdf.fz_is_infinite_irect( bbox):
+                self.this = mupdf.fz_new_draw_device( mupdf.FzMatrix(), pm)
+            else:
+                self.this = mupdf.fz_new_draw_device_with_bbox( mupdf.FzMatrix(), pm, bbox)
+        elif args_match( args, mupdf.FzDisplayList):
+            dl, = args
+            self.this = mupdf.fz_new_list_device( dl)
+        elif args_match( args, mupdf.FzTextPage, None):
+            tp, flags = args
+            opts = mupdf.FzStextOptions( flags)
+            self.this = mupdf.fz_new_stext_device( tp, opts)
+        else:
+            raise Exception( f'Unrecognised args for DeviceWrapper: {args!r}')
 
 
 class DisplayList:
@@ -2906,7 +2915,7 @@ class Document:
         page_count = self.page_count  # page count of document
         f = t = -1
         if kw:  # check if keywords were used
-            if args != []:  # then no positional args are allowed
+            if args:  # then no positional args are allowed
                 raise ValueError("cannot mix keyword and positional argument")
             f = kw.get("from_page", -1)  # first page to delete
             t = kw.get("to_page", -1)  # last page to delete
@@ -11608,7 +11617,16 @@ dictkey_xres = "xres"
 dictkey_yres = "yres"
 
 #g_timings.mid()
-fitz_fontdescriptors = dict()
+
+try:
+    from pymupdf_fonts import fontdescriptors, fontbuffers
+
+    fitz_fontdescriptors = fontdescriptors.copy()
+    for k in fitz_fontdescriptors.keys():
+        fitz_fontdescriptors[k]["loader"] = fontbuffers[k]
+    del fontdescriptors, fontbuffers
+except ImportError:
+    fitz_fontdescriptors = {}
 
 no_device_caching = 0   # Switch for device hints = no cache
 skip_quad_corrections = 0   # Unset ascender / descender corrections
@@ -14875,7 +14893,7 @@ def JM_refresh_links( page):
         page_mediabox = mupdf.FzRect()
         page_ctm = mupdf.FzMatrix()
         mupdf.pdf_page_transform( page, page_mediabox, page_ctm)
-        link = mupdf.pdf_load_link_annots( pdf, obj, number, page_ctm)
+        link = mupdf.pdf_load_link_annots( pdf, page, obj, number, page_ctm)
         page.m_internal.links = mupdf.ll_fz_keep_link( link.m_internal)
 
 
