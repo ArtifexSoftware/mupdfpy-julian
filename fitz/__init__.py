@@ -16385,7 +16385,7 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     span_dict[ 'descender'] = dsc
     if colorspace:
         rgb = mupdf.fz_convert_color(
-                mupdf.FzColorspace(colorspace),
+                mupdf.FzColorspace( mupdf.ll_fz_keep_colorspace( colorspace)),
                 color, mupdf.fz_device_rgb(),
                 mupdf.FzColorspace(),
                 mupdf.FzColorParams(),
