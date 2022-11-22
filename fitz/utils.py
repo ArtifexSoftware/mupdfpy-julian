@@ -5092,7 +5092,7 @@ def recover_char_quad(line_dir: tuple, span: dict, char: dict) -> fitz.Quad:
 # -------------------------------------------------------------------
 # Building font subsets using fontTools
 # -------------------------------------------------------------------
-def subset_fonts(doc: fitz.Document) -> None:
+def subset_fonts(doc: fitz.Document, verbose: bool = False) -> None:
     """Build font subsets of a PDF. Requires package 'fontTools'.
 
     Eligible fonts are potentially replaced by smaller versions. Page text is

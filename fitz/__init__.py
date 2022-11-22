@@ -1172,7 +1172,7 @@ class Annot:
         annot = self.this
         type_ = mupdf.pdf_annot_type( annot);
         if type_ in ( mupdf.PDF_ANNOT_LINE, mupdf.PDF_ANNOT_POLY_LINE, PDF_ANNOT_POLYGON):
-            mupdf::fz_warn( f'setting rectangle ignored for annot type {mupdf.pdf_string_from_annot_type( type_)}')
+            mupdf.fz_warn( f'setting rectangle ignored for annot type {mupdf.pdf_string_from_annot_type( type_)}')
             return
         
         pdfpage = annot.pdf_annot_page()
@@ -2876,7 +2876,7 @@ class Document:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_del_xml_metadata(self)
         pdf = mupdf.pdf_specifics(self.this)
-        root = mupdf.pdf_dict_get( pdf_trailer( pdf), PDF_NAME('Root'))
+        root = mupdf.pdf_dict_get( mupdf.pdf_trailer( pdf), PDF_NAME('Root'))
         if root.m_internal:
             mupdf.pdf_dict_del( root, PDF_NAME('Metadata'))
 
@@ -6558,6 +6558,9 @@ class Page:
             page = page.super()
         else:
             assert 0, f'Unrecognised type(page)={type(page)}'
+        jlib.log( f'{type(page)=} {page=}')
+        jlib.log( f'{type(dev)=} {dev=}')
+        jlib.log( f'{type(ctm)=} {ctm=}')
         mupdf.fz_run_page(page, dev, ctm, mupdf.FzCookie());
         mupdf.fz_close_device(dev)
         return tpage
@@ -16256,20 +16259,33 @@ def jm_checkrect():
     return 1;
 
 
+def jm_trace_text( out, text, type_, ctm, colorspace, color, alpha, seqno):
+    span = text.head
+    while 1:
+        if not span:
+            break
+        jm_trace_text_span( out, span, type_, ctm, colorspace, color, alpha, seqno)
+        span = span.next
+
+
 def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     '''
     jm_trace_text_span(fz_context *ctx, PyObject *out, fz_text_span *span, int type, fz_matrix ctm, fz_colorspace *colorspace, const float *color, float alpha, size_t seqno)
     '''
     out_font = None
-    fontname = JM_font_name( span.font)
+    assert isinstance( span, mupdf.fz_text_span)
+    span = mupdf.FzTextSpan( span)
+    assert isinstance( ctm, mupdf.fz_matrix)
+    ctm = mupdf.FzMatrix( ctm)
+    fontname = JM_font_name( span.font())
     #float rgb[3];
     #PyObject *chars = PyTuple_New(span->len);
-    join = mupdf.fz_concat(span.m_internal.trm, ctm)
+    join = mupdf.fz_concat( span.trm(), ctm)
     dir = mupdf.fz_transform_vector( mupdf.fz_make_point(1, 0), join)
     fsize = math.sqrt( abs( join.a * join.d))
     space_adv = 0;
-    asc = JM_font_ascender( span.m_internal.font)
-    dsc = JM_font_descender( span.m_internal.font)
+    asc = JM_font_ascender( span.font())
+    dsc = JM_font_descender( span.font())
     if asc < 1e-3:  # probably Tesseract font
         dsc = -0.1
         asc = 0.9
@@ -16277,14 +16293,14 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     ascsize = asc * fsize / (asc - dsc)
     dscsize = dsc * fsize / (asc - dsc)
     fflags = 0;
-    mono = mupdf.font_is_monospaced( span.m_internal.font)
-    fflags += mono * mupdf.TEXT_FONT_MONOSPACED
-    fflags += mupdf.font_is_italic( span.m_internal.font) * mupdf.TEXT_FONT_ITALIC
-    fflags += mupdf.font_is_serif( span.m_internal.font) * mupdf.TEXT_FONT_SERIFED
-    fflags += mupdf.font_is_bold( span.m_internal.font) * mupdf.TEXT_FONT_BOLD
+    mono = mupdf.fz_font_is_monospaced( span.font())
+    fflags += mono * TEXT_FONT_MONOSPACED
+    fflags += mupdf.fz_font_is_italic( span.font()) * TEXT_FONT_ITALIC
+    fflags += mupdf.fz_font_is_serif( span.font()) * TEXT_FONT_SERIFED
+    fflags += mupdf.fz_font_is_bold( span.font()) * TEXT_FONT_BOLD
     mat = trace_device.ptm
-    ctm_rot = mupdf.fz_concat(ctm, trace_device.rot)
-    mat = mupdf.fz_concat(mat, ctm_rot)
+    ctm_rot = mupdf.fz_concat( ctm, trace_device.rot)
+    mat = mupdf.fz_concat( mat, ctm_rot)
 
     if trace_device.dev_linewidth > 0:
         linewidth = trace_device.dev_linewidth
@@ -16301,13 +16317,13 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     chars = []
     for i in range( span.m_internal.len):
         adv = 0
-        if span.m_internal.items[i].gid >= 0:
-            adv = mupdf.fz_advance_glyph( span.m_internal.font, span.m_internal.items[i].gid, span.m_internal.wmode)
+        if span.items(i).gid >= 0:
+            adv = mupdf.fz_advance_glyph( span.font(), span.items(i).gid, span.m_internal.wmode)
         adv *= fsize
         last_adv = adv
-        if span.m_internal.items[i].ucs == 32:
+        if span.items(i).ucs == 32:
             space_adv = adv
-        char_orig = mupdf.fz_make_point(span.m_internal.items[i].x, span.m_internal.items[i].y)
+        char_orig = mupdf.fz_make_point(span.items(i).x, span.items(i).y)
         char_orig.y = trace_device.ptm.f - char_orig.y
         char_orig = mupdf.fz_transform_point(char_orig, mat)
         m1 = mupdf.fz_make_matrix(1, 0, 0, 1, -char_orig.x, -char_orig.y)
@@ -16325,8 +16341,8 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
         char_bbox = mupdf.fz_transform_rect(char_bbox, m1)
         chars.append(
                 (
-                    span.m_internal.items[i].ucs,
-                    span.m_internal.items[i].gid,
+                    span.items(i).ucs,
+                    span.items(i).gid,
                     (
                         char_orig.x,
                         char_orig.y,
@@ -16335,7 +16351,7 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
                         char_bbox.x0,
                         char_bbox.y0,
                         char_bbox.x1,
-                        char_bbox.y,
+                        char_bbox.y1,
                     ),
                 )
                 )
@@ -16345,9 +16361,9 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
             span_bbox = char_bbox
     if not space_adv:
         if not mono:
-            c, out_font = mupdf.fz_encode_character_with_fallback( span.m_internal.font, 32, 0, 0)
+            c, out_font = mupdf.fz_encode_character_with_fallback( span.font(), 32, 0, 0)
             space_adv = mupdf.fz_advance_glyph(
-                    span.m_internal.font,
+                    span.font(),
                     c,
                     span.m_internal.wmode,
                     )
@@ -16360,27 +16376,32 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     # make the span dictionary
     span_dict = dict()
     span_dict[ 'dir'] = JM_py_from_point(dir)
-    span_dict[ dictkey_font] = JM_EscapeStrFromStr(fontname)
-    span_dict[ dictkey_wmode] = span.m_internal.wmode
-    span_dict[ dictkey_flags] =fflags
+    span_dict[ 'font'] = JM_EscapeStrFromStr(fontname)
+    span_dict[ 'wmode'] = span.m_internal.wmode
+    span_dict[ 'flags'] =fflags
     span_dict[ "bidi_lvl"] =span.m_internal.bidi_level
     span_dict[ "bidi_dir"] = span.m_internal.markup_dir
-    span_dict[ dictkey_ascender] = asc
-    span_dict[ dictkey_descender] = dsc
-    if colorspace.m_internal:
-            rgb = mupdf.fz_convert_color( colorspace, color, mupdf.fz_device_rgb(), None, fz_default_color_params)
-            span_dict[ dictkey_colorspace] = 3
-            span_dict[ dictkey_color] = rgb[0], rgb[1], rgb[2]
+    span_dict[ 'ascender'] = asc
+    span_dict[ 'descender'] = dsc
+    if colorspace:
+        rgb = mupdf.fz_convert_color(
+                mupdf.FzColorspace(colorspace),
+                color, mupdf.fz_device_rgb(),
+                mupdf.FzColorspace(),
+                mupdf.FzColorParams(),
+                )
+        span_dict[ 'colorspace'] = 3
+        span_dict[ 'color'] = rgb[0], rgb[1], rgb[2]
     else:
-            span_dict[ dictkey_colorspace] = 1
-            span_dict[ dictkey_color] =1
-    span_dict[ dictkey_size] = fsize
+        span_dict[ 'colorspace'] = 1
+        span_dict[ 'color'] =1
+    span_dict[ 'size'] = fsize
     span_dict[ "opacity"] = alpha
     span_dict[ "linewidth"] =linewidth
     span_dict[ "spacewidth"] = space_adv
-    span_dict[ dictkey_type] =type
-    span_dict[ dictkey_chars] = chars
-    span_dict[ dictkey_bbox] = JM_py_from_rect(span_bbox)
+    span_dict[ 'type'] =type
+    span_dict[ 'chars'] = chars
+    span_dict[ 'bbox'] = JM_py_from_rect(span_bbox)
     span_dict[ "seqno"] = seqno
     out.append( span_dict)
 
@@ -16469,8 +16490,15 @@ def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, al
 # 1 - stroke text (PDF Tr 1)
 # 3 - ignore text (PDF Tr 3)
 
-def jm_tracedraw_fill_text( dev, text, ctm, colorspace, color, alpha, color_params):
-    #jlib.log('{trace_device.dev_pathdict=}')
+def jm_tracedraw_fill_text( dev, ctx, text, ctm, colorspace, color, alpha, color_params):
+    jlib.log(f'{type(ctx)=} {ctx=}')
+    jlib.log(f'{type(dev)=} {dev=}')
+    jlib.log(f'{type(text)=} {text=}')
+    jlib.log(f'{type(ctm)=} {ctm=}')
+    jlib.log(f'{type(colorspace)=} {colorspace=}')
+    jlib.log(f'{type(color)=} {color=}')
+    jlib.log(f'{type(alpha)=} {alpha=}')
+    jlib.log(f'{type(color_params)=} {color_params=}')
     out = dev.out
     jm_trace_text(out, text, 0, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
@@ -16768,8 +16796,8 @@ class JM_new_tracedraw_device_Device(mupdf.FzDevice2):
     fill_image_mask = jm_increase_seqno
 
 class JM_new_tracetext_device_Device(mupdf.FzDevice2):
-    def __init__(self):
-        super().__init__( out)
+    def __init__(self, out):
+        super().__init__()
         self.use_virtual_fill_path()
         self.use_virtual_stroke_path()
         self.use_virtual_fill_text()
