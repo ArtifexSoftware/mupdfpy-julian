@@ -1170,6 +1170,11 @@ class Annot:
         CheckParent(self)
         #return _fitz.Annot_set_rect(self, rect)
         annot = self.this
+        type_ = mupdf.pdf_annot_type( annot);
+        if type_ in ( mupdf.PDF_ANNOT_LINE, mupdf.PDF_ANNOT_POLY_LINE, PDF_ANNOT_POLYGON):
+            mupdf::fz_warn( f'setting rectangle ignored for annot type {mupdf.pdf_string_from_annot_type( type_)}')
+            return
+        
         pdfpage = annot.pdf_annot_page()
         rot = JM_rotate_page_matrix(pdfpage)
         r = mupdf.fz_transform_rect(JM_rect_from_py(rect), rot)
@@ -1183,11 +1188,6 @@ class Annot:
         #return _fitz.Annot_set_rotation(self, rotate)
         
         annot = self.this
-        type_ = mupdf.pdf_annot_type( annot);
-        if type_ in ( mupdf.PDF_ANNOT_LINE, mupdf.PDF_ANNOT_POLY_LINE, PDF_ANNOT_POLYGON):
-            fz_warn( f'setting rectangle ignored for annot type {mupdf.pdf_string_from_annot_type( type_)}')
-            return
-        
         type = mupdf.pdf_annot_type(annot)
         if type not in (
                 mupdf.PDF_ANNOT_CARET,
@@ -2874,8 +2874,11 @@ class Document:
         """Delete XML metadata."""
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
-        # fixme: not translated to python yet.
-        return _fitz.Document_del_xml_metadata(self)
+        #return _fitz.Document_del_xml_metadata(self)
+        pdf = mupdf.pdf_specifics(self.this)
+        root = mupdf.pdf_dict_get( pdf_trailer( pdf), PDF_NAME('Root'))
+        if root.m_internal:
+            mupdf.pdf_dict_del( root, PDF_NAME('Metadata'))
 
     def delete_page(self, pno: int =-1):
         """ Delete one page from a PDF.
@@ -4881,7 +4884,7 @@ class Document:
         pdf = mupdf.pdf_specifics( self.this)
         ASSERT_PDF(pdf)
         xreflen = mupdf.pdf_xref_len( pdf)
-        if not INRANGE(xref, 1, xreflen-1) and xref != -1:
+        if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
             raise ValueError( MSG_BAD_XREF);
         if xref >= 0:
             obj = mupdf.pdf_new_indirect( pdf, xref, 0)
@@ -4901,7 +4904,7 @@ class Document:
         pdf = mupdf.pdf_specifics( self.this)
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len( pdf)
-        if not INRANGE(xref, 1, xreflen-1) and xref != -1:
+        if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
             raise ValueError( MSG_BAD_XREF);
         if xref >= 0:
             obj = mupdf.pdf_new_indirect( pdf, xref, 0)
@@ -11392,7 +11395,7 @@ FZ_MIN_INF_RECT = -0x80000000
 FZ_MAX_INF_RECT = 0x7fffff80
 
 JM_annot_id_stem = "fitz"
-#JM_mupdf_warnings_store = []
+JM_mupdf_warnings_store = []
 JM_mupdf_show_errors = 1
 JM_mupdf_show_warnings = 0
 
@@ -14569,7 +14572,7 @@ def JM_merge_resources( page, temp_res):
     return (max_alp, max_fonts) # next available numbers
 
 
-def JM_mupdf_warning( ctx, message):
+def JM_mupdf_warning( message):
     '''
     redirect MuPDF warnings
     '''
@@ -14580,7 +14583,7 @@ def JM_mupdf_warning( ctx, message):
         sys.stderr.write(f'mupdf: {message}\n')
 
 
-def JM_mupdf_error( ctx, message):
+def JM_mupdf_error( message):
     #sys.stderr.write( '*** JM_mupdf_error() called\n')
     sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
@@ -16180,8 +16183,6 @@ def jm_checkquad():
         return 0
     trace_device.dev_linecount = 0   # reset this
     
-    PyTuple_SET_ITEM(rect, 0, PyUnicode_FromString("qu"));
-    
     # relationship of float array to quad points:
     # (0, 1) = ul, (2, 3) = ll, (6, 7) = ur, (4, 5) = lr
     
@@ -16436,7 +16437,7 @@ def jm_tracedraw_drop_device(dev, ctx):
     dev.out = None
  
 def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
-    print(f'jm_tracedraw_fill_path(): trace_device.dev_pathdict={trace_device.dev_pathdict=}', file=sys.stderr)
+    #print(f'jm_tracedraw_fill_path(): trace_device.dev_pathdict={trace_device.dev_pathdict=}', file=sys.stderr)
     even_odd = True if even_odd else False
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
