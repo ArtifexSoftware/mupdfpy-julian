@@ -1,5 +1,73 @@
 #! /usr/bin/env python3
 
+'''
+Overview:
+
+    We hard-code the URL of the MuPDF .tar.gz file that we require. This
+    generally points to a particular source release on mupdf.com.
+
+    Default behaviour:
+
+        Building an sdist:
+            We download the MuPDF .tar.gz file and embed within the sdist.
+
+        Building PyMuPDF:
+            If we are not in an sdist we first download the mupdf .tar.gz file.
+
+            Then we extract and build MuPDF locally, before setuptools builds
+            PyMuPDF. So PyMuPDF will always be built with the exact MuPDF
+            release that we require.
+
+Environmental variables:
+
+    PYMUPDF_SETUP_DEVENV
+        Location of devenv.com on Windows. If unset we search in some
+        hard-coded default locations; if that fails we use just 'devenv.com'.
+
+    PYMUPDF_SETUP_MUPDF_BUILD
+        If set, overrides location of mupdf when building PyMuPDF:
+            Empty string:
+                Build PyMuPDF with the system mupdf.
+            A string starting with 'git:':
+                Use `git clone` to get a mupdf directory. We use the string in
+                the git clone command; it must contain the git URL from which
+                to clone, and can also contain other `git clone` args, for
+                example:
+                    PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master https://github.com/ArtifexSoftware/mupdf.git"
+            Otherwise:
+                Location of mupdf directory.
+
+    PYMUPDF_SETUP_MUPDF_BUILD_TYPE
+        Unix only. Controls build type of MuPDF. Supported values are:
+            debug
+            memento
+            release (default)
+
+    PYMUPDF_SETUP_MUPDF_REBUILD
+        If '0' we do not build MuPDF - avoids delay if it is known to be up to date.
+
+    PYMUPDF_SETUP_MUPDF_CLEAN
+        If '1', we do a clean MuPDF build.
+
+    PYMUPDF_SETUP_MUPDF_TGZ
+        If set, overrides location of MuPDF .tar.gz file:
+            Empty string:
+                Do not download MuPDF .tar.gz file. Sdist's will not contain
+                MuPDF.
+
+            A string containing '://':
+                The URL from which to download the MuPDF .tar.gz file. Leaf
+                must match mupdf-*.tar.gz.
+
+            Otherwise:
+                The path of local mupdf git checkout. We put all files in this
+                checkout known to git into a local tar archive.
+
+Building MuPDF:
+    When building MuPDF, we overwrite the mupdf's include/mupdf/fitz/config.h
+    with fitz/_config.h and do a PyMuPDF-specific build.
+'''
+
 import os
 import textwrap
 import pipcl
@@ -35,6 +103,22 @@ def _fs_find_in_paths( name, paths=None):
         p = f'{path}/{name}'
         if os.path.isfile( p):
             return p
+
+def remove(path):
+    '''
+    Removes file or directory, without raising exception if it doesn't exist.
+
+    We assert-fail if the path still exists when we return, in case of
+    permission problems etc.
+    '''
+    try:
+        os.remove( path)
+    except Exception:
+        pass
+    shutil.rmtree( path, ignore_errors=1)
+    assert not os.path.exists( path)
+
+
 
 def _python_compile_flags():
     '''
@@ -155,6 +239,7 @@ def get_mupdf():
     path = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
     if path is None:
         # Default.
+        raise Exception( f'Using downloaded mupdf not currently supported; set PYMUPDF_SETUP_MUPDF_BUILD.')
         if os.path.exists( mupdf_tgz):
             log( f'mupdf_tgz already exists: {mupdf_tgz}')
         else:
@@ -265,9 +350,12 @@ def build():
             command += f' && echo "build/{unix_build_type}:"'
             command += f' && ls -l build/{unix_build_type}'
         
-        log( f'Building MuPDF by running: {command}')
-        subprocess.run( command, shell=True, check=True)
-        log( f'Finished building mupdf.')
+        if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
+            log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
+        else:
+            log( f'Building MuPDF by running: {command}')
+            subprocess.run( command, shell=True, check=True)
+            log( f'Finished building mupdf.')
     else:
         # Use installed MuPDF.
         log( f'Using system mupdf.')
@@ -275,9 +363,9 @@ def build():
     
     # Build fitz.extra module.
     #os.makedirs( 'build', exist_ok=True)
-    path_i = 'extra.i'
-    path_cpp = 'fitz/extra.cpp'
-    path_so = 'fitz/_extra.so'
+    path_i = f'{g_root}/extra.i'
+    path_cpp = f'{g_root}/fitz/extra.cpp'
+    path_so = f'{g_root}/fitz/_extra.so'
     unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'shared-release')
     cpp_flags = '-Wall'
     #cpp_flags += ' -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro -fwrapv'
@@ -298,12 +386,11 @@ def build():
         include1 = f'-I{mupdf_dir}/platform/c++/include'
         include2 = f'-I{mupdf_dir}/include'
         linkdir = f'-L {mupdf_dir}/build/{unix_build_type}'
-    elif mupdf_dir == '':
+    else:
+        # Use system mupdf.
         include1 = ''
         include2 = ''
         linkdir = ''
-    else:
-        assert 0, f'No support yet for downloading mupdf'
     
     # Run swig.
     if 0 or _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
@@ -313,7 +400,7 @@ def build():
                     -c++
                     -python
                     -module extra
-                    -outdir fitz
+                    -outdir {g_root}/fitz
                     -o {path_cpp}
                     {include1}
                     {include2}
@@ -347,25 +434,49 @@ def build():
                     {include1}
                     {include2}
                     -Wno-deprecated-declarations
+                    -Wno-unused-const-variable
                     {path_cpp}
                     -o {path_so}
                     -L {mupdf_dir}/build/{unix_build_type}
                     {libs_text}
+                    -Wl,-rpath='$ORIGIN',-z,origin
                 ''')
     else:
         log( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
     
-    return [
-            'README.md',
+    ret = []
+    for p in [
             'fitz/__init__.py',
             'fitz/__main__.py',
             'fitz/_extra.so',
             'fitz/extra.py',
             'fitz/fitz.py',
             'fitz/utils.py',
-            'test.py',
-            ]
+            ]:
+        from_ = f'{g_root}/{p}'
+        to_ = p
+        ret.append( ( from_, to_))
+    ret.append( ( f'{g_root}/test.py', f'fitz/test.py'))
+    ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
 
+    # This doesn't yet work. So need to set PYTHONPATH and LD_LIBRARY_PATH so
+    # that we can import mupdf python API.
+    if mupdf_dir:
+        # Add MuPDF runtime files.
+        
+        for leaf in (
+                'mupdf.py',
+                '_mupdf.so',
+                'libmupdfcpp.so',
+                'libmupdf.so'
+                ):
+            from_ = f'{mupdf_dir}/build/{unix_build_type}/{leaf}'
+            to_ = f'fitz/{leaf}'
+            #to_ = f'{leaf}'
+            #to_ = to_.replace( '.so', '.cpython-39-x86_64-linux-gnu.so')
+            ret.append( ( from_, to_))
+
+    return ret
 
 def sdist():
     '''
