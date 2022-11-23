@@ -738,7 +738,6 @@ def get_text(
         "words": 0,
         "blocks": 1,
     }
-    import jlib
     option = option.lower()
     if option not in formats:
         option = "text"
