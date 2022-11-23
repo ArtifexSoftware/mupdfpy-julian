@@ -117,7 +117,7 @@ if mupdf_cppyy is not None:
 else:
     # Use SWIG bindings.
     #g_timings.mid()
-    import mupdf
+    from . import mupdf
     mupdf.reinit_singlethreaded()
 
 #g_timings.mid()
