@@ -749,7 +749,7 @@ class Package:
             ret += '\n'
         return ret
 
-    def _path_relative_to_root(self, path):
+    def _path_relative_to_root(self, path, assert_within_root=True):
         '''
         Returns `(path_abs, path_rel)`, where `path_abs` is absolute path and
         `path_rel` is relative to `self.root_sep`.
@@ -758,14 +758,16 @@ class Package:
 
         We use `os.path.realpath()` to resolve any links.
 
-        Assert-fails if `path` is not within `self.root_sep`.
+        if assert_within_root is true, assert-fails if `path` is not within
+        `self.root_sep`.
         '''
         if os.path.isabs(path):
             p = path
         else:
             p = os.path.join(self.root_sep, path)
         p = os.path.realpath(os.path.abspath(p))
-        assert p.startswith(self.root_sep), f'Path not within root={self.root_sep}: {path}'
+        if assert_within_root:
+            assert p.startswith(self.root_sep), f'Path not within root={self.root_sep}: {path}'
         p_rel = os.path.relpath(p, self.root_sep)
         return p, p_rel
 
@@ -780,8 +782,8 @@ class Package:
         If `to_` starts with `$dist-info/`, we replace this with
         `self._dist_info_dir()`.
 
-        `from_abs` and `to_abs` are absolute paths, asserted to be within
-        `self.root_sep`.
+        `from_abs` and `to_abs` are absolute paths. We assert that `to_abs` is
+        `within self.root_sep`.
 
         `from_rel` and `to_rel` are derived from the `_abs` paths and are
         `relative to self.root_sep`.
@@ -798,7 +800,9 @@ class Package:
         prefix = '$dist-info/'
         if to_.startswith( prefix):
             to_ = f'{self._dist_info_dir()}{to_[ len(prefix):]}'
-        return self._path_relative_to_root(from_), self._path_relative_to_root(to_)
+        from_ = self._path_relative_to_root( from_, assert_within_root=False)
+        to_ = self._path_relative_to_root(to_)
+        return from_, to_
 
 
 # Functions that might be useful.
