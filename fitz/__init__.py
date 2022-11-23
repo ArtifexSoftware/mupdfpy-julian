@@ -32,10 +32,13 @@ if not jlib:
             def end( self, *args, **kwargs):        pass
             def mid( self, *args, **kwargs):        pass
             def __enter__( self):                   pass
-            def __exit__( self):                    pass
+            def __exit__( self, type_, value, traceback):  pass
             def __call__( self, *args, **kwargs):   return self
             def text( self, *args, **kwargs):       return ''
             def __str__( self):                     return ''
+            
+            @property
+            def active( self):                      return False
     
     #jlib.log( 'Failed to import jlib; using basic logging etc.')
 
@@ -905,15 +908,6 @@ class Annot:
     @property
     def rect(self):
         """annotation rectangle"""
-        #CheckParent(self)
-        #if 0:
-        #    #val = _fitz.Annot_rect(self)
-        #    val = extra.Annot_rect( self.this)
-        #elif 1:
-        #    val = extra.Annot_rect2( self.this)
-        #else:
-        #    val = mupdf.pdf_bound_annot(self.this)
-        #val = extra.Annot_rect2( self.this)
         if g_use_extra:
             val = extra.Annot_rect3( self.this)
         else:
@@ -1731,7 +1725,8 @@ class DisplayList:
 #       evaluating self.this ?
 
 mupdf_FzDocument = mupdf.FzDocument
-extra_FzDocument_insert_pdf = extra.FzDocument_insert_pdf
+if g_use_extra:
+    extra_FzDocument_insert_pdf = extra.FzDocument_insert_pdf
 
 class Document:
     
@@ -1970,25 +1965,12 @@ class Document:
                 except Exception:
                     raise FileDataError("cannot open broken document") from None
 
-        self.this_is_pdf = isinstance( self.this, mupdf.PdfDocument)
-        #print(f'self.this_is_pdf={self.this_is_pdf}')
-        if self.this_is_pdf:
-            #self.page_count_internal2 = fitz.extra.page_count_pdf
-            #self.page_count_internal = lambda self: self.page_count_internal2( self.this)
-            #self.page_count = property( fitz.extra.page_count_pdf)
-            self.page_count2 = fitz.extra.page_count_pdf
-        else:
-            #self.page_count_internal2 = fitz.extra.page_count_fz
-            
-            # calling `self.page_count2(self)` is significantly faster than
-            # `self.page_count`, where page_count() simply does `return
-            # self.page_count2(self)` - e.g. reduces timing test from 3.35s to
-            # 2.89s.
-            #
-            self.page_count2 = fitz.extra.page_count_fz
-            #self.page_count = property( lambda: fitz.extra.page_count_fz(self))
-            #self.page_count2 = fitz.extra.page_count_fz2
-        #self.page_count_internal = lambda self: self.page_count_internal2( self.this)
+        if g_use_extra:
+            self.this_is_pdf = isinstance( self.this, mupdf.PdfDocument)
+            if self.this_is_pdf:
+                self.page_count2 = fitz.extra.page_count_pdf
+            else:
+                self.page_count2 = fitz.extra.page_count_fz
 
     def __len__(self) -> int:
         return self.page_count
@@ -2425,7 +2407,8 @@ class Document:
 
     def _getMetadata(self, key):
         """Get metadata."""
-        return extra.getMetadata(self, key)
+        if g_use_extra:
+            return extra.getMetadata(self, key)
         if self.is_closed:
             raise ValueError("document closed")
         # return self.this _fitz.Document__getMetadata(self, key)
@@ -4112,34 +4095,12 @@ class Document:
     @property
     def page_count(self):
         """Number of pages."""
-        #if self.is_closed:
-        #    raise ValueError("document closed")
-        return self.page_count2(self)
-        #return self.page_count2(self.this)
-        
-        #return self.page_count_internal2( self.this)
-        #return self.page_count_internal(self)
-        if self.this_is_pdf:
-            return extra.page_count_pdf( self)
-        else:
-            return extra.page_count_fz( self)
-        if isinstance( self.this, mupdf.FzDocument):
-            return extra.page_count_fz( self.this)
-        else:
-            #assert isinstance( self.this, mupdf.PdfDocument)
-            return extra.page_count_pdf( self.this)
         if g_use_extra:
-            return extra.page_count( self.this)
+            return self.page_count2(self)
         if isinstance( self.this, mupdf.FzDocument):
             return mupdf.fz_count_pages( self.this)
         else:
             return mupdf.pdf_count_pages( self.this)
-        #
-        pdf = self.this.pdf_specifics()
-        if pdf.m_internal:
-            return mupdf.pdf_count_pages( pdf)
-        else:
-            return mupdf.fz_count_pages( self.this)
 
     def page_cropbox(self, pno):
         """Get CropBox of page number (without loading page)."""
@@ -4433,10 +4394,11 @@ class Document:
         if no_new_id == 0:
             JM_ensure_identity(pdf)
         if isinstance(filename, str):
+            jlib.log( 'calling mupdf.pdf_save_document()')
             mupdf.pdf_save_document(pdf, filename, opts)
         else:
             out = JM_new_output_fileptr(filename)
-            #jlib.log( '{=type(out) type(out.this)}')
+            jlib.log( '{=type(out) type(out.this)}')
             mupdf.pdf_write_document(pdf, out, opts)
 
     def save_snapshot(self, filename):
@@ -6009,15 +5971,13 @@ class Outline:
     @property
     def is_external(self):
         #return _fitz.Outline_isExternal(self)
-        if 1 or g_use_extra:
+        if g_use_extra:
             #print( f'type(self)={type(self)} type(self.this)={type(self.this)}', file=sys.stderr)
             
             # calling _extra.* here appears to save significant time in
             # test_toc.py:test_full_toc, 1.2s=>0.94s.
             #
             return _extra.Outline_is_external( self.this)
-            
-            return extra.Outline_is_external( self.this)
         ol = self.this
         if not ol.m_internal:
             return False
@@ -7476,7 +7436,7 @@ class Page:
 
     def get_cdrawings(self):
         """Extract drawing paths from the page."""
-        print(f'get_cdrawings()', file=sys.stderr)
+        #print(f'get_cdrawings()', file=sys.stderr)
         CheckParent(self)
         old_rotation = self.rotation
         if old_rotation != 0:
@@ -7497,7 +7457,7 @@ class Page:
 
         if old_rotation != 0:
             self.set_rotation(old_rotation)
-        print(f'~get_cdrawings()', file=sys.stderr)
+        #print(f'~get_cdrawings()', file=sys.stderr)
         return val
 
     def get_contents(self):
@@ -7540,7 +7500,6 @@ class Page:
         of the C version to respective Point / Rect / Quad objects.
         It also adds default items that are missing in original path types.
         """
-        print(f'get_drawings()', file=sys.stderr)
         allkeys = (
                 ("closePath", False), ("fill", None),
                 ("color", None), ("width", 0), ("lineCap", [0]),
@@ -7569,7 +7528,6 @@ class Page:
                 npath[k] = npath.get(k, v)
             paths.append(npath)
         val = None
-        print(f'~get_drawings()', file=sys.stderr)
         return paths
 
     def get_fonts(self, full=False):
@@ -13452,7 +13410,8 @@ def JM_get_annot_xref_list( page_obj):
     '''
     return the xrefs and /NM ids of a page's annots, links and fields
     '''
-    return extra.JM_get_annot_xref_list( page_obj)
+    if g_use_extra:
+        return extra.JM_get_annot_xref_list( page_obj)
     
     names = []
     annots = mupdf.pdf_dict_get( page_obj, PDF_NAME('Annots'))
@@ -14621,7 +14580,7 @@ def JM_new_buffer_from_stext_page(page):
 
 
 def JM_new_output_fileptr(bio):
-    return mupdf.FzOutput( JM_new_output_fileptr_Output( bio))
+    return JM_new_output_fileptr_Output( bio)
 
 
 def JM_new_tracedraw_device(out):
@@ -16491,14 +16450,15 @@ def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, al
 # 3 - ignore text (PDF Tr 3)
 
 def jm_tracedraw_fill_text( dev, ctx, text, ctm, colorspace, color, alpha, color_params):
-    jlib.log(f'{type(ctx)=} {ctx=}')
-    jlib.log(f'{type(dev)=} {dev=}')
-    jlib.log(f'{type(text)=} {text=}')
-    jlib.log(f'{type(ctm)=} {ctm=}')
-    jlib.log(f'{type(colorspace)=} {colorspace=}')
-    jlib.log(f'{type(color)=} {color=}')
-    jlib.log(f'{type(alpha)=} {alpha=}')
-    jlib.log(f'{type(color_params)=} {color_params=}')
+    if 0:
+        jlib.log(f'{type(ctx)=} {ctx=}')
+        jlib.log(f'{type(dev)=} {dev=}')
+        jlib.log(f'{type(text)=} {text=}')
+        jlib.log(f'{type(ctm)=} {ctm=}')
+        jlib.log(f'{type(colorspace)=} {colorspace=}')
+        jlib.log(f'{type(color)=} {color=}')
+        jlib.log(f'{type(alpha)=} {alpha=}')
+        jlib.log(f'{type(color_params)=} {color_params=}')
     out = dev.out
     jm_trace_text(out, text, 0, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
@@ -16627,7 +16587,7 @@ def jm_tracedraw_path(dev, ctx, path):
 
 
 def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
-    print(f'jm_tracedraw_stroke_path(): trace_device.dev_pathdict={trace_device.dev_pathdict}', file=sys.stderr)
+    #print(f'jm_tracedraw_stroke_path(): trace_device.dev_pathdict={trace_device.dev_pathdict}', file=sys.stderr)
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
@@ -18089,7 +18049,7 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
             n = mupdf.pdf_array_len( old_annots)
             new_annots = mupdf.pdf_dict_put_array( page_dict, PDF_NAME('Annots'), n)
             with page_merge_timings():
-                if 1:
+                if 0:
                     # Use optimisation in mupdf2.
                     #import mupdf2
                     mupdf.page_merge_helper(
