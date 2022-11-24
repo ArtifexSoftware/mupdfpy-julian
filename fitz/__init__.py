@@ -19505,17 +19505,17 @@ def test_py():
 def test_py_c():
     return test_c()
 
-if 0:
-    def test_c():
-        return extra.test_c
-    def test1():
-        return mupdf.fz_test1()
-    def test2():
-        return mupdf.fz_test2()
-else:
-    test_c = extra.test_c
-    test1 = mupdf.fz_test1
-    test2 = mupdf.fz_test2
+#if 0:
+#    def test_c():
+#        return extra.test_c
+#    def test1():
+#        return mupdf.fz_test1()
+#    def test2():
+#        return mupdf.fz_test2()
+#else:
+#    test_c = extra.test_c
+#    test1 = mupdf.fz_test1
+#    test2 = mupdf.fz_test2
 
 #g_timings.end()
 #jlib.log( '{g_timings.text(g_timings.root_item, precision=3)}')
