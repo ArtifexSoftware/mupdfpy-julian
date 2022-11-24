@@ -1712,6 +1712,7 @@ def test_py():
 
 %}
 
+
 %{
 int test_c()
 {
@@ -1720,12 +1721,14 @@ int test_c()
 
 int test1()
 {
-    return fz_test1();
+    //return fz_test1();
+    return 0;
 }
     
 int test2()
 {
-    return mupdf::fz_test2();
+    //return mupdf::fz_test2();
+    return 0;
 }
 %}
 
