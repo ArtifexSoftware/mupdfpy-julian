@@ -84,8 +84,8 @@ def log( text):
         p, p1 = os.path.split( p)
         p, p0 = os.path.split( p)
         _log_prefix = os.path.join( p0, p1)
-    print(f'{_log_prefix}: {text}', file=sys.stderr)
-    sys.stderr.flush()
+    print(f'{_log_prefix}: {text}', file=sys.stdout)
+    sys.stdout.flush()
 
 
 g_root = os.path.abspath( f'{__file__}/..')
@@ -303,8 +303,8 @@ def build():
     PYMUPDF_SETUP_MUPDF_BUILD_TYPE must start with `shared-` or `fpic-`.
     '''
     # Build mupdf.
-    
     mupdf_local = get_mupdf()
+    log( f'{mupdf_local=}')
     if mupdf_local:
         if not mupdf_local.endswith( '/'):
             mupdf_local += '/'
