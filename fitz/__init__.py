@@ -15542,7 +15542,7 @@ def ENSURE_OPERATION( pdf):
 
 def PyUnicode_DecodeRawUnicodeEscape(s, errors='strict'):
     # fixme: handle escape sequencies
-    ret = s.decode('utf8')
+    ret = s.decode('utf8', errors=errors)
     z = ret.find(chr(0))
     if z >= 0:
         ret = ret[:z]
