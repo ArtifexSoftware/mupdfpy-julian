@@ -6518,9 +6518,6 @@ class Page:
             page = page.super()
         else:
             assert 0, f'Unrecognised type(page)={type(page)}'
-        jlib.log( f'{type(page)=} {page=}')
-        jlib.log( f'{type(dev)=} {dev=}')
-        jlib.log( f'{type(ctm)=} {ctm=}')
         mupdf.fz_run_page(page, dev, ctm, mupdf.FzCookie());
         mupdf.fz_close_device(dev)
         return tpage
