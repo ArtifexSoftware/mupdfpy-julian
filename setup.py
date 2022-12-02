@@ -72,6 +72,7 @@ import os
 import textwrap
 import pipcl
 import platform
+import shutil
 import subprocess
 import sys
 
@@ -314,7 +315,7 @@ def build():
     
     if mupdf_local:
         log( f'Building mupdf.')
-        #shutil.copy2( 'fitz/_config.h', f'{mupdf_local}include/mupdf/fitz/config.h')
+        shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}include/mupdf/fitz/config.h')
     
         if platform.system() == 'Windows' or platform.system().startswith('CYGWIN'):
             # Windows build.
