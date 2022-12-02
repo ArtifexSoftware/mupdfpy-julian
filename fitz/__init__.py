@@ -7378,13 +7378,15 @@ class Page:
         CheckParent(self)
         #val = _fitz.Page_first_annot(self)
         page = self._pdf_page()
-        if page:
-            annot = mupdf.pdf_first_annot(page)
-        val = Annot(annot) if annot else None
-        if val:
-            val.thisown = True
-            val.parent = weakref.proxy(self) # owning page object
-            self._annot_refs[id(val)] = val
+        if not page:
+            return
+        annot = mupdf.pdf_first_annot(page)
+        if not annot.m_internal:
+            return
+        val = Annot(annot)
+        val.thisown = True
+        val.parent = weakref.proxy(self) # owning page object
+        self._annot_refs[id(val)] = val
         return val
 
     @property
@@ -7401,17 +7403,18 @@ class Page:
         #val = _fitz.Page_first_widget(self)
         annot = 0
         page = self._pdf_page()
-        if page:
-            annot = mupdf.pdf_first_widget(page)
+        if not page:
+            return
+        annot = mupdf.pdf_first_widget(page)
+        if not annot.m_internal:
+            return
         val = Annot(annot)
-
-        if val.this.m_internal:
-            val.thisown = True
-            val.parent = weakref.proxy(self) # owning page object
-            self._annot_refs[id(val)] = val
-            widget = Widget()
-            TOOLS._fill_widget(val, widget)
-            val = widget
+        val.thisown = True
+        val.parent = weakref.proxy(self) # owning page object
+        self._annot_refs[id(val)] = val
+        widget = Widget()
+        TOOLS._fill_widget(val, widget)
+        val = widget
         return val
 
     def get_bboxlog(self):
@@ -7852,26 +7855,24 @@ class Page:
         #val = _fitz.Page_load_links(self)
 
         val = mupdf.fz_load_links( self.this)
-        #jlib.log( 'fz_load_links => {val=}')
-        #jlib.log( '{=val.m_internal_value()}')
-        val = Link( val) if val.m_internal else None
-
-        if val:
-            val.thisown = True
-            val.parent = weakref.proxy(self) # owning page object
-            self._annot_refs[id(val)] = val
+        if not val.m_internal:
+            return
+        val = Link( val)
+        val.thisown = True
+        val.parent = weakref.proxy(self) # owning page object
+        self._annot_refs[id(val)] = val
+        val.xref = 0
+        val.id = ""
+        if self.parent.is_pdf:
+            xrefs = self.annot_xrefs()
+            xrefs = [x for x in xrefs if x[1] == mupdf.PDF_ANNOT_LINK]
+            if xrefs:
+                link_id = xrefs[0]
+                val.xref = link_id[0]
+                val.id = link_id[2]
+        else:
             val.xref = 0
             val.id = ""
-            if self.parent.is_pdf:
-                xrefs = self.annot_xrefs()
-                xrefs = [x for x in xrefs if x[1] == mupdf.PDF_ANNOT_LINK]
-                if xrefs:
-                    link_id = xrefs[0]
-                    val.xref = link_id[0]
-                    val.id = link_id[2]
-            else:
-                val.xref = 0
-                val.id = ""
         return val
 
     #----------------------------------------------------------------
@@ -15011,9 +15012,9 @@ def JM_search_stext_page(page, needle):
                 haystack += rune
                 hs = haystack_string[haystack:]
                 #break
-            assert haystack_string[haystack] == '\n'
+            assert haystack_string[haystack] == '\n', f'{haystack=} {haystack_string[haystack]=}'
             haystack += 1
-        assert haystack_string[haystack] == '\n'
+        assert haystack_string[haystack] == '\n', f'{haystack=} {haystack_string[haystack]=}'
         haystack += 1
     #no_more_matches:;
     return quads
