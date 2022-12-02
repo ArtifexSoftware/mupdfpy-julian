@@ -4919,7 +4919,6 @@ class Font:
             is_italic=0,
             is_serif=0,
             ):
-        jlib.log( f"Font.__init__() 1: {fontname=} {fontfile=} {type(fontbuffer)=} {script=} {language=} {ordering=} {is_bold=} {is_italic=} {is_serif=}")
         
         if fontbuffer:
             if hasattr(fontbuffer, "getvalue"):
@@ -4944,28 +4943,21 @@ class Font:
                     "korea-s",
                     "cjk",
                     ):
-                jlib.log( "Font(): setting ordering=0")
                 ordering = 0
 
             elif fontname.lower() in fitz_fontdescriptors.keys():
                 import pymupdf_fonts  # optional fonts
                 fontbuffer = pymupdf_fonts.myfont(fontname)  # make a copy
-                jlib.log( 'setting fontname to None')
                 fontname = None  # ensure using fontbuffer only
                 del pymupdf_fonts  # remove package again
 
             elif ordering < 0:
                 fontname = Base14_fontdict.get(fontname.lower(), fontname)
-                jlib.log( 'Font(): changed fontname to {fontname}')
 
         lang = mupdf.fz_text_language_from_string(language)
-        jlib.log( f'Font() 2: {lang=} {type(fontbuffer)=}')
-        #jlib.log( '{=fontname}')
         font = JM_get_font(fontname, fontfile,
                    fontbuffer, script, lang, ordering,
                    is_bold, is_italic, is_serif)
-        jlib.log( f'Font() 3: JM_get_font() => {font.m_internal.name=}')
-        #jlib.log( 'mupdf.fz_font_flags(font):')
         if 0:
             flags = mupdf.fz_font_flags(font)
             if mupdf_cppyy:
@@ -5143,9 +5135,6 @@ class Font:
     def is_writable(self):
         #return _fitz.Font_is_writable(self)
         font = self.this
-        #jlib.log( '{=mupdf.fz_font_t3_procs(font) bool(mupdf.fz_font_t3_procs(font))}')
-        #jlib.log( '{mupdf.font_flags(font.m_internal).ft_substitute=}')
-        #jlib.log( '{mupdf.pdf_font_writing_supported(font)=}')
         flags = mupdf.ll_fz_font_flags(font.m_internal)
         if mupdf_cppyy:
             # cppyy doesn't handle bitfields correctly.
@@ -5154,15 +5143,11 @@ class Font:
         else:
             ft_substitute = flags.ft_substitute
         
-        b = mupdf.fz_font_t3_procs(font)
-        jlib.log( f'{font.m_internal.name=} {mupdf.fz_font_t3_procs(font)=} {mupdf.ll_fz_font_flags(font.m_internal).ft_substitute=} {mupdf.pdf_font_writing_supported(font)=}')
         if ( mupdf.ll_fz_font_t3_procs(font.m_internal)
                 or ft_substitute
                 or not mupdf.pdf_font_writing_supported(font)
                 ):
-            jlib.log( 'Returning False')
             return False
-        jlib.log( 'Returning True')
         return True
 
     @property
@@ -13474,7 +13459,6 @@ def JM_get_font(
     '''
     return a fz_font from a number of parameters
     '''
-    jlib.log( f'JM_get_font: {fontname=} {fontfile=} {type(fontbuffer)=} {script=} {lang=} {ordering=} {is_bold=} {is_italic=} {is_serif=}')
     index = 0
     font = None
     if fontfile:
@@ -13494,22 +13478,16 @@ def JM_get_font(
 
     if ordering > -1:
         # goto have_cjk;
-        jlib.log(f"have_cjk {ordering=}\n");
         data, size, index = mupdf.fz_lookup_cjk_font(ordering)
-        jlib.log( f'{ordering=} {data=} {size=} {index=}')
         if data:
             font = mupdf.fz_new_font_from_memory( None, data, size, index, 0);
-            jlib.log(f'{font=}')
         if not font or not font.m_internal:
-            jlib.log( 'MSG_FONT_FAILED')
             raise RuntimeError( MSG_FONT_FAILED)
-        jlib.log( 'after fz_lookup_cjk_font() + fz_new_font_from_memory(): {font.m_internal.name=}')
         return font
 
     if fontname:
         # goto have_base14;
         data, size = mupdf.fz_lookup_base14_font(fontname)
-        jlib.log( f'{data=} {size=}')
         if data:
             font = mupdf.fz_new_font_from_memory(fontname, data, size, 0, 0)
         if not font or font.m_internal:
@@ -13517,12 +13495,10 @@ def JM_get_font(
             return font
 
         data, size = mupdf.fz_lookup_builtin_font(fontname, is_bold, is_italic)
-        jlib.log( f'{data=} {size=}')
         if data:
             font = mupdf.fz_new_font_from_memory(fontname, data, size, 0, 0)
         if not font or not font.m_internal:
             raise RuntimeError( MSG_FONT_FAILED)
-        jlib.log( f'returning with {font.m_internal.name=}')
         return font
 
 def JM_get_fontbuffer(doc, xref):
@@ -15685,7 +15661,7 @@ def Page__add_text_marker(self, quads, annot_type):
         JM_add_annot_id(annot, "A")
         final()
     except Exception as e:
-        if 1 or g_exceptions_verbose:    jlib.exception_info()
+        if g_exceptions_verbose:    jlib.exception_info()
         final()
         return
     return Annot(annot)
