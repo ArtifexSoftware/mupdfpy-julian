@@ -9840,7 +9840,7 @@ class Shape:
     def finish(
             self,
             width: float = 1,
-            color: OptSeq = None,
+            color: OptSeq = (0,),
             fill: OptSeq = None,
             lineCap: int = 0,
             lineJoin: int = 0,
@@ -9859,14 +9859,15 @@ class Shape:
             morphing. Also whether to close the path
             by connecting last to first point.
         """
-        even_odd = True if even_odd else False
         if self.draw_cont == "":  # treat empty contents as no-op
             return
 
         if width == 0:  # border color makes no sense then
             color = None
-        elif color is None:  # vice versa
+        elif color == None:  # vice versa
             width = 0
+        # if color == None and fill == None:
+        #     raise ValueError("at least one of 'color' or 'fill' must be given")
         color_str = ColorCode(color, "c")  # ensure proper color string
         fill_str = ColorCode(fill, "f")  # ensure proper fill string
 
@@ -9881,7 +9882,7 @@ class Shape:
         if alpha != None:
             self.draw_cont = "/%s gs\n" % alpha + self.draw_cont
 
-        if width != 1:
+        if width != 1 and width != 0:
             self.draw_cont += "%g w\n" % width
 
         if lineCap != 0:
