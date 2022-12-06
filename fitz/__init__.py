@@ -345,9 +345,9 @@ class Annot:
         page = mupdf.pdf_annot_page( annot)
         pdf = page.doc()
         type_ = mupdf.pdf_annot_type( annot)
-        fcol = [1, 1, 1, 1] # std fill color: white
-        nfcol = 0   # number of color components
-        nfcol = JM_color_FromSequence(fill_color, fcol)
+        #fcol = [1, 1, 1, 1] # std fill color: white
+        #nfcol = 0   # number of color components
+        nfcol, fcol = JM_color_FromSequence(fill_color)
 
         try:
             # remove fill color from unsupported annots
@@ -6157,10 +6157,12 @@ class Page:
             ):
         #return _fitz.Page__add_freetext_annot(self, rect, text, fontsize, fontname, text_color, fill_color, align, rotate)
         page = self._pdf_page()
-        fcol = [1, 1, 1, 1] # fill color: white
-        nfcol = JM_color_FromSequence(fill_color, fcol)
-        tcol = [0, 0, 0, 0]  # std. text color: black
-        ntcol = JM_color_FromSequence(text_color, tcol)
+        #fcol = [1, 1, 1, 1] # fill color: white
+        nfcol, fcol = JM_color_FromSequence(fill_color)
+        print(f"{nfcol=}")
+        #tcol = [0, 0, 0, 0]  # std. text color: black
+        ntcol, tcol = JM_color_FromSequence(text_color)
+        print(f"{ntcol=}")
         r = JM_rect_from_py(rect)
         if r.fz_is_infinite_rect() or r.fz_is_empty_rect():
             raise ValueError( MSG_BAD_RECT)
@@ -6172,6 +6174,7 @@ class Page:
         mupdf.pdf_dict_put_int( annot_obj, PDF_NAME('Q'), align);
 
         if nfcol > 0:
+            print(f"calling pdf_set_annot_color() {nfcol=} {fcol=}")
             mupdf.pdf_set_annot_color( annot, fcol[:nfcol])
 
         # insert the default appearance string
@@ -6282,7 +6285,7 @@ class Page:
         # TODO calculate de-rotated rect
         mupdf.pdf_set_annot_rect(annot, r)
         if fill:
-            nfcol = JM_color_FromSequence(fill, fcol)
+            nfcol, fcol = JM_color_FromSequence(fill)
             arr = mupdf.pdf_new_array(page.doc(), nfcol)
             for i in range(nfcol):
                 mupdf.pdf_array_push_real(arr, fcol[i])
@@ -10970,7 +10973,7 @@ class TextWriter:
             ncol = 1
             dev_color = [0, 0, 0, 0]
             if color:
-                ncol = JM_color_FromSequence(color, dev_color)
+                ncol, dev_color = JM_color_FromSequence(color)
             if ncol == 3:
                 colorspace = mupdf.fz_device_rgb()
             elif ncol == 4:
@@ -12704,32 +12707,64 @@ def JM_choice_options(annot):
     return liste
 
 
-def JM_color_FromSequence(color, col):
-    if not color or (not isinstance(color, list) and not isinstance(color, float)):
-        return 1
-    if isinstance(color, float):    # maybe just a single float
-        c = color
-        if not _INRANGE(c, 0, 1):
-            return 1
-        col[0] = c
-        return 1
-
+def JM_color_FromSequence(color):
+    print(f"JM_color_FromSequence(): {color=}")
+    #if color is None:# or (not isinstance(color, list) and not isinstance(color, float)):
+    #    print(f"not color or (not isinstance(color, list) and not isinstance(color, float)) {color=}")
+    #    return -1
+    
+    if isinstance(color, (int, float)):    # maybe just a single float
+        color = color[0]
+        #print(f"JM_color_FromSequence(): isinstance(color, float)")
+        #c = color
+        #if not _INRANGE(c, 0, 1):
+        #    print(f"JM_color_FromSequence(): not _INRANGE(c, 0, 1): {c=}")
+        #    c = 1
+        #col[0] = c
+        #return 1
+    
+    if not isinstance( color, (list, tuple)):
+        print(f"Not list of tuple: {color=}")
+        return -1, []
+    
+    if len(color) not in (0, 1, 3, 4):
+        return -1, []
+    
+    ret = color[:]
+    for i in range(len(ret)):
+        if ret[i] < 0 or ret[i] > 1:
+            ret[i] = 1
+    print(f"JM_color_FromSequence(): returning {len(ret)=} {ret=}")
+    return len(ret), ret
+    
     len_ = len(color)
+    if len_ == 0:
+        return 0
+    
     if not _INRANGE(len_, 1, 4) or len_ == 2:
-        return 1
+        print(f"JM_color_FromSequence(): not _INRANGE(len_, 1, 4) or len_ == 2 {len=}")
+        return -1
 
-    mcol = [0,0,0,0]    # local color storage
+    #mcol = [0,0,0,0]    # local color storage
+    #for i in range(len_):
+    #    print(f"JM_color_FromSequence(): {i=}")
+    #    c = color[i]
+    #    if c < 0 or c > 1:
+    #        c = 1
+    #    mcol[i] = c
+    #    
+    #    if i < len(mcol):
+    #        mcol[i] = color[i]
+    #        rc = 0
+    #    else:
+    #        rc = 1
+    #    if not _INRANGE(mcol[i], 0, 1) or rc == 1:
+    #        mcol[i] = 1;
     for i in range(len_):
-        if i < len(mcol):
-            mcol[i] = color[i]
-            rc = 0
-        else:
-            rc = 1
-        if not _INRANGE(mcol[i], 0, 1) or rc == 1:
-            mcol[i] = 1;
-
-    for i in range(len_):
-        col[i] = mcol[i]
+        c = color[i]
+        if c < 0 or c > 1:
+            c = 1
+        col[i] = c
     return len_
 
 
