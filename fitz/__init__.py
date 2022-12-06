@@ -108,8 +108,8 @@ skip_quad_corrections = 0
 mupdf_cppyy = os.environ.get( 'MUPDF_CPPYY')
 if mupdf_cppyy is not None:
     # Use cppyy bindings; experimental.
-    print( f'{__file__}: $MUPDF_CPPYY={mupdf_cppyy!r} so attempting to import mupdf_cppyy.')
-    print( f'{__file__}: $PYTHONPATH={os.environ["PYTHONPATH"]}')
+    jlib.log( f'{__file__}: $MUPDF_CPPYY={mupdf_cppyy!r} so attempting to import mupdf_cppyy.')
+    jlib.log( f'{__file__}: $PYTHONPATH={os.environ["PYTHONPATH"]}')
     if mupdf_cppyy == '':
         import mupdf_cppyy
     else:
@@ -150,7 +150,7 @@ def FITZEXCEPTION( e):
     raise RuntimeError( str( e))
 
 def FITZEXCEPTION2( e):
-    #print(f'FITZEXCEPTION2: type(e)={type(e)} str(e)={str(e)} repr(e)={repr(e)}', file=sys.stderr)
+    #jlib.log(f'FITZEXCEPTION2: type(e)={type(e)} str(e)={str(e)} repr(e)={repr(e)}', file=sys.stderr)
     if str(e) == MSG_BAD_FILETYPE:
         raise ValueError( str(e))
     else:
@@ -16172,10 +16172,10 @@ def jm_checkrect():
     #as '+1' for anti-clockwise, '-1' for clockwise orientation.
     if ll.y != lr.y:    # not horizontal
         #goto drop_out
-        return 1
+        return 0
     if lr.x != ur.x:    # not vertical
         #goto drop_out;
-        return 1
+        return 0
     if ur.y != ul.y:    # not horizontal
         #goto drop_out;
         return 0
@@ -16198,7 +16198,7 @@ def jm_checkrect():
     rect = ( 're', JM_py_from_rect(r), orientation)
     items[ len_ - 3] = rect # replace item -3 by rect
     del items[ len_ - 2 : len_] # delete remaining 2 items
-    return 1;
+    return 1
 
 
 def jm_trace_text( out, text, type_, ctm, colorspace, color, alpha, seqno):
@@ -16408,11 +16408,14 @@ def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, al
         trace_device.ctm = mupdf.FzMatrix( ctm)  # fz_concat(ctm, trace_device_ptm);
         trace_device.path_type = trace_device.FILL_PATH
         jm_tracedraw_path( dev, ctx, path)
+        print(f'jm_tracedraw_fill_path(): {trace_device.dev_pathdict=}')
         if trace_device.dev_pathdict is None:
+            print(f'jm_tracedraw_fill_path(): trace_device.dev_pathdict is None, returning early')
             return
         #item_count = len(trace_device.dev_pathdict[ dictkey_items])
         #if item_count == 0:
         #    return
+        print(f'jm_tracedraw_fill_path(): setting trace_device.dev_pathdict, closePath=False')
         trace_device.dev_pathdict[ dictkey_type] ="f"
         trace_device.dev_pathdict[ "even_odd"] = even_odd
         trace_device.dev_pathdict[ "fill_opacity"] = alpha
@@ -16532,14 +16535,15 @@ class Walker(mupdf.FzPathWalker2):
             raise
 
     def closepath(self, ctx):    # trace_close().
-        #jlib.log('{trace_device.dev_pathdict=}')
+        jlib.log('{trace_device.dev_pathdict=}')
         try:
+            print(f'{trace_device.dev_linecount=}')
             if trace_device.dev_linecount == 3:
                 if jm_checkrect():
+                    jlib.log(f'closepath(): dev_linecount == 3 and jm_checkrect() true')
                     return
-            else:
-                trace_device.dev_pathdict[ "closePath"] = True
-                dev_linecount = 0   # reset # of consec. lines
+            trace_device.dev_pathdict[ "closePath"] = True
+            dev_linecount = 0   # reset # of consec. lines
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
@@ -16570,7 +16574,7 @@ def jm_tracedraw_path(dev, ctx, path):
 
 
 def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
-    #print(f'jm_tracedraw_stroke_path(): trace_device.dev_pathdict={trace_device.dev_pathdict}', file=sys.stderr)
+    #jlib.log(f'jm_tracedraw_stroke_path(): trace_device.dev_pathdict={trace_device.dev_pathdict}', file=sys.stderr)
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
@@ -18329,7 +18333,7 @@ def repair_mono_font(page: "Page", font: "Font") -> None:
     width = int(round((font.glyph_advance(32) * 1000)))
     for xref in xrefs:
         if not TOOLS.set_font_width(doc, xref, width):
-            print("Cannot set width for '%s' in xref %i" % (font.name, xref))
+            jlib.log("Cannot set width for '%s' in xref %i" % (font.name, xref))
 
 def retainpage(doc, parent, kids, page):
     '''
@@ -19206,10 +19210,10 @@ def restore_aliases():
         text = warnings.formatwarning(msg, cat, filename, lineno, line=line)
         s = text.find("FitzDeprecation")
         if s < 0:
-            print(text, file=sys.stderr)
+            jlib.log(text, file=sys.stderr)
             return
         text = text[s:].splitlines()[0][4:]
-        print(text, file=sys.stderr)
+        jlib.log(text, file=sys.stderr)
 
     warnings.showwarning = showthis
 
