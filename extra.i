@@ -435,15 +435,18 @@ static const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
 //----------------------------------------------------------------------------
 // Turn fz_buffer into a Python bytes object
 //----------------------------------------------------------------------------
-static std::string JM_BinFromBuffer( mupdf::FzBuffer& buffer)
+static PyObject* JM_BinFromBuffer( mupdf::FzBuffer& buffer)
 {
-    if (!buffer.m_internal) return nullptr;
-    unsigned char *c = NULL;
+    if (!buffer.m_internal)
+    {
+        return PyBytes_FromStringAndSize( "", 0);
+    }
+    unsigned char* c = nullptr;
     size_t len = mupdf::fz_buffer_storage( buffer, &c);
-    return std::string( (char*) c, len);
+    return PyBytes_FromStringAndSize( (const char*) c, len);
 }
 
-static std::string Annot_getAP( mupdf::PdfAnnot& annot)
+static PyObject* Annot_getAP( mupdf::PdfAnnot& annot)
 {
     //std::cerr << __FILE__ << __LINE__ << ": annot.m_internal=" << annot.m_internal << "\n";
     mupdf::PdfObj annot_obj = mupdf::pdf_annot_obj( annot);
@@ -456,13 +459,9 @@ static std::string Annot_getAP( mupdf::PdfAnnot& annot)
     if (mupdf::pdf_is_stream( ap))
     {
         mupdf::FzBuffer res = mupdf::pdf_load_stream( ap);
-        if (res.m_internal)
-        {
-            std::string r = JM_BinFromBuffer( res);
-            return r;
-        }
+        return JM_BinFromBuffer( res);
     }
-    return "";
+    return PyBytes_FromStringAndSize( "", 0);
 }
 
 void Tools_update_da(struct mupdf::PdfAnnot& this_annot, const char *da_str)
@@ -1617,7 +1616,7 @@ std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page);
 mupdf::PdfAnnot _add_caret_annot( mupdf::PdfPage& self, mupdf::FzPoint& point);
 mupdf::PdfAnnot _add_caret_annot( mupdf::FzPage& self, mupdf::FzPoint& point);
 const char* Tools_parse_da( mupdf::PdfAnnot& this_annot);
-std::string Annot_getAP( mupdf::PdfAnnot& annot);
+PyObject* Annot_getAP( mupdf::PdfAnnot& annot);
 void Tools_update_da(struct mupdf::PdfAnnot& this_annot, const char *da_str);
 mupdf::FzPoint JM_point_from_py(PyObject *p);
 mupdf::FzRect Annot_rect(mupdf::PdfAnnot& annot);
