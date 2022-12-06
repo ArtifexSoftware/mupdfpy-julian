@@ -6169,9 +6169,7 @@ class Page:
         mupdf.pdf_dict_put_int( annot_obj, PDF_NAME('Q'), align);
 
         if nfcol > 0:
-            print(f"calling pdf_set_annot_color() {nfcol=} {fcol=}")
             mupdf.pdf_set_annot_color( annot, fcol[:nfcol])
-            print(f"pdf_set_annot_color() returned")
 
         # insert the default appearance string
         JM_make_annot_DA(annot, ntcol, tcol, fontname, fontsize)
@@ -12424,7 +12422,6 @@ def JM_annot_set_border(border, doc, annot_obj):
             d = ndashes[i]
             mupdf.pdf_array_push_int(darr, d)
         mupdf.pdf_dict_putl( annot_obj, darr, mupdf.PDF_ENUM_NAME_BS, mupdf.PDF_ENUM_NAME_D)
-        #annot_obj.pdf_dict_putl(darr, mupdf.PDF_ENUM_NAME_BS, mupdf.PDF_ENUM_NAME_D)
         nstyle = "D"
 
     mupdf.pdf_dict_putl(
@@ -12436,7 +12433,7 @@ def JM_annot_set_border(border, doc, annot_obj):
 
     val = JM_get_border_style(nstyle)
 
-    annot_obj.pdf_dict_putl(val, mupdf.PDF_ENUM_NAME_BS, mupdf.PDF_ENUM_NAME_S)
+    mupdf.pdf_dict_putl(annot_obj, val, mupdf.PDF_ENUM_NAME_BS, mupdf.PDF_ENUM_NAME_S)
 
 
 def JM_append_rune(buff, ch):
@@ -14162,6 +14159,10 @@ def JM_listbox_value( annot):
 
 
 def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
+    # PyMuPDF uses a fz_buffer to build up the string, but it's non-trivial to
+    # convert the fz_buffer's `unsigned char*` into a `const char*` suitable
+    # for passing to pdf_dict_put_text_string(). So instead we build up the
+    # string directly in Python.
     buf = ''
     if ncol <= 1:
         buf += f'{col[0]} g '
@@ -14171,27 +14172,6 @@ def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
         buf += f'{col[0]} {col[1]} {col[2]} {col[3]} k '
     buf += f'/{JM_expand_fname(fontname)} {fontsize} Tf'
     annot.pdf_annot_obj().pdf_dict_put_text_string(mupdf.PDF_ENUM_NAME_DA, buf)
-    
-    
-    '''
-    buf = mupdf.FzBuffer(50)
-    if ncol <= 1:
-        buf.fz_append_string(f'{col[0]} g ');
-    elif ncol < 4:
-        buf.fz_append_string(f'{col[0]} {col[1]} {col[2]} rg ')
-    else:
-        buf.fz_append_string(f'{col[0]} {col[1]} {col[2]} {col[3]} k ')
-
-    buf.fz_append_string(f'/{JM_expand_fname(fontname)} {fontsize} Tf')
-    len_, da = buf.fz_buffer_storage()
-    print(f"{len_=} {da=}")
-    #buf_bytes = mupdf.raw_to_python_bytes(da, len_)
-    #buf_bytes = mupdf.fz_buffer_storage_memoryview( buf)
-    #buf_string = buf_bytes.decode('utf-8')
-    #buf_string = str( buf_bytes, 'utf8')
-    #annot.pdf_annot_obj().pdf_dict_put_string(mupdf.PDF_ENUM_NAME_DA, buf_string)
-    annot.pdf_annot_obj().pdf_dict_put_string(mupdf.PDF_ENUM_NAME_DA, da, len_)
-    '''
 
 
 def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
