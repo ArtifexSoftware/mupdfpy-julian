@@ -12707,7 +12707,6 @@ def JM_color_FromSequence(color):
         color = color[0]
     
     if not isinstance( color, (list, tuple)):
-        print(f"Not list of tuple: {color=}")
         return -1, []
     
     if len(color) not in (0, 1, 3, 4):
@@ -14164,12 +14163,16 @@ def JM_make_annot_DA(annot, ncol, col, fontname, fontsize):
     # for passing to pdf_dict_put_text_string(). So instead we build up the
     # string directly in Python.
     buf = ''
-    if ncol <= 1:
-        buf += f'{col[0]} g '
-    elif ncol < 4:
-        buf += f'{col[0]} {col[1]} {col[2]} rg '
+    if ncol < 1:
+        buf += f'0 g '
+    elif ncol == 1:
+        buf += f'{col[0]:g} g '
+    elif ncol == 2:
+        assert 0
+    elif ncol == 3:
+        buf += f'{col[0]:g} {col[1]:g} {col[2]:g} rg '
     else:
-        buf += f'{col[0]} {col[1]} {col[2]} {col[3]} k '
+        buf += f'{col[0]:g} {col[1]:g} {col[2]:g} {col[3]:g} k '
     buf += f'/{JM_expand_fname(fontname)} {fontsize} Tf'
     annot.pdf_annot_obj().pdf_dict_put_text_string(mupdf.PDF_ENUM_NAME_DA, buf)
 
