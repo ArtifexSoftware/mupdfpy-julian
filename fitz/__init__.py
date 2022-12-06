@@ -16535,7 +16535,7 @@ class Walker(mupdf.FzPathWalker2):
             raise
 
     def closepath(self, ctx):    # trace_close().
-        jlib.log('{trace_device.dev_pathdict=}')
+        jlib.log(f'{trace_device.dev_pathdict=}')
         try:
             print(f'{trace_device.dev_linecount=}')
             if trace_device.dev_linecount == 3:
@@ -16623,7 +16623,7 @@ def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, al
 
 
 def jm_tracedraw_stroke_text(dev, ctx, text, stroke, ctm, colorspace, color, alpha, color_params):
-    jlib.log('{trace_device.dev_pathdict=}')
+    jlib.log(f'{trace_device.dev_pathdict=}')
     out = dev.out
     jm_trace_text(out, text, 1, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
