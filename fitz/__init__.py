@@ -24,7 +24,8 @@ if not jlib:
         @staticmethod
         def exception_info():
             import traceback
-            return traceback.print_exc()
+            print(f'exception_info:')
+            traceback.print_exc(file=sys.stdout)
     
         class Timings:
             def __init__( self, *args, **kwargs):   pass
@@ -14525,7 +14526,7 @@ def JM_mupdf_warning( message):
     sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_warnings:
-        sys.stderr.write(f'mupdf: {message}\n')
+        sys.stderr.write(f'mupdf warning: {message}\n')
 
 
 def JM_mupdf_error( message):
@@ -14533,7 +14534,9 @@ def JM_mupdf_error( message):
     sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_errors:
-        sys.stderr.write(f'mupdf: {message}')
+        import traceback
+        sys.stderr.write(f'mupdf error: {message}\n')
+        traceback.print_stack(file=sys.stdout)
 
 
 def JM_new_bbox_device(result):
@@ -16326,6 +16329,7 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     span_dict[ 'ascender'] = asc
     span_dict[ 'descender'] = dsc
     if colorspace:
+        jlib.log( f'Calling mupdf.fz_convert_color; {mupdf.FzColorParams()=}')
         rgb = mupdf.fz_convert_color(
                 mupdf.FzColorspace( mupdf.ll_fz_keep_colorspace( colorspace)),
                 color, mupdf.fz_device_rgb(),
@@ -16362,12 +16366,22 @@ def jm_tracedraw_color(colorspace, color):
         #    jlib.log( f'color={color}')
         #    raise
         try:
+            # Need to be careful to use a named Python object to ensure
+            # that the `params` we pass to mupdf.ll_fz_convert_color() is
+            # valid. E.g. doing:
+            #
+            #   rgb = mupdf.ll_fz_convert_color(..., mupdf.FzColorParams().internal())
+            #
+            # - seems to end up with a corrupted `params`.
+            #
+            cs = mupdf.FzColorspace( mupdf.FzColorspace.Fixed_RGB)
+            cp = mupdf.FzColorParams()
             rgb = mupdf.ll_fz_convert_color(
                     colorspace,
                     color,
-                    mupdf.FzColorspace( mupdf.FzColorspace.Fixed_RGB).m_internal,
+                    cs.m_internal,
                     None,
-                    mupdf.FzColorParams().internal(),
+                    cp.internal(),
                     )
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
@@ -18633,7 +18647,13 @@ class TOOLS:
 
     @staticmethod
     def mupdf_warnings(reset=1):
-        pass
+        '''
+        Get the MuPDF warnings/errors with optional reset (default).
+        '''
+        ret = '\n'.join( JM_mupdf_warnings_store)
+        if reset:
+            self.reset_mupdf_warnings()
+        return reset
 
     @staticmethod
     def set_annot_stem( stem=None):
