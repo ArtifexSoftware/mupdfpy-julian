@@ -8327,10 +8327,11 @@ class Pixmap:
 
     @property
     def samples_mv(self):
+        '''
+        Pixmap samples memoryview.
+        '''
         #return _fitz.Pixmap__samples_mv(self)
-        raw_data = self.this.samples()
-        raw_len = self.this.stride() * self.this.h()
-        return raw_data, raw_len
+        return self.this.fz_pixmap_samples2()
 
     @property
     def samples_ptr(self):
@@ -8500,7 +8501,8 @@ class Pixmap:
         #return _fitz.Pixmap_is_monochrome(self)
         return mupdf.fz_is_pixmap_monochrome( self.this)
 
-    def is_unicolor():
+    @property
+    def is_unicolor(self):
         '''
         Check if pixmap has only one color.
         '''
