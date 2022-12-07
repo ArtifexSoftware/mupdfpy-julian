@@ -14526,7 +14526,7 @@ def JM_mupdf_warning( message):
     sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_warnings:
-        sys.stderr.write(f'mupdf warning: {message}\n')
+        sys.stderr.write(f'mupdf: {message}\n')
 
 
 def JM_mupdf_error( message):
@@ -14534,9 +14534,7 @@ def JM_mupdf_error( message):
     sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_errors:
-        import traceback
-        sys.stderr.write(f'mupdf error: {message}\n')
-        traceback.print_stack(file=sys.stdout)
+        sys.stderr.write(f'mupdf: {message}\n')
 
 
 def JM_new_bbox_device(result):
@@ -16329,7 +16327,6 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
     span_dict[ 'ascender'] = asc
     span_dict[ 'descender'] = dsc
     if colorspace:
-        jlib.log( f'Calling mupdf.fz_convert_color; {mupdf.FzColorParams()=}')
         rgb = mupdf.fz_convert_color(
                 mupdf.FzColorspace( mupdf.ll_fz_keep_colorspace( colorspace)),
                 color, mupdf.fz_device_rgb(),
@@ -16355,16 +16352,6 @@ def jm_trace_text_span(out, span, type_, ctm, colorspace, color, alpha, seqno):
 def jm_tracedraw_color(colorspace, color):
     #jlib.log('{trace_device.dev_pathdict=}')
     if colorspace:
-        #mupdf.fz_convert_color( colorspace, color, fz_device_rgb(ctx),
-        #                 rgb, NULL, fz_default_color_params);
-        #rgb = [0.0, 0.0, 0.0]
-        #if isinstance( color, float):
-        #    color = color,
-        #try:
-        #    color2 = tuple(color) + (0,)*(4-len(color))
-        #except Exception:
-        #    jlib.log( f'color={color}')
-        #    raise
         try:
             # Need to be careful to use a named Python object to ensure
             # that the `params` we pass to mupdf.ll_fz_convert_color() is
@@ -18647,13 +18634,7 @@ class TOOLS:
 
     @staticmethod
     def mupdf_warnings(reset=1):
-        '''
-        Get the MuPDF warnings/errors with optional reset (default).
-        '''
-        ret = '\n'.join( JM_mupdf_warnings_store)
-        if reset:
-            self.reset_mupdf_warnings()
-        return reset
+        assert 0, 'Not implemented'
 
     @staticmethod
     def set_annot_stem( stem=None):
