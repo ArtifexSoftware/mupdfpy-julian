@@ -8336,9 +8336,7 @@ class Pixmap:
     @property
     def samples_ptr(self):
         #return _fitz.Pixmap__samples_ptr(self)
-        raw_data = self.this.samples()
-        raw_len = self.this.stride() * self.this.h()
-        return raw_data, raw_len
+        return self.this.fz_pixmap_samples_int()
 
     def _tobytes(self, format_):
         #return _fitz.Pixmap__tobytes(self, format)
