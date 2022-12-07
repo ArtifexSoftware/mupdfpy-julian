@@ -13488,6 +13488,19 @@ def JM_get_font(
         if not font or not font.m_internal:
             raise RuntimeError( MSG_FONT_FAILED)
         return font
+    
+    # Check for NOTO font
+    data, size, index = mupdf.fz_lookup_noto_font( script, lang)
+    font = None
+    if data:
+        font = mupdf.fz_new_font_from_memory( None, data, size, index, 0)
+    if font:
+        return font
+    font = mupdf.fz_load_fallback_font( script, lang, is_serif, is_bold, is_italic)
+    if not font or not font.m_internal:
+        raise RuntimeError( MSG_FONT_FAILED)
+    return font
+    
 
 def JM_get_fontbuffer(doc, xref):
     '''
