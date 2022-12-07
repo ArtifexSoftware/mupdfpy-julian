@@ -8176,7 +8176,7 @@ class Pixmap:
                     tptr = 0
                     sptr = 0
                     # This is a little faster than calling
-                    # pm.samples_set(), but still quite slow. E.g. reduces
+                    # pm.fz_samples_set(), but still quite slow. E.g. reduces
                     # test_pixmap.py:test_setalpha() from 6.7s to 4.5s.
                     #
                     # t=0.53
@@ -8199,7 +8199,7 @@ class Pixmap:
                 if src_pix.alpha() == pm.alpha():   # identical samples
                     #memcpy(tptr, sptr, w * h * (n + alpha));
                     for i in range(w * h * (n + alpha)):
-                        pm.samples_set(i, src_pix.samples_get(i))
+                        pm.fz_samples_set(i, src_pix.fz_samples_get(i))
                 else:
                     # t=2.56
                     tptr = 0
@@ -8208,10 +8208,10 @@ class Pixmap:
                     for i in range(w * h):
                         #memcpy(tptr, sptr, n);
                         for j in range(n):
-                            pm.samples_set(tptr + j, src_pix.samples_get(sptr + j))
+                            pm.fz_samples_set(tptr + j, src_pix.fz_samples_get(sptr + j))
                         tptr += n
                         if pm.alpha():
-                            pm.samples_set(tptr, 255)
+                            pm.fz_samples_set(tptr, 255)
                             tptr += 1
                         sptr += n + src_pix_alpha
             t = time.time() - t
@@ -8386,7 +8386,7 @@ class Pixmap:
         '''
         pm = self.this
         rc = JM_color_count( pm, clip)
-        if not r:
+        if not rc:
             raise RuntimeError( MSG_COLOR_COUNT_FAILED)
         if not colors:
             return len( rc)
@@ -8704,7 +8704,7 @@ class Pixmap:
                 alpha = data[k]
                 if zero_out:
                     for j in range(i, i+n):
-                        if pix.samples_get(j) != colors[j - i]:
+                        if pix.fz_samples_get(j) != colors[j - i]:
                             data_fix = 255
                             break
                         else:
@@ -8716,17 +8716,17 @@ class Pixmap:
                         return x // 256
 
                     if data_fix == 0:
-                        pix.samples_set(i+n, 0)
+                        pix.fz_samples_set(i+n, 0)
                     else:
-                        pix.samples_set(i+n, alpha)
+                        pix.fz_samples_set(i+n, alpha)
                     if premultiply and not bground:
                         denom = int(data[k])
                         for j in range(i, i+n):
-                            pix.samples_set(j, fz_mul255( pix.samples_get(j), alpha))
+                            pix.fz_samples_set(j, fz_mul255( pix.fz_samples_get(j), alpha))
                     elif bground:
                         for j in range( i, i+n):
                             m = bgcolor[j - i]
-                            pix.samples_set(j, fz_mul255( pix.samples_get(j) - m, alpha))
+                            pix.fz_samples_set(j, fz_mul255( pix.fz_samples_get(j) - m, alpha))
                 else:
                     pixsamples_set(i+n, data_fix)
                 i += n+1
@@ -12132,7 +12132,7 @@ def _read_samples( pixmap, offset, n):
     # bytes or similar.
     ret = []
     for i in range( n):
-        ret.append( pm.samples_get( offset + i))
+        ret.append( pixmap.fz_samples_get( offset + i))
     return bytes( ret)
 
 
@@ -12727,8 +12727,8 @@ def JM_color_count( pm, clip):
     irect = mupdf.fz_pixmap_bbox( pm)
     irect = mupdf.fz_intersect_irect(irect, mupdf.fz_round_rect(JM_rect_from_py(clip)))
     stride = pm.stride()
-    width = irect.x1() - irect.x0()
-    height = irect.y1() - irect.y0()
+    width = irect.x1 - irect.x0
+    height = irect.y1 - irect.y0
     n = pm.n()
     substride = width * n
     s = stride * (irect.y0 - pm.y()) + (irect.x0 - pm.x()) * n
@@ -13113,7 +13113,7 @@ def JM_fill_pixmap_rect_with_color(dest, col, b):
         s = destp;
         for x in range(w):
             for i in range( dest.n()):
-                dest.samples_set(s, col[i])
+                dest.fz_samples_set(s, col[i])
                 s += 1
         destp += destspan
         y -= 1
@@ -14095,14 +14095,14 @@ def JM_invert_pixmap_rect( dest, b):
         s = destp
         for x in range( w):
             for i in range( n0):
-                ss = dest.samples_get( s)
+                ss = dest.fz_samples_get( s)
                 ss = 255 - ss
-                dest.samples_set( s, ss)
+                dest.fz_samples_set( s, ss)
                 s += 1
             if alpha:
-                ss = dest.samples_get( s)
+                ss = dest.fz_samples_get( s)
                 ss += 1
-                dest.samples_set( s, ss)
+                dest.fz_samples_set( s, ss)
         destp += destspan
         y -= 1
         if y == 0:
