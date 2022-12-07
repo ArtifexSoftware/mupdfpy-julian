@@ -2356,7 +2356,7 @@ class Document:
                 font = mupdf.fz_new_font_from_memory(bfname, data, size, 0, 0)
             else:
                 buf = JM_get_fontbuffer(pdf, xref)
-                if not buffer.m_internal:
+                if not buf.m_internal:
                     raise Exception("font at xref %d is not supported" % xref)
 
                 font = mupdf.fz_new_font_from_buffer(NULL, buf, idx, 0)
@@ -17406,7 +17406,7 @@ def annot_preprocess(page: "Page") -> int:
         raise ValueError("is no PDF")
     old_rotation = page.rotation
     if old_rotation != 0:
-        page.setRotation(0)
+        page.set_rotation(0)
     return old_rotation
 
 
