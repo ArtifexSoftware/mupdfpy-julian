@@ -16408,14 +16408,11 @@ def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, al
         trace_device.ctm = mupdf.FzMatrix( ctm)  # fz_concat(ctm, trace_device_ptm);
         trace_device.path_type = trace_device.FILL_PATH
         jm_tracedraw_path( dev, ctx, path)
-        jlib.log(f'jm_tracedraw_fill_path(): {trace_device.dev_pathdict=}')
         if trace_device.dev_pathdict is None:
-            print(f'jm_tracedraw_fill_path(): trace_device.dev_pathdict is None, returning early')
             return
         #item_count = len(trace_device.dev_pathdict[ dictkey_items])
         #if item_count == 0:
         #    return
-        jlib.log(f'jm_tracedraw_fill_path(): setting trace_device.dev_pathdict, closePath=False')
         trace_device.dev_pathdict[ dictkey_type] ="f"
         trace_device.dev_pathdict[ "even_odd"] = even_odd
         trace_device.dev_pathdict[ "fill_opacity"] = alpha
@@ -16466,12 +16463,7 @@ class Walker(mupdf.FzPathWalker2):
         self.use_virtual_curveto()
         self.use_virtual_closepath()
 
-    def _show(self, prefix):
-        jlib.log(f'{prefix}: dev_pathdict: {trace_device.dev_pathdict!r}')
-    
     def moveto(self, ctx, x, y):   # trace_moveto().
-        self._show('moveto1')
-        jlib.log( f'{x=} {y=}')
         try:
             #jlib.log( '{=trace_device.ctm type(trace_device.ctm)}')
             trace_device.dev_lastpoint = mupdf.fz_transform_point(
@@ -16489,11 +16481,8 @@ class Walker(mupdf.FzPathWalker2):
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
-        self._show('moveto2')
 
     def lineto(self, ctx, x, y):   # trace_lineto().
-        self._show('lineto1')
-        jlib.log( f'{x=} {y=}')
         try:
             p1 = mupdf.fz_transform_point( mupdf.fz_make_point(x, y), trace_device.ctm)
             trace_device.dev_pathrect = mupdf.fz_include_point_in_rect( trace_device.dev_pathrect, p1)
@@ -16512,11 +16501,8 @@ class Walker(mupdf.FzPathWalker2):
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
-        self._show('lineto2')
 
     def curveto(self, ctx, x1, y1, x2, y2, x3, y3):   # trace_curveto().
-        self._show('curveto1')
-        jlib.log( f'{x1=} {y1=} {x2=} {y2=} {x3=} {y3=} ')
         try:
             trace_device.dev_linecount = 0  # reset # of consec. lines
             p1 = mupdf.fz_make_point(x1, y1)
@@ -16541,23 +16527,17 @@ class Walker(mupdf.FzPathWalker2):
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
-        self._show('curveto2')
 
     def closepath(self, ctx):    # trace_close().
-        self._show('closepath1')
         try:
-            jlib.log(f'{trace_device.dev_linecount=}')
             if trace_device.dev_linecount == 3:
                 if jm_checkrect():
-                    jlib.log(f'closepath(): dev_linecount == 3 and jm_checkrect() true')
                     return
-            jlib.log( f'closepath(): (): setting closePath=True')
             trace_device.dev_pathdict[ "closePath"] = True
             dev_linecount = 0   # reset # of consec. lines
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
             raise
-        self._show('closepath2')
 
 def jm_tracedraw_path(dev, ctx, path):
     #jlib.log('{trace_device.dev_pathdict=}')
@@ -16634,7 +16614,6 @@ def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, al
 
 
 def jm_tracedraw_stroke_text(dev, ctx, text, stroke, ctm, colorspace, color, alpha, color_params):
-    jlib.log(f'{trace_device.dev_pathdict=}')
     out = dev.out
     jm_trace_text(out, text, 1, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
