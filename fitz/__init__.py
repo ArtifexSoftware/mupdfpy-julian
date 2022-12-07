@@ -8602,8 +8602,8 @@ class Pixmap:
 
     @property
     def samples(self)->bytes:
-        raw_data, raw_len = self.samples_mv
-        return mupdf.raw_to_python_bytes( raw_data, raw_len)
+        mv = self.samples_mv
+        return bytes( mv)
 
     def save(self, filename, output=None):
         """Output as image in format determined by filename extension.
@@ -18647,7 +18647,8 @@ class TOOLS:
 
     @staticmethod
     def mupdf_warnings(reset=1):
-        assert 0, 'Not implemented'
+        # fixme: not implemented.
+        pass
 
     @staticmethod
     def set_annot_stem( stem=None):
