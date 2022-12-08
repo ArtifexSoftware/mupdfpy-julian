@@ -487,9 +487,41 @@ def sdist():
     return pipcl.git_items( g_root)
 
 
+classifier = [
+        #"Development Status :: 5 - Production/Stable",
+        "Intended Audience :: Developers",
+        "Intended Audience :: Information Technology",
+        "Operating System :: MacOS",
+        "Operating System :: Microsoft :: Windows",
+        "Operating System :: POSIX :: Linux",
+        "Programming Language :: C",
+        "Programming Language :: Python :: 3 :: Only",
+        "Programming Language :: Python :: Implementation :: CPython",
+        "Topic :: Utilities",
+        "Topic :: Multimedia :: Graphics",
+        "Topic :: Software Development :: Libraries",
+        ]
+
+with open( f'{g_root}/README.md', encoding="utf-8") as f:
+    readme = f.read()
+
 p = pipcl.Package(
         'fitz',
-        '0.0.0',
+        '1.21.0',
+        summary="Rebased PyMuPDF bindings for the PDF toolkit and renderer MuPDF",
+        description=readme,
+        description_content_type="text/markdown",
+        classifier=classifier,
+        author="Artifex",
+        author_email="support@artifex.com",
+        requires_python=">=3.7",
+        license="GNU AFFERO GPL 3.0",
+        #project_url=[
+        #        ("Documentation", "https://pymupdf.readthedocs.io/"),
+        #        ("Source", "https://github.com/pymupdf/pymupdf"),
+        #        ("Tracker", "https://github.com/pymupdf/PyMuPDF/issues"),
+        #        ("Changelog", "https://pymupdf.readthedocs.io/en/latest/changes.html"),
+        #        ],
         fn_build=build,
         fn_sdist=sdist,
         )
