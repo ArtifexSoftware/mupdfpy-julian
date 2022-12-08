@@ -290,134 +290,54 @@ def get_mupdf():
         log( f'Running: {command}')
         subprocess.run( command, shell=True, check=False)
     
-    if 1:
-        # Use custom mupdf directory.
-        log( f'Using custom mupdf directory from $PYMUPDF_SETUP_MUPDF_BUILD: {path}')
-        assert os.path.isdir( path), f'$PYMUPDF_SETUP_MUPDF_BUILD is not a directory: {path}'
-        return path
+    # Use custom mupdf directory.
+    log( f'Using custom mupdf directory from $PYMUPDF_SETUP_MUPDF_BUILD: {path}')
+    assert os.path.isdir( path), f'$PYMUPDF_SETUP_MUPDF_BUILD is not a directory: {path}'
+    path = os.path.abspath( path)
+    return path
 
+
+linux = sys.platform.startswith( 'linux') or 'gnu' in sys.platform
+openbsd = sys.platform.startswith( 'openbsd')
+freebsd = sys.platform.startswith( 'freebsd')
+darwin = sys.platform.startswith( 'darwin')
+windows = platform.system() == 'Windows' or platform.system().startswith('CYGWIN')
 
 def build():
+    assert not windows
+    return build_unix()
+
+def build_unix():
     '''
-    We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE
-    in a similar way as a normal PyMuPDF build, except that
-    PYMUPDF_SETUP_MUPDF_BUILD_TYPE must start with `shared-` or `fpic-`.
+    We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE in a
+    similar way as a normal PyMuPDF build.
     '''
-    # Build mupdf.
-    mupdf_local = get_mupdf()
-    log( f'{mupdf_local=}')
-    if mupdf_local:
-        if not mupdf_local.endswith( '/'):
-            mupdf_local += '/'
-    
-    unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'shared-release')
-    assert unix_build_type.startswith( ( 'shared-', 'fpic-')), f'PYMUPDF_SETUP_MUPDF_BUILD_TYPE must start with `shared-` or `fpic-`'
-    
-    if mupdf_local:
-        log( f'Building mupdf.')
-        shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}include/mupdf/fitz/config.h')
-    
-        if platform.system() == 'Windows' or platform.system().startswith('CYGWIN'):
-            # Windows build.
-            devenv = os.environ.get('PYMUPDF_SETUP_DEVENV')
-            if not devenv:
-                # Search for devenv in some known locations.
-                devenv = glob.glob('C:/Program Files (x86)/Microsoft Visual Studio/2019/*/Common7/IDE/devenv.com')
-                if devenv:
-                    devenv = devenv[0]
-            if not devenv:
-                devenv = 'devenv.com'
-                log( f'Cannot find devenv.com in default locations, using: {devenv!r}')
-            windows_config = 'Win32' if word_size()==32 else 'x64'
-            command = (
-                    f'cd {mupdf_local}&&'
-                    f'"{devenv}"'
-                    f' platform/win32/mupdf.sln'
-                    f' /Build "ReleaseTesseract|{windows_config}"'
-                    f' /Project mupdf'
-                    )
-        else:
-            # Unix build.
-            flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
-            flags += ' verbose=yes'
-            env = ''
-            make = 'make'
-            if os.uname()[0] == 'Linux':
-                env += ' CFLAGS="-fPIC"'
-            if os.uname()[0] in ('OpenBSD', 'FreeBSD'):
-                make = 'gmake'
-                env += ' CFLAGS="-fPIC" CXX=clang++'
-            
-            unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
-            assert unix_build_type in ('debug', 'memento', 'release')
-            flags += f' build={unix_build_type}'
-            
-            # This is for MacOS cross-compilation, where ARCHFLAGS can be
-            # '-arch arm64'.
-            #
-            archflags = os.environ.get( 'ARCHFLAGS')
-            if archflags:
-                flags += f' XCFLAGS="{archflags}" XLIBS="{archflags}"'
-            
-            # We specify a build directory path containing 'mupdfpy' so that we
-            # coexist with non-mupdfpy builds (because mupdfpy builds have a
-            # different config.h).
-            #
-            # We also append further text to try to allow different builds to
-            # work if they reuse the mupdf directory.
-            #
-            # Using platform.machine() (e.g. 'amd64') ensures that different
-            # builds of mupdf on a shared filesystem can coexist. Using
-            # $_PYTHON_HOST_PLATFORM allows cross-compiled cibuildwheel builds
-            # to coexist, e.g. on github.
-            #
-            build_prefix = f'mupdfpy-{platform.machine()}-'
-            build_prefix_extra = os.environ.get( '_PYTHON_HOST_PLATFORM')
-            if build_prefix_extra:
-                build_prefix += f'{build_prefix_extra}-'
-            build_prefix += 'shared-'
-            unix_build_dir = f'{mupdf_local}build/{build_prefix}{unix_build_type}'
-            
-            command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
-            command += f' && echo {unix_build_dir}:'
-            command += f' && ls -l {unix_build_dir}'
-        
-        if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
-            log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
-        else:
-            log( f'Building MuPDF by running: {command}')
-            subprocess.run( command, shell=True, check=True)
-            log( f'Finished building mupdf.')
-    else:
-        # Use installed MuPDF.
-        log( f'Using system mupdf.')
-    
+    # Build MuPDF
+    #
+    mupdf_local, unix_build_dir = build_unix_mupdf()
+    log( f'{unix_build_dir=}')
     
     # Build fitz.extra module.
-    #os.makedirs( 'build', exist_ok=True)
+    #
     path_i = f'{g_root}/extra.i'
     path_cpp = f'{g_root}/fitz/extra.cpp'
     path_so = f'{g_root}/fitz/_extra.so'
-    unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'shared-release')
     cpp_flags = '-Wall'
-    #cpp_flags += ' -Wl,-O1 -Wl,-Bsymbolic-functions -Wl,-z,relro -fwrapv'
-    unix_build_type_flags = unix_build_type.split( '-')
-    if 'release' in unix_build_type_flags:
+    unix_build_dir_flags = os.path.basename( unix_build_dir).split( '-')
+    if 'release' in unix_build_dir_flags:
         cpp_flags += ' -g -O2 -DNDEBUG'
-    elif 'debug' in unix_build_type_flags or 'memento' in unix_build_type_flags:
+    elif 'debug' in unix_build_dir_flags:
         cpp_flags += ' -g'
-        if unix_build_type == 'memento':
-            cpp_flags += ' -DMEMENTO'
+    elif 'memento' in unix_build_dir_flags:
+        cpp_flags += ' -g -DMEMENTO'
     else:
-        assert 0, f'Unrecognised PYMUPDF_SETUP_MUPDF_BUILD_TYPE: {unix_build_type}'
-    
-    #cpp_flags += ' -DSWIGINTERN='
+        assert 0, f'Unrecognised {unix_build_dir=}'
     
     mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
     if mupdf_dir:
         include1 = f'-I{mupdf_dir}/platform/c++/include'
         include2 = f'-I{mupdf_dir}/include'
-        linkdir = f'-L {mupdf_dir}/build/{unix_build_type}'
+        linkdir = f'-L {unix_build_dir}'
     else:
         # Use system mupdf.
         include1 = ''
@@ -425,7 +345,7 @@ def build():
         linkdir = ''
     
     # Run swig.
-    if 0 or _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
+    if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
         _run( f'''
                 swig
                     -Wall
@@ -442,17 +362,16 @@ def build():
     else:
         log( f'Not running swig because mtime:{path_i} < mtime:{path_cpp}')
     
-    python_flags = _python_compile_flags()
-
     # Compile and link swig-generated code.
     #
     # Fun fact - on Linux, if the -L and -l options are before '{path_cpp} -o
     # {path_so}' they seem to be ignored...
     #
-    if 0 or _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
+    python_flags = _python_compile_flags()
+    if _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
         libs = list()
         libs.append( 'mupdfcpp')
-        if unix_build_type.startswith( 'shared-'):
+        if 'shared' in os.path.basename( unix_build_dir).split( '-'):
             libs.append( 'mupdf')
         libs_text = ''
         for lib in libs:
@@ -469,13 +388,15 @@ def build():
                     -Wno-unused-const-variable
                     {path_cpp}
                     -o {path_so}
-                    -L {mupdf_dir}/build/{unix_build_type}
+                    -L {unix_build_dir}
                     {libs_text}
                     -Wl,-rpath='$ORIGIN',-z,origin
                 ''')
     else:
         log( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
     
+    # Generate list of (to, from) items to return to pipcl.
+    #
     ret = []
     for p in [
             'fitz/__init__.py',
@@ -491,24 +412,95 @@ def build():
     ret.append( ( f'{g_root}/test.py', f'fitz/test.py'))
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
 
-    # This doesn't yet work. So need to set PYTHONPATH and LD_LIBRARY_PATH so
-    # that we can import mupdf python API.
     if mupdf_dir:
         # Add MuPDF runtime files.
-        
+        log( f'{unix_build_dir=}')
         for leaf in (
                 'mupdf.py',
                 '_mupdf.so',
                 'libmupdfcpp.so',
                 'libmupdf.so'
                 ):
-            from_ = f'{mupdf_dir}/build/{unix_build_type}/{leaf}'
+            from_ = f'{unix_build_dir}/{leaf}'
             to_ = f'fitz/{leaf}'
-            #to_ = f'{leaf}'
-            #to_ = to_.replace( '.so', '.cpython-39-x86_64-linux-gnu.so')
             ret.append( ( from_, to_))
 
+    for f, t in ret:
+        log( f'{f} => {t}')
     return ret
+
+def build_unix_mupdf():
+    '''
+    Builds MuPDF and returns `(mupdf_local, unix_build_dir)`:
+        mupdf_local:
+            Path of MuPDF directory.
+        unix_build_dir:
+            Absolute path of build directory within MuPDF, e.g.
+            ".../mupdf/build/mupdfpy-shared-release".
+    
+    If we are using the system MuPDF, returns `(None, None)`.
+    '''
+    mupdf_local = get_mupdf()
+    
+    if mupdf_local:
+        #log( f'Building mupdf.')
+        shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
+    
+        flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
+        flags += ' verbose=yes'
+        env = ''
+        if openbsd or freebsd:
+            env += ' CXX=clang++'
+
+        unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
+        assert unix_build_type in ('debug', 'memento', 'release'), f'{unix_build_type=}'
+
+        # Add extra flags for MacOS cross-compilation, where ARCHFLAGS can be
+        # '-arch arm64'.
+        #
+        archflags = os.environ.get( 'ARCHFLAGS')
+        if archflags:
+            flags += f' XCFLAGS="{archflags}" XLIBS="{archflags}"'
+
+        # We specify a build directory path containing 'mupdfpy' so that we
+        # coexist with non-mupdfpy builds (because mupdfpy builds have a
+        # different config.h).
+        #
+        # We also append further text to try to allow different builds to
+        # work if they reuse the mupdf directory.
+        #
+        # Using platform.machine() (e.g. 'amd64') ensures that different
+        # builds of mupdf on a shared filesystem can coexist. Using
+        # $_PYTHON_HOST_PLATFORM allows cross-compiled cibuildwheel builds
+        # to coexist, e.g. on github.
+        #
+        build_prefix = f'mupdfpy-{platform.machine()}-'
+        build_prefix_extra = os.environ.get( '_PYTHON_HOST_PLATFORM')
+        if build_prefix_extra:
+            build_prefix += f'{build_prefix_extra}-'
+        build_prefix += 'shared-'
+        unix_build_dir = f'{mupdf_local}/build/{build_prefix}{unix_build_type}'
+
+        # Unlike PyMuPDF we need MuPDF's Python bindings, so we build MuPDF
+        # with `mupdf/scripts/mupdfwrap.py` instead of running `make`.
+        #
+        command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
+        command += f' && echo {unix_build_dir}:'
+        command += f' && ls -l {unix_build_dir}'
+        
+        if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
+            log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
+        else:
+            log( f'Building MuPDF by running: {command}')
+            subprocess.run( command, shell=True, check=True)
+            log( f'Finished building mupdf.')
+    else:
+        # Use installed MuPDF.
+        log( f'Using system mupdf.')
+        unix_build_dir = None
+    
+    return mupdf_local, unix_build_dir
+    
 
 def sdist():
     '''
