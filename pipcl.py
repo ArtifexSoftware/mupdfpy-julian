@@ -334,15 +334,15 @@ class Package:
                     f'Root-Is-Purelib: false\n'
                     f'Tag: {tag}\n'
                     ,
-                    f'{dist_info_dir}WHEEL',
+                    f'{dist_info_dir}/WHEEL',
                     )
             # Add <name>-<version>.dist-info/METADATA.
             #
-            add_str(self._metainfo(), f'{dist_info_dir}METADATA')
+            add_str(self._metainfo(), f'{dist_info_dir}/METADATA')
             
             # Update <name>-<version>.dist-info/RECORD. This must be last.
             #
-            z.writestr(f'{dist_info_dir}RECORD', record.get())
+            z.writestr(f'{dist_info_dir}/RECORD', record.get())
 
         _log( f'build_wheel(): Have created wheel: {path}')
         return os.path.basename(path)
@@ -450,6 +450,10 @@ class Package:
         '''
         Called by `handle_argv()`.
         '''
+        #_log( f'argv_install(): {record_path=} {root=}')
+        
+        # Do a build and get list of files to install.
+        #
         items = []
         if self.fn_build:
             items = self.fn_build()
@@ -468,20 +472,33 @@ class Package:
                     text += f'    {i}\n'
                 raise Exception(text)
         
-        record = _Record() if record_path else None
+        dist_info_dir = self._dist_info_dir()
+        
+        if not record_path:
+            record_path = f'{root}/{dist_info_dir}/RECORD'
+        record = _Record()
+        
+        def add_file(from_abs, from_rel, to_abs, to_rel):
+            #_log(f'copying from {from_abs} to {to_abs}')
+            os.makedirs( os.path.dirname( to_abs), exist_ok=True)
+            shutil.copy2( from_abs, to_abs)
+            #_log(f'adding to record: {from_rel=} {to_rel=}')
+            record.add_file(from_rel, to_rel)
+
+        def add_str(content, to_abs, to_rel):
+            with open( to_abs, 'w') as f:
+                f.write( content)
+            record.add_content(content, to_rel)
+        
         for item in items:
             (from_abs, from_rel), (to_abs, to_rel) = self._fromto(item)
-            to_path = f'{root}/{to_rel}'
-            _log(f'copying from {from_abs} to {to_path}')
-            os.makedirs( os.path.dirname( to_path), exist_ok=True)
-            shutil.copy2( from_abs, f'{to_path}')
-            if record:
-                # Could maybe use relative path of to_path from root/.
-                record.add_file(from_abs, to_path)
+            to_abs2 = f'{root}/{to_rel}'
+            add_file( from_abs, from_rel, to_abs2, to_rel)
+        
+        add_str( self._metainfo(), f'{root}/{dist_info_dir}/METADATA', f'{dist_info_dir}/METADATA')
 
-        if record:
-            with open(record_path, 'w') as f:
-                f.write(record.get())
+        with open(record_path, 'w') as f:
+            f.write(record.get())
 
         _log(f'argv_install(): Finished.')
 
@@ -689,7 +706,7 @@ class Package:
             )
 
     def _dist_info_dir( self):
-        return f'{self.name}-{self.version}.dist-info/'
+        return f'{self.name}-{self.version}.dist-info'
 
     def _metainfo(self):
         '''
@@ -799,7 +816,7 @@ class Package:
         from_, to_ = ret
         prefix = '$dist-info/'
         if to_.startswith( prefix):
-            to_ = f'{self._dist_info_dir()}{to_[ len(prefix):]}'
+            to_ = f'{self._dist_info_dir()}/{to_[ len(prefix):]}'
         from_ = self._path_relative_to_root( from_, assert_within_root=False)
         to_ = self._path_relative_to_root(to_)
         return from_, to_
