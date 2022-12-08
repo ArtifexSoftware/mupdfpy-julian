@@ -347,9 +347,40 @@ def build():
             if os.uname()[0] in ('OpenBSD', 'FreeBSD'):
                 make = 'gmake'
                 env += ' CFLAGS="-fPIC" CXX=clang++'
-            command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/{unix_build_type} -b all'
-            command += f' && echo "build/{unix_build_type}:"'
-            command += f' && ls -l build/{unix_build_type}'
+            
+            unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
+            assert unix_build_type in ('debug', 'memento', 'release')
+            flags += f' build={unix_build_type}'
+            
+            # This is for MacOS cross-compilation, where ARCHFLAGS can be
+            # '-arch arm64'.
+            #
+            archflags = os.environ.get( 'ARCHFLAGS')
+            if archflags:
+                flags += f' XCFLAGS="{archflags}" XLIBS="{archflags}"'
+            
+            # We specify a build directory path containing 'mupdfpy' so that we
+            # coexist with non-mupdfpy builds (because mupdfpy builds have a
+            # different config.h).
+            #
+            # We also append further text to try to allow different builds to
+            # work if they reuse the mupdf directory.
+            #
+            # Using platform.machine() (e.g. 'amd64') ensures that different
+            # builds of mupdf on a shared filesystem can coexist. Using
+            # $_PYTHON_HOST_PLATFORM allows cross-compiled cibuildwheel builds
+            # to coexist, e.g. on github.
+            #
+            build_prefix = f'mupdfpy-{platform.machine()}-'
+            build_prefix_extra = os.environ.get( '_PYTHON_HOST_PLATFORM')
+            if build_prefix_extra:
+                build_prefix += f'{build_prefix_extra}-'
+            build_prefix += 'shared-'
+            unix_build_dir = f'{mupdf_local}build/{build_prefix}{unix_build_type}'
+            
+            command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
+            command += f' && echo {unix_build_dir}:'
+            command += f' && ls -l {unix_build_dir}'
         
         if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
             log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
