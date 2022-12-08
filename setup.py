@@ -409,7 +409,6 @@ def build_unix():
         from_ = f'{g_root}/{p}'
         to_ = p
         ret.append( ( from_, to_))
-    ret.append( ( f'{g_root}/test.py', f'fitz/test.py'))
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
 
     if mupdf_dir:
