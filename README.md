@@ -141,15 +141,9 @@ These can be run in the usual way, for example:
     pip install pytest fontTools
     pytest PyMuPDF
 
-### Known failures as of 2022-11-23:
+### Known failures as of 2022-12-08:
 
-    PyMuPDF/tests/test_annots.py::test_freetext - RuntimeError: code=2: FreeText annotations have no IC property
-    PyMuPDF/tests/test_annots.py::test_1645 - RuntimeError: code=2: FreeText annotations have no IC property
-    
     Stories are not implemented so all the Story tests fail.
-    
-    PyMuPDF/tests/test_drawings.py::test_drawings1 - assert "[{'closePath...dth': 1.0}]\n" == "[{'closePath...dth': 1.0}]\n"
-    PyMuPDF/tests/test_drawings.py::test_drawings3 - AssertionError: assert (set(), set(), {}) == (set(), set()...False, True)})
  
 
 ## Details
