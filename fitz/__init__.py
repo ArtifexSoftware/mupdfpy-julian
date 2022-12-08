@@ -430,7 +430,7 @@ class Annot:
             if not extg.m_internal: # no ExtGState yet: make one
                 extg = mupdf.pdf_dict_put_dict( resources, PDF_NAME('ExtGState'), 2)
 
-            mupdf.pdf_dict_put_drop( extg, PDF_NAME('H'), alp0)
+            mupdf.pdf_dict_put( extg, PDF_NAME('H'), alp0)
 
         except Exception as e:
             if g_exceptions_verbose:    jlib.exception_info()
@@ -9250,18 +9250,6 @@ class Quad:
         r.y1 = max(self.ul.y, self.ur.y, self.lr.y, self.ll.y)
         return r
 
-    def torect(self, r):
-        """Return matrix that converts to target rect."""
-
-        r = Rect(r)
-        if self.is_infinite or self.is_empty or r.is_infinite or r.is_empty:
-            raise ValueError("rectangles must be finite and not empty")
-        return (
-                Matrix(1, 0, 0, 1, -self.x0, -self.y0)
-                * Matrix(r.width / self.width, r.height / self.height)
-                * Matrix(1, 0, 0, 1, r.x0, r.y0)
-                )
-
     def transform(self, m):
         """Replace quad by its transformation with matrix m."""
         if hasattr(m, "__float__"):
@@ -9524,6 +9512,18 @@ class Rect:
     def top_right(self):
         """Top-right corner."""
         return Point(self.x1, self.y0)
+    
+    def torect(self, r):
+        """Return matrix that converts to target rect."""
+
+        r = Rect(r)
+        if self.is_infinite or self.is_empty or r.is_infinite or r.is_empty:
+            raise ValueError("rectangles must be finite and not empty")
+        return (
+            Matrix(1, 0, 0, 1, -self.x0, -self.y0)
+            * Matrix(r.width / self.width, r.height / self.height)
+            * Matrix(1, 0, 0, 1, r.x0, r.y0)
+        )
 
     def transform(self, m):
         """Replace with the transformation by matrix-like m."""
@@ -13989,7 +13989,6 @@ def JM_insert_contents(pdf, pageref, newcont, overlay):
                 mupdf.pdf_array_push(carr, contents)
             mupdf.pdf_array_push(carr, newconts)
         else:
-            #mupdf.pdf_array_push_drop(carr, newconts)
             mupdf.pdf_array_push(carr, newconts)
             if contents.m_internal:
                 mupdf.pdf_array_push(carr, contents)
@@ -15272,7 +15271,6 @@ def JM_set_widget_properties(annot, Widget):
             col = value[i]
             mupdf.pdf_array_push_real(fill_col, col)
         mupdf.pdf_field_set_fill_color(annot_obj, fill_col)
-        #mupdf.pdf_drop_obj(fill_col)
 
     # dashes -----------------------------------------------------------------
     value = GETATTR("border_dashes")
