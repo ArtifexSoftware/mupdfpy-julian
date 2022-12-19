@@ -172,6 +172,23 @@ def _fs_mtime( filename, default=0):
     except OSError:
         return default
 
+def _git_get_branch( directory):
+    command = f'cd {directory} && git branch --show-current'
+    log( f'Running: {command}')
+    p = subprocess.run(
+            command,
+            shell=True,
+            check=False,
+            text=True,
+            stdout=subprocess.PIPE,
+            )
+    ret = None
+    if p.returncode == 0:
+        ret = p.stdout.strip()
+        log( f'Have found MuPDF git branch: ret={ret!r}')
+    return ret
+
+
 
 mupdf_tgz = os.path.abspath( f'{__file__}/../mupdf.tgz')
 
@@ -230,7 +247,7 @@ def get_mupdf_tgz():
         return mupdf_local
 
 
-def get_mupdf():
+def _get_mupdf_internal():
     '''
     Downloads and/or extracts mupdf and returns location of mupdf directory.
 
@@ -295,6 +312,18 @@ def get_mupdf():
     assert os.path.isdir( path), f'$PYMUPDF_SETUP_MUPDF_BUILD is not a directory: {path}'
     path = os.path.abspath( path)
     return path
+
+
+def get_mupdf():
+    mupdf_local = _get_mupdf_internal()
+    if isinstance( mupdf_local, str) and mupdf_local.endswith( '/'):
+        del mupdf_local[-1]
+    mupdf_branch = None
+    if mupdf_local and os.path.exists( f'{mupdf_local}/.git'):
+        mupdf_branch = _git_get_branch( mupdf_local)
+        if mupdf_branch:
+            log( f'Have found MuPDF git branch: mupdf_branch={mupdf_branch!r}')
+    return mupdf_local, mupdf_branch
 
 
 linux = sys.platform.startswith( 'linux') or 'gnu' in sys.platform
@@ -439,11 +468,15 @@ def build_unix_mupdf():
     
     If we are using the system MuPDF, returns `(None, None)`.
     '''
-    mupdf_local = get_mupdf()
+    mupdf_local, mupdf_branch = get_mupdf()
     
     if mupdf_local:
         #log( f'Building mupdf.')
-        shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
+        log( '{mupdf_branch=}')
+        if mupdf_branch == 'master':
+            log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
+        else:
+            shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
     
         flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
         flags += ' verbose=yes'
