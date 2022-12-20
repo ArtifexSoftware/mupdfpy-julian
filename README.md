@@ -31,95 +31,67 @@ As of 2022-11-23, only limited testing has been done, and only on Linux and
 OpenBSD. No testing has been done on other platforms such as Windows.
 
 
+## Benefits
+
+* Simpler implementation because of MuPDF C++ and Python API features:
+
+    * Automatic reference counting.
+    * Automatic contexts.
+    * Native C++ and Python exceptions.
+
+* Potential support for multithreaded use (native PyMuPDF is explicitly
+  single-threaded).
+
+* Access to the underlying MuPDF Python API in the `mupdf` module.
+
+
 ## License
 
 SPDX-License-Identifier: GPL-3.0-only
 
 
-## Build and install [last updated 2022-11-29]
+## Build and install [last updated 2022-12-20]
 
-* General.
+Supported OS's:
 
-    * Supported OS's:
+* Linux
+* OpenBSD
 
-        * Linux
-        * OpenBSD
+[`mupdfpy/setup.py` does not yet support Windows.]
 
-          [`mupdfpy/setup.py` does not yet support Windows.]
+Steps:
 
-    * An account on `ghostscript.com` is required.
-
-    * SWIG should be installed.
-
-
+* Install SWIG.
+* Get MuPDF, 1.21.x branch.
+* Get mupdfpy, master branch.
 * Set up a Python virtual environment.
+* Install libclang.
+* Build mupdfpy, using `PYMUPDF_SETUP_MUPDF_BUILD` to point to the local MuPDF checkout.
 
-    We need to set things up differently depending on the OS, in order to get a
-    working Python clang module.
+So:
 
-    #### Linux
-
-    `pip install libclang` seems to be unreliable due to clang not being integrated
-    with system headers (for example not having a typedef for `size_t`) which
-    breaks MuPDF's Python build.
-
-    So instead we need to install the system package `python3-clang`, and create
-    a Python virtual environment with `--system-site-packages` so it can see the
-    system's python3-clang.
+    # Install SWIG:
+    sudo apt install swig   # Linux
+    sudo pkg_add swig       # OpenBSD
     
-    For example on Devuan:
+    # Get MuPDF, branch 1.21.x.
+    git clone --recursive git://git.ghostscript.com/mupdf.git
+    git checkout 1.21.x
+    git submodule update --init
 
-        sudo apt install python3-clang
-        python3 -m venv --system-site-packages pylocal
-        . pylocal/bin/activate
+    # Get mupdfpy (requires ghostscript login).
+    git clone USER@ghostscript.com:/home/julian/repos/mupdfpy.git
 
-
-    #### OpenBSD
-
-    One can use pip's libclang:
-
-        python3 -m venv pylocal
-        . pylocal/bin/activate
-        pip install libclang
-
-    Or the system libclang:
-
-        sudo pkg_add py3-llvm
-        python3 -m venv --system-site-packages pylocal
-        . pylocal/bin/activate
-
-
-* Get MuPDF, mupdfpy, and build.
-
-    * **MuPDF**
-
-        We need branch `1.21.x` of MuPDF repository: `ghostscript.com:/home/julian/repos/mupdf.git`
-
-        Because of the MuPDF's git repository's use of submodules, this
-        requires first getting MuPDF from the main MuPDF repository
-        `ghostscript.com:/home/git/mupdf.git`, then pulling from
-        `ghostscript.com:/home/julian/repos/mupdf.git`.
-
-    * **mupdfpy**
-
-        We need branch `master` of mupdfpy repository: `ghostscript.com:/home/julian/repos/mupdfpy.git`
-
-    * When building mupdfpy, set `PYMUPDF_SETUP_MUPDF_BUILD` to point to the local MuPDF checkout.
-
-    So, with `USER` replaced by an appropriate username on ghostscript.com:
-
-        # Get MuPDF.
-        git clone --branch 1.21.x --recursive USER@ghostscript.com:/home/git/mupdf.git
-        cd mupdf
-        git pull -r USER@ghostscript.com:/home/julian/repos/mupdf.git 1.21.x
-        cd ..
-
-        # Get mupdfpy.
-        git clone USER@ghostscript.com:/home/julian/repos/mupdfpy.git
-
-        # Build mupdfpy (will also build MuPDF).
-        cd mupdfpy
-        PYMUPDF_SETUP_MUPDF_BUILD=../mupdf ./setup.py install
+    # Create and enter Python virtual environment.
+    python3 -m venv pylocal
+    . pylocal/bin/activate
+    
+    # Install clang python into venv.
+    pip install libclang
+    
+    # Build mupdfpy (will also build MuPDF).
+    cd mupdfpy
+    PYMUPDF_SETUP_MUPDF_BUILD=../mupdf ./setup.py install
 
 
 ## Testing
