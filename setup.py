@@ -445,7 +445,7 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     link_flags += f' {path_so}.obj'
     link_flags += f' /OUT:fitz\_extra.cp39-win_amd64.pyd'
     link_flags += f' /IMPLIB:fitz\_extra.cp39-win_amd64.lib'
-    link_flags += f' /NODEFAULTLIB:MSVCRT'
+    #link_flags += f' /NODEFAULTLIB:MSVCRT'
     _run( f'''
             "{vcvars}"&&"{link}"
                 {link_flags}
