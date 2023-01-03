@@ -158,7 +158,11 @@ def _python_compile_flags():
 
 
 def _run( command):
-    command = textwrap.dedent( command).strip().replace( '\n', " \\\n")
+    command = textwrap.dedent( command).strip()
+    if windows:
+        command = command.replace( '\n', ' ')
+    else:
+        command = command.replace( '\n', ' \\\n')
     log( f'Running: {command}')
     sys.stdout.flush()
     subprocess.run( command, shell=True, check=True)
@@ -332,47 +336,156 @@ freebsd = sys.platform.startswith( 'freebsd')
 darwin = sys.platform.startswith( 'darwin')
 windows = platform.system() == 'Windows' or platform.system().startswith('CYGWIN')
 
-def build():
-    assert not windows
-    return build_unix()
+    
 
-def build_unix():
+def build_windows( include1, include2, path_cpp, path_so, build_dir):
+    year, version, directory, vcvars, cl, link, devenv = pipcl.windows_find_msvc()
+    p_path, p_version, p_root, p_cpu = pipcl.windows_find_python()
+    mupdf_local, mupdf_branch = get_mupdf()
+    
+    libs = list()
+    libs.append( 'mupdfcpp')
+    libs_text = ''
+    for lib in libs:
+        libs_text += f' /l {lib}'
+
+    cpp_flags = ''
+    #cpp_flags += f' /nologo'
+    cpp_flags += f' /D "FZ_DLL_CLIENT"'  # Activates __declspec() in headers.
+    cpp_flags += f' /D "NDEBUG"'
+    cpp_flags += f' /D "UNICODE"'
+    cpp_flags += f' /D "WIN{64}"'
+    cpp_flags += f' /D "_UNICODE"'
+    cpp_flags += f' /EHsc'               # Enable C++ exceptions.
+    cpp_flags += f' /FC'                 # Display full path of source code files passed to cl.exe in diagnostic text.
+    #cpp_flags += f' /Fa{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/'       # Sets the listing file name.
+    #cpp_flags += f' /Fd{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/'       # Specifies a file name for the program database (PDB) file
+    #cpp_flags += f' /Fp"Release/_mupdf.pch"' # Specifies a precompiled header file name.
+    cpp_flags += f' /GL'                 # Enables whole program optimization.
+    cpp_flags += f' /GS'                 # Buffers security check.
+    cpp_flags += f' /Gd'                 # Uses the __cdecl calling convention (x86 only).
+    cpp_flags += f' /Gm-'                # Deprecated. Enables minimal rebuild.
+    cpp_flags += f' /Gy'                 # Enables function-level linking.
+    cpp_flags += f' /MD'                 # Creates a multithreaded DLL using MSVCRT.lib.
+    cpp_flags += f' /O2'
+    cpp_flags += f' /Oi'
+    cpp_flags += f' /Oy-'                # Omits frame pointer (x86 only).
+    cpp_flags += f' /W3'                 # Sets which warning level to output.
+    cpp_flags += f' /WX-'                # Treats all warnings as errors.
+    cpp_flags += f' /Zc:forScope'
+    cpp_flags += f' /Zc:inline'
+    cpp_flags += f' /Zc:wchar_t'
+    cpp_flags += f' /Zi'
+    cpp_flags += f' /analyze-'           # Enable code analysis.
+    cpp_flags += f' /c'                  # Compiles without linking.
+    cpp_flags += f' /diagnostics:column' # Controls the format of diagnostic messages.
+    cpp_flags += f' /errorReport:prompt' # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
+    cpp_flags += f' /fp:precise'         # Specify floating-point behavior.
+    cpp_flags += f' /permissive-'        # Set standard-conformance mode.
+    cpp_flags += f' /sdl'                # Enables additional security features and warnings.
+    cpp_flags += rf' /I"{p_root}/include"'
+
+
+
+    _run( f'''
+            "{vcvars}"&&"{cl}"
+                {cpp_flags}
+                {include1}
+                {include2}
+                {path_cpp}
+                /Fo {path_so}.obj
+                /L {build_dir}
+                {libs_text}
+                /I {p_root}/include
+            ''')
+    link_flags = ''
+    link_flags += '/NOLOGO'
+    link_flags += '/DLL'
+    link_flags += '/DYNAMICBASE'        # Specifies whether to generate an executable image that's rebased at load time by using the address space layout randomizationLR) feature.
+    link_flags += '/ERRORREPORT:PROMPT' # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
+    link_flags += '/IMPLIB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.lib"'
+    link_flags += '/INCREMENTAL:NO'     # Controls incremental linking.
+    link_flags += '/LIBPATH:"platform/win32/{build_dirs.cpu.windows_subdir}Release"'
+    link_flags += '/LIBPATH:"{p_root}/libs"'
+    link_flags += '/LTCG:incremental'
+    link_flags += '/LTCGOUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.iobj"'
+    link_flags += '/MACHINE:{build_dirs.cpu.windows_name.upper()}'   # Specifies the target platform.
+    link_flags += '/MANIFEST'           # Creates a side-by-side manifest file and optionally embeds it in the binary.
+    link_flags += '/MANIFESTUAC:NO'     # Specifies whether User Account Control (UAC) information is embedded in the program manifest.
+    link_flags += '/ManifestFile:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll.intermediate.manifest"'
+    link_flags += '/NXCOMPAT'           # Marks an executable as verified to be compatible with the Windows Data Execution Prevention feature.
+    link_flags += '/OPT:ICF'
+    link_flags += '/OPT:REF'
+    link_flags += '/OUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll"'
+    link_flags += '/PDB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.pdb"'
+    link_flags += f'{"/SAFESEH" if build_dirs.cpu.bits==32 else ""}'    # Not supported on x64.
+    link_flags += '/SUBSYSTEM:WINDOWS'  # Tells the operating system how to run the .exe file.
+    link_flags += '/TLBID:1'            # A user-specified value for a linker-created type library. It overrides the default resource ID of 1.
+    link_flags += '"kernel32.lib" "user32.lib" "gdi32.lib" "winspool.lib" "comdlg32.lib" "advapi32.lib"'
+    link_flags += '"shell32.lib" "ole32.lib" "oleaut32.lib" "uuid.lib" "odbc32.lib" "odbccp32.lib"'
+    #link_flags += '#' python3.lib'         # not needed because on Windows Python.h has info about library.
+    link_flags += f'{path_so}.obj'
+    link_flags += 'mupdfcpp.lib'
+    _run( f'''
+            {vcvars}&&{link}
+                {link_flags}
+            ''')
+
+
+def build():
     '''
     We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE in a
     similar way as a normal PyMuPDF build.
     '''
     # Build MuPDF
     #
-    mupdf_local, unix_build_dir = build_unix_mupdf()
-    log( f'{unix_build_dir=}')
+    if windows:
+        mupdf_local, build_dir = build_windows_mupdf()
+    else:
+        mupdf_local, build_dir = build_unix_mupdf()
+    log( f'{build_dir=}')
     
     # Build fitz.extra module.
     #
     path_i = f'{g_root}/extra.i'
     path_cpp = f'{g_root}/fitz/extra.cpp'
-    path_so = f'{g_root}/fitz/_extra.so'
-    cpp_flags = '-Wall'
-    unix_build_dir_flags = os.path.basename( unix_build_dir).split( '-')
-    if 'release' in unix_build_dir_flags:
-        cpp_flags += ' -g -O2 -DNDEBUG'
-    elif 'debug' in unix_build_dir_flags:
-        cpp_flags += ' -g'
-    elif 'memento' in unix_build_dir_flags:
-        cpp_flags += ' -g -DMEMENTO'
+    if windows:
+        path_so_tail = 'fitz/_extra.pyd'
     else:
-        assert 0, f'Unrecognised {unix_build_dir=}'
+        path_so_tail = 'fitz/_extra.so'
+    path_so = f'{g_root}/{path_so_tail}'
+
+    cpp_flags = '-Wall'
+    
+    build_dir_flags = os.path.basename( build_dir).split( '-')
+    if windows:
+        cpp_flags += ' /g /O2 /DNDEBUG'
+    else:
+        if 'release' in build_dir_flags:
+            cpp_flags += ' -g -O2 -DNDEBUG'
+        elif 'debug' in build_dir_flags:
+            cpp_flags += ' -g'
+        elif 'memento' in build_dir_flags:
+            cpp_flags += ' -g -DMEMENTO'
+        else:
+            assert 0, f'Unrecognised {build_dir=}'
     
     mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
-    if mupdf_dir:
+    if windows:
+        # SWIG needs `-I` not `/I`.
+        include1 = f'-I{mupdf_dir}\\platform\\c++\\include'
+        include2 = f'-I{mupdf_dir}\\include'
+        linkdir = f'/L {build_dir}'
+    elif mupdf_dir:
         include1 = f'-I{mupdf_dir}/platform/c++/include'
         include2 = f'-I{mupdf_dir}/include'
-        linkdir = f'-L {unix_build_dir}'
+        linkdir = f'-L {build_dir}'
     else:
         # Use system mupdf.
         include1 = ''
         include2 = ''
         linkdir = ''
-    
+    outdir = f'{g_root}\\fitz' if windows else f'{g_root}/fitz'
     # Run swig.
     if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
         _run( f'''
@@ -381,7 +494,7 @@ def build_unix():
                     -c++
                     -python
                     -module extra
-                    -outdir {g_root}/fitz
+                    -outdir {outdir}
                     -o {path_cpp}
                     {include1}
                     {include2}
@@ -396,31 +509,40 @@ def build_unix():
     # Fun fact - on Linux, if the -L and -l options are before '{path_cpp} -o
     # {path_so}' they seem to be ignored...
     #
-    python_flags = _python_compile_flags()
     if _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
-        libs = list()
-        libs.append( 'mupdfcpp')
-        if 'shared' in os.path.basename( unix_build_dir).split( '-'):
-            libs.append( 'mupdf')
-        libs_text = ''
-        for lib in libs:
-            libs_text += f' -l {lib}'
-        _run( f'''
-                c++
-                    -fPIC
-                    -shared
-                    {cpp_flags}
-                    {python_flags}
-                    {include1}
-                    {include2}
-                    -Wno-deprecated-declarations
-                    -Wno-unused-const-variable
-                    {path_cpp}
-                    -o {path_so}
-                    -L {unix_build_dir}
-                    {libs_text}
-                    -Wl,-rpath='$ORIGIN',-z,origin
-                ''')
+        if windows:
+            build_windows(
+                    include1,
+                    include2,
+                    path_cpp,
+                    path_so,
+                    build_dir,
+                    )
+        else:
+            python_flags = _python_compile_flags()
+            libs = list()
+            libs.append( 'mupdfcpp')
+            if 'shared' in os.path.basename( build_dir).split( '-'):
+                libs.append( 'mupdf')
+            libs_text = ''
+            for lib in libs:
+                libs_text += f' -l {lib}'
+            _run( f'''
+                    c++
+                        -fPIC
+                        -shared
+                        {cpp_flags}
+                        {python_flags}
+                        {include1}
+                        {include2}
+                        -Wno-deprecated-declarations
+                        -Wno-unused-const-variable
+                        {path_cpp}
+                        -o {path_so}
+                        -L {build_dir}
+                        {libs_text}
+                        -Wl,-rpath='$ORIGIN',-z,origin
+                    ''')
     else:
         log( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
     
@@ -430,7 +552,6 @@ def build_unix():
     for p in [
             'fitz/__init__.py',
             'fitz/__main__.py',
-            'fitz/_extra.so',
             'fitz/extra.py',
             'fitz/fitz.py',
             'fitz/utils.py',
@@ -438,24 +559,61 @@ def build_unix():
         from_ = f'{g_root}/{p}'
         to_ = p
         ret.append( ( from_, to_))
+    ret.append( path_so, path_so_tail)
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
 
     if mupdf_dir:
         # Add MuPDF runtime files.
-        log( f'{unix_build_dir=}')
-        for leaf in (
-                'mupdf.py',
-                '_mupdf.so',
-                'libmupdfcpp.so',
-                'libmupdf.so'
-                ):
-            from_ = f'{unix_build_dir}/{leaf}'
-            to_ = f'fitz/{leaf}'
-            ret.append( ( from_, to_))
+        log( f'{build_dir=}')
+        if windows:
+            for leaf in (
+                    'mupdf.py',
+                    '_mupdf.pyd',
+                    'libmupdfcpp.dll',
+                    ):
+                from_ = f'{build_dir}/{leaf}'
+                to_ = f'fitz/{leaf}'
+                ret.append( ( from_, to_))
+        else:
+            for leaf in (
+                    'mupdf.py',
+                    '_mupdf.so',
+                    'libmupdfcpp.so',
+                    'libmupdf.so'
+                    ):
+                from_ = f'{build_dir}/{leaf}'
+                to_ = f'fitz/{leaf}'
+                ret.append( ( from_, to_))
 
     for f, t in ret:
         log( f'{f} => {t}')
     return ret
+
+
+def build_windows_mupdf():
+    mupdf_local, mupdf_branch = get_mupdf()
+    
+    assert mupdf_local
+    if mupdf_local:
+        windows_build_dir = f'{mupdf_local}\\build\\shared-release-x64-py3.9'
+        #log( f'Building mupdf.')
+        log( f'{mupdf_branch=}')
+        if mupdf_branch == 'master':
+            log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
+        else:
+            shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
+    
+        year, version, directory, vcvars, cl, link, devenv = pipcl.windows_find_msvc()
+        command = f'cd {mupdf_local} && {sys.executable} ./scripts/mupdfwrap.py -b --devenv "{devenv}" all'
+        if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
+            log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
+        else:
+            log( f'Building MuPDF by running: {command}')
+            subprocess.run( command, shell=True, check=True)
+            log( f'Finished building mupdf.')
+    
+    return mupdf_local, windows_build_dir
+
 
 def build_unix_mupdf():
     '''
@@ -472,7 +630,7 @@ def build_unix_mupdf():
     
     if mupdf_local:
         #log( f'Building mupdf.')
-        log( '{mupdf_branch=}')
+        log( f'{mupdf_branch=}')
         if mupdf_branch == 'master':
             log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
         else:
