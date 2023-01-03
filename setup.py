@@ -401,6 +401,8 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     cpp_flags += f' /permissive-'        # Set standard-conformance mode.
     cpp_flags += f' /Zc:forScope'
     cpp_flags += f' /diagnostics:column' # Controls the format of diagnostic messages.
+    cpp_flags += f' /D UNICODE'
+    cpp_flags += f' /D _UNICODE'
 
     _run( f'''
             "{vcvars}"&&"{cl}"
@@ -435,7 +437,7 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #link_flags += '/SUBSYSTEM:WINDOWS'  # Tells the operating system how to run the .exe file.
     #link_flags += '/TLBID:1'            # A user-specified value for a linker-created type library. It overrides the default resource ID of 1.
     #link_flags += ' libmupdf.lib'
-    link_flags += f' libmupdf.lib'
+    #link_flags += f' libmupdf.lib'
     link_flags += f' mupdfcpp64.lib'
     #link_flags += f'{"/SAFESEH" if build_dirs.cpu.bits==32 else ""}'    # Not supported on x64.
     #link_flags += f'{path_so}.obj'
