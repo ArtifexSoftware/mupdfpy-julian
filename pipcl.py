@@ -1023,7 +1023,10 @@ def windows_find_python( cpu=None, version=None):
 
 def windows_find_msvc( year=None, grade=None, version=None):
     '''
-    Returns `(year, version, directory, vcvars, cl, link, devenv)` for latest matching MSVC.
+    Finds Visual Studio command-line tools.
+    
+    Returns `(year, version, directory, vcvars, cl, link, devenv)` for latest
+    matching MSVC.
     
     year:
         None or, for example, '2019'.
@@ -1035,36 +1038,62 @@ def windows_find_msvc( year=None, grade=None, version=None):
     version:
         None or, for example, '14.28.29910'.
     '''
+    
+    # Find devenv.com
+    #
     pattern = f'C:\\Program Files*\\Microsoft Visual Studio\\{year if year else "2*"}\\{grade if grade else "*"}'
     directories = glob.glob( pattern)
-    _log( f'{pattern=}')
-    _log( f'{directories=}')
     assert directories, f'No match found for: {pattern}'
     directories.sort()
     directory = directories[-1]
     devenv = f'{directory}\\Common7\\IDE\\devenv.com'
     assert os.path.isfile( devenv), f'Does not exist: {devenv}'
+
+    # Extract `year` and `grade` from devenv.com's path.
+    #    
+    # We use r'...' for regex strings because an extra level of escaping is
+    # required for backslashes.
+    #
+    m = re.match( rf'^C:\\Program Files.*\\Microsoft Visual Studio\\([^\\]+)\\([^\\]+)', directory)
+    assert m
+    year2 = m.group(1)
+    grade2 = m.group(2)
+    if year:
+        assert year2 == year
+    else:
+        year == year2
+    if grade:
+        assert grade2 == grade
+    else:
+        grade == grade2
     
-    if not year:
-        m = re.match( rf'^C:\\Program Files.*\\Microsoft Visual Studio\\([^\\]+)', directory)
-        assert m
-        year = m.group(1)
-        _log( f'{year=}')
-    if not grade:
-        m = re.match( rf'^C:\\Program Files.*\\Microsoft Visual Studio\\[^\\]+\\([^\\]+)', directory)
-        assert m
-        grade = m.group(1)
-    
+    # Find vcvars.bat.
+    #
     vcvars = f'{directory}\\VC\Auxiliary\\Build\\vcvars64.bat'
     assert os.path.isfile( vcvars), f'No match for: {vcvars}'
     
+    # Find cl.exe.
+    #
     cl_pattern = f'{directory}\\VC\\Tools\\MSVC\\{version if version else "*"}\\bin\\Hostx64\\x64\\cl.exe'
     cl_s = glob.glob( cl_pattern)
     assert cl_s, f'No match for: {cl_pattern}'
     cl_s.sort()
     cl = cl_s[ -1]
     
-    link_pattern = f'{directory}\\VC\\Tools\\MSVC\\{version if version else "*"}\\bin\\Hostx64\\x64\\link.exe'
+    # Extract `version` from cl.exe's path.
+    #
+    m = re.search( rf'\\VC\\Tools\\MSVC\\([^\\]+)\\bin\\Hostx64\\x64\\cl.exe$', cl)
+    assert m
+    version2 = m.group(1)
+    if version:
+        assert version2 == version
+    else:
+        version = version2
+    assert version
+    
+    # Find link.exe.
+    #
+    link_pattern = f'{directory}\\VC\\Tools\\MSVC\\{version}\\bin\\Hostx64\\x64\\link.exe'
     link_s = glob.glob( link_pattern)
     assert link_s, f'No match for: {link_pattern}'
     link_s.sort()
