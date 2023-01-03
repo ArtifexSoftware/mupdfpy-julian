@@ -21,6 +21,9 @@ catch(...) {
 }
 
 %{
+#define and &&
+#define or ||
+
 #include "mupdf/classes2.h"
 #include "mupdf/exceptions.h"
 
@@ -349,6 +352,41 @@ static std::vector< std::string> JM_get_annot_id_list( mupdf::PdfPage& page)
     return names;
 }
 
+#ifdef _WIN32
+
+int vasprintf(char **str, const char *fmt, va_list ap)
+{
+    va_list ap2;
+
+    va_copy( ap2, ap);
+    int len = vsnprintf( NULL, 0, fmt, ap2);
+    va_end( ap2);
+    
+    char* buffer = (char*) malloc( len + 1);
+    if ( !buffer)
+    {
+        *str = NULL;
+        return -1;
+    }
+    va_copy( ap2, ap);
+    int len2 = vsnprintf( buffer, len + 1, fmt, ap2);
+    va_end( ap2);
+    assert( len2 == len);
+    *str = buffer;
+    return len;
+}
+
+int asprintf(char **str, const char *fmt, ...)
+{
+    va_list ap;
+    va_start(ap, fmt);
+    int ret = vasprintf( str, fmt, ap);
+    va_end(ap);
+
+    return ret;
+}
+#endif
+
 
 //------------------------------------------------------------------------
 // Add a unique /NM key to an annotation or widget.
@@ -425,7 +463,7 @@ static const char* Tools_parse_da( mupdf::PdfAnnot& this_annot)
         }
         da_str = mupdf::pdf_to_text_string( da);
     }
-    catch( std::exception& e)
+    catch( std::exception&)
     {
         return NULL;
     }
@@ -715,7 +753,7 @@ static void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items)
         }
         end:;
     }
-    catch( std::exception& e)
+    catch( std::exception&)
     {
     }
     Py_CLEAR(xrefs);
@@ -1372,12 +1410,12 @@ static PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linkl
                         );
                 mupdf::pdf_array_push( annots, ind_obj);
             }
-            catch( std::exception& e) {
+            catch( std::exception&) {
                 PySys_WriteStderr("skipping bad link / annot item %i.\n", i);
             }
         }
     }
-    catch( std::exception& e) {
+    catch( std::exception&) {
         PyErr_Clear();
         return NULL;
     }
