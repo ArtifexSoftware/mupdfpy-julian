@@ -356,7 +356,7 @@ windows = platform.system() == 'Windows' or platform.system().startswith('CYGWIN
     
 
 def build_windows( include1, include2, path_cpp, path_so, build_dir):
-    year, version, directory, vcvars, cl, link, devenv = pipcl.windows_find_msvc()
+    vs = pipcl.WindowsVS()
     p_path, p_version, p_root, p_cpu = pipcl.windows_find_python()
     mupdf_local, mupdf_branch = get_mupdf()
     
@@ -365,7 +365,7 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #   https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-alphabetically?view=msvc-170
     #
     _run( f'''
-            "{vcvars}"&&"{cl}"
+            "{vcvars}"&&"{vs.cl}"
                 /D FZ_DLL_CLIENT        # Activates __declspec() in MuPDF C++ API headers.
                 /D NDEBUG               #
                 /D UNICODE 
@@ -394,7 +394,7 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #   https://learn.microsoft.com/en-us/cpp/build/reference/linker-options?view=msvc-170
     #
     _run( f'''
-            "{vcvars}"&&"{link}"
+            "{vcvars}"&&"{vs.link}"
                 /DLL                   # Builds a DLL.
                 /EXPORT:PyInit__extra  # Exports a function.
                 /IMPLIB:{path_so.replace( ".pyd", ".lib")}     # Overrides the default import library name.
@@ -646,9 +646,8 @@ def build_windows_mupdf():
             log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
         else:
             shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
-    
-        year, version, directory, vcvars, cl, link, devenv = pipcl.windows_find_msvc()
-        command = f'cd {mupdf_local} && {sys.executable} ./scripts/mupdfwrap.py -b --devenv "{devenv}" all'
+        vs = pipcl.WindowsVS()
+        command = f'cd {mupdf_local} && {sys.executable} ./scripts/mupdfwrap.py -b --devenv "{vs.devenv}" all'
         if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
             log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
         else:
