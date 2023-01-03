@@ -4,10 +4,12 @@ Support for Python packaging operations.
 
 import base64
 import distutils.util
+import glob
 import hashlib
 import io
 import os
 import platform
+import re
 import shutil
 import site
 import subprocess
@@ -905,3 +907,210 @@ class _Record:
 
     def get(self):
         return self.text
+
+
+def cpu_name():
+    '''
+    Returns 'x32' or 'x64' depending on Python build.
+    '''
+    #log(f'sys.maxsize={hex(sys.maxsize)}')
+    return f'x{32 if sys.maxsize == 2**31 else 64}'
+
+class Cpu:
+    '''
+    For Windows only. Paths and names that depend on cpu.
+
+    Members:
+        .bits
+            .
+        .windows_subdir
+            '' or 'x64/', e.g. platform/win32/x64/Release.
+        .windows_name
+            'x86' or 'x64'.
+        .windows_config
+            'x64' or 'Win32', e.g. /Build Release|x64
+        .windows_suffix
+            '64' or '', e.g. mupdfcpp64.dll
+    '''
+    def __init__(self, name):
+        self.name = name
+        if name == 'x32':
+            self.bits = 32
+            self.windows_subdir = ''
+            self.windows_name = 'x86'
+            self.windows_config = 'Win32'
+            self.windows_suffix = ''
+        elif name == 'x64':
+            self.bits = 64
+            self.windows_subdir = 'x64/'
+            self.windows_name = 'x64'
+            self.windows_config = 'x64'
+            self.windows_suffix = '64'
+        else:
+            assert 0, f'Unrecognised cpu name: {name}'
+
+    def __str__(self):
+        return self.name
+
+
+def python_version():
+    '''
+    Returns two-digit version number of Python as a string, e.g. '3.9'.
+    '''
+    return '.'.join(platform.python_version().split('.')[:2])
+
+
+def windows_find_python( cpu=None, version=None):
+    '''
+    Windows only. Finds installed Python with specific word size and version.
+
+    cpu:
+        A Cpu instance. If None, we use whatever we are running on.
+    version:
+        Two-digit Python version as a string such as '3.8'. If None we use
+        current Python's version.
+
+    Returns (path, version, root, cpu):
+
+        path:
+            Path of python binary.
+        version:
+            Version as a string, e.g. '3.9'. Same as <version> if not None,
+            otherwise the inferred version.
+        root:
+            The parent directory of <path>; allows
+            Python headers to be found, for example
+            <root>/include/Python.h.
+        cpu:
+            A Cpu instance, same as <cpu> if not None, otherwise the inferred
+            cpu.
+
+    We parse the output from 'py -0p' to find all available python
+    installations.
+    '''
+    if cpu is None:
+        cpu = Cpu(cpu_name())
+    if version is None:
+        version = python_version()
+    command = 'py -0p'
+    _log(f'Running: {command}')
+    text = subprocess.check_output( command, shell=True, text=True)
+    for line in text.split('\n'):
+        _log( f'    {line}')
+        m = re.match( '^ *-([0-9.]+)-((64)|(32)) +([^\\r*]+)[\\r*]*$', line)
+        if not m:
+            continue
+        version2 = m.group(1)
+        bits = int(m.group(2))
+        if bits != cpu.bits or version2 != version:
+            continue
+        path = m.group(5).strip()
+        root = path[ :path.rfind('\\')]
+        if not os.path.exists(path):
+            # Sometimes it seems that the specified .../python.exe does not exist,
+            # and we have to change it to .../python<version>.exe.
+            #
+            assert path.endswith('.exe'), f'path={path!r}'
+            path2 = f'{path[:-4]}{version}.exe'
+            _log( f'Python {path!r} does not exist; changed to: {path2!r}')
+            assert os.path.exists( path2)
+            path = path2
+
+        _log(f'{cpu=} {version=}: returning {path=} {version=} {root=} {cpu=}')
+        return path, version, root, cpu
+
+    raise Exception( f'Failed to find python matching cpu={cpu}. Run "py -0p" to see available pythons')
+
+def windows_find_msvc( year=None, grade=None, version=None):
+    '''
+    Returns `(year, version, directory, vcvars, cl, link, devenv)` for latest matching MSVC.
+    
+    year:
+        None or, for example, '2019'.
+    grade:
+        None or, for example:
+            'Community'
+            'Professional'
+            'Enterprise'
+    version:
+        None or, for example, '14.28.29910'.
+    '''
+    pattern = f'C:\\Program Files*\\Microsoft Visual Studio\\{year if year else "2*"}\\{grade if grade else "*"}'
+    directories = glob.glob( pattern)
+    _log( f'{pattern=}')
+    _log( f'{directories=}')
+    assert directories, f'No match found for: {pattern}'
+    directories.sort()
+    directory = directories[-1]
+    devenv = f'{directory}\\Common7\\IDE\\devenv.com'
+    assert os.path.isfile( devenv), f'Does not exist: {devenv}'
+    
+    if not year:
+        m = re.match( rf'^C:\\Program Files.*\\Microsoft Visual Studio\\([^\\]+)', directory)
+        assert m
+        year = m.group(1)
+        _log( f'{year=}')
+    if not grade:
+        m = re.match( rf'^C:\\Program Files.*\\Microsoft Visual Studio\\[^\\]+\\([^\\]+)', directory)
+        assert m
+        grade = m.group(1)
+    
+    vcvars = f'{directory}\\VC\Auxiliary\\Build\\vcvars64.bat'
+    assert os.path.isfile( vcvars), f'No match for: {vcvars}'
+    
+    cl_pattern = f'{directory}\\VC\\Tools\\MSVC\\{version if version else "*"}\\bin\\Hostx64\\x64\\cl.exe'
+    cl_s = glob.glob( cl_pattern)
+    assert cl_s, f'No match for: {cl_pattern}'
+    cl_s.sort()
+    cl = cl_s[ -1]
+    
+    link_pattern = f'{directory}\\VC\\Tools\\MSVC\\{version if version else "*"}\\bin\\Hostx64\\x64\\link.exe'
+    link_s = glob.glob( link_pattern)
+    assert link_s, f'No match for: {link_pattern}'
+    link_s.sort()
+    link = link_s[ -1]
+    
+    return year, version, directory, vcvars, cl, link, devenv
+    
+    '''
+    pattern_ = pattern.replace( '\\', '/')
+    regex = r'$(C:\\Program Files[^\\]*\\Microsoft Visual Studio)\\([^\\]+)\\([^\\]+)\\VC\\Tools\\MSVC\\([^\\]+)\\bin\\Hostx64\\x64$'
+    _log(  f'{pattern=}')
+    _log(  f'{regex=}')
+    _log(  f'{pattern_=}')
+    _log(  f'pattern_={pattern_}')
+    directories = glob.glob( pattern)
+    directories.sort()
+    matches = []
+    for directory in directories:
+        m = re.match( regex, directory)
+        assert m
+        root = m.group(1)
+        year2 = m.group(2)
+        grade2 = m.group(3)
+        if grade2 not in ( 'Community', 'Professional', 'Enterprise'):
+            _log( f'Warning, grade expected to be "Community", "Professional" or "Enterprise", but {grade=}: {directory}')
+        version2 = m.group(4)
+        match = False
+        if (not year or year == year2) and (not grade or grade == grade2) and (not version or version == version2):
+            match = True
+            matches.append( (year, grade, version, directory))
+        _log( f'[{"*" if match else " "}] {year=} {version=}: {directory}')
+    if not matches:
+        raise Exception( f'No matching MSVC for year={year if year else "ANY"} version={version if version else "ANY"}')
+    year, grade, version, directory = matches[-1]
+    vcvars = rf'{root}\{year}\{grade}\VC\Auxiliary\Build\vcvars64.bat'
+    cl = rf'{directory}\cl.exe'
+    link = rf'{directory}\link.exe'
+    devenv = rf'{root}\{year}\{grade}\Common7\IDE\devenv.com'
+    if not os.path.isfile( vcvars):
+        raise Exception( f'vcvars.bat does not exist: {vcvars}')
+    if not os.path.isfile( cl):
+        raise Exception( f'cl.exe does not exist: {cl}')
+    if not os.path.isfile( link):
+        raise Exception( f'link.exe does not exist: {link}')
+    if not os.path.isfile( devenv):
+        raise Exception( f'devenv.com does not exist: {devenv}')
+    _log( f'Found MSVC: {year=} {version=}: {directory}')
+    return year, version, directory, vcvars, cl, link, devenv
+    '''
