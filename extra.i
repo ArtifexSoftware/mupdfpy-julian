@@ -25,17 +25,21 @@ catch(...) {
 #include "mupdf/exceptions.h"
 
 #ifdef _WIN32
+
     #undef fz_try
     #undef fz_always
     #undef fz_catch
     #undef fz_throw
     #undef fz_rethrow
+    #undef fz_var
+    
     #define fz_try( ctx)
     #define fz_always( ctx)
     #define fz_catch( ctx) if (0)
     #define fz_throw( ctx, level, msg) abort()
     #define fz_rethrow( ctx) abort()
     #define fz_var( x)
+    
 #endif
 
 const char MSG_BAD_ANNOT_TYPE[] = "bad annot type";
