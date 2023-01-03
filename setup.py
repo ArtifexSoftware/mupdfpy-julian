@@ -485,7 +485,7 @@ def build():
         mupdf_local, build_dir = build_windows_mupdf()
     else:
         mupdf_local, build_dir = build_unix_mupdf()
-    log( f'{build_dir=}')
+    log( f'build(): {build_dir=}')
     
     # Build fitz.extra module.
     #
@@ -546,7 +546,7 @@ def build():
                 '''
                 )
     else:
-        log( f'Not running swig because mtime:{path_i} < mtime:{path_cpp}')
+        log( f'build(): Not running swig because mtime:{path_i} < mtime:{path_cpp}')
     
     # Compile and link swig-generated code.
     #
@@ -588,7 +588,7 @@ def build():
                         -Wl,-rpath='$ORIGIN',-z,origin
                     ''')
     else:
-        log( f'Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
+        log( f'build(): Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
     
     # Generate list of (to, from) items to return to pipcl.
     #
@@ -600,8 +600,8 @@ def build():
             'fitz/fitz.py',
             'fitz/utils.py',
             ]:
-        from_ = f'{g_root}/{p}'
-        to_ = p
+        from_ = f'{g_root}/{p}'.replace( '/', os.sep)
+        to_ = p.replace( '/', os.sep)
         ret.append( ( from_, to_))
     ret.append( ( path_so, path_so_tail))
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
@@ -630,7 +630,7 @@ def build():
                 ret.append( ( from_, to_))
 
     for f, t in ret:
-        log( f'{f} => {t}')
+        log( f'build(): {f} => {t}')
     return ret
 
 
