@@ -21,11 +21,22 @@ catch(...) {
 }
 
 %{
-#define and &&
-#define or ||
-
 #include "mupdf/classes2.h"
 #include "mupdf/exceptions.h"
+
+#ifdef _WIN32
+    #undef fz_try
+    #undef fz_always
+    #undef fz_catch
+    #undef fz_throw
+    #undef fz_rethrow
+    #define fz_try( ctx)
+    #define fz_always( ctx)
+    #define fz_catch( ctx) if (0)
+    #define fz_throw( ctx, level, msg) abort()
+    #define fz_rethrow( ctx) abort()
+    #define fz_var( x)
+#endif
 
 const char MSG_BAD_ANNOT_TYPE[] = "bad annot type";
 const char MSG_BAD_APN[] = "bad or missing annot AP/N";
@@ -807,12 +818,12 @@ static fz_rect
 JM_rect_from_py(PyObject *r)
 {
     if (!r || !PySequence_Check(r) || PySequence_Size(r) != 4)
-        return fz_infinite_rect;
+        return *mupdf::FzRect( mupdf::FzRect::Fixed_INFINITE).internal();// fz_infinite_rect;
     Py_ssize_t i;
     double f[4];
 
     for (i = 0; i < 4; i++) {
-        if (JM_FLOAT_ITEM(r, i, &f[i]) == 1) return fz_infinite_rect;
+        if (JM_FLOAT_ITEM(r, i, &f[i]) == 1) return *mupdf::FzRect( mupdf::FzRect::Fixed_INFINITE).internal();
         if (f[i] < FZ_MIN_INF_RECT) f[i] = FZ_MIN_INF_RECT;
         if (f[i] > FZ_MAX_INF_RECT) f[i] = FZ_MAX_INF_RECT;
     }
@@ -830,17 +841,17 @@ JM_matrix_from_py(PyObject *m)
     double a[6];
 
     if (!m || !PySequence_Check(m) || PySequence_Size(m) != 6)
-        return fz_identity;
+        return *mupdf::FzMatrix().internal(); //fz_identity;
 
     for (i = 0; i < 6; i++)
-        if (JM_FLOAT_ITEM(m, i, &a[i]) == 1) return fz_identity;
+        if (JM_FLOAT_ITEM(m, i, &a[i]) == 1) return *mupdf::FzMatrix().internal();
 
     return fz_make_matrix((float) a[0], (float) a[1], (float) a[2], (float) a[3], (float) a[4], (float) a[5]);
 }
 
 PyObject *util_transform_rect(PyObject *rect, PyObject *matrix)
 {
-	return JM_py_from_rect(::fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)));
+	return JM_py_from_rect(mupdf::ll_fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)));
 }
 
 //----------------------------------------------------------------------------
@@ -894,7 +905,7 @@ static mupdf::FzRect JM_mediabox( mupdf::PdfObj& page_obj)
 
     if (page_mediabox.x1 - page_mediabox.x0 < 1 ||
         page_mediabox.y1 - page_mediabox.y0 < 1)
-        page_mediabox = fz_unit_rect;
+        page_mediabox = *mupdf::FzRect( mupdf::FzRect::Fixed_UNIT).internal(); //fz_unit_rect;
 
     return page_mediabox;
 }
@@ -938,9 +949,9 @@ static mupdf::FzPoint JM_cropbox_size( mupdf::PdfObj& page_obj)
 //----------------------------------------------------------------------------
 static mupdf::FzMatrix JM_rotate_page_matrix(mupdf::PdfPage& page)
 {
-    if (!page.m_internal) return fz_identity;  // no valid pdf page given
+    if (!page.m_internal) return *mupdf::FzMatrix().internal();  // no valid pdf page given
     int rotation = JM_page_rotation( page);
-    if (rotation == 0) return fz_identity;  // no rotation
+    if (rotation == 0) return *mupdf::FzMatrix().internal();  // no rotation
     mupdf::FzMatrix m;
     auto po = page.obj();
     mupdf::FzPoint cb_size = JM_cropbox_size( po);
@@ -972,7 +983,7 @@ JM_py_from_matrix(mupdf::FzMatrix m)
 
 static PyObject *Page_derotate_matrix(mupdf::PdfPage& pdfpage)
 {
-    if (!pdfpage.m_internal) return JM_py_from_matrix(fz_identity);
+    if (!pdfpage.m_internal) return JM_py_from_matrix(*mupdf::FzMatrix().internal());
     return JM_py_from_matrix(JM_derotate_page_matrix( pdfpage));
 }
 
@@ -1461,8 +1472,8 @@ static int page_count_pdf( mupdf::PdfDocument& pdf)
 static int page_count( mupdf::FzDocument& document)
 {
     static fz_context* ctx = mupdf::internal_context_get();
-    return ::fz_count_pages( ctx, document.m_internal);
-    //return mupdf::fz_count_pages( document);
+    //return ::fz_count_pages( ctx, document.m_internal);
+    return mupdf::fz_count_pages( document);
 }
 
 static int page_count( mupdf::PdfDocument& pdf)
@@ -1501,7 +1512,7 @@ static bool Outline_is_external( mupdf::FzOutline* outline)
 {
     //return true;
     if (!outline->m_internal->uri)   return false;
-    return ::fz_is_external_link( NULL, outline->m_internal->uri);
+    //return ::fz_is_external_link( NULL, outline->m_internal->uri);
     return mupdf::ll_fz_is_external_link( outline->m_internal->uri);
 }
 
