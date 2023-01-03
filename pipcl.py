@@ -1025,9 +1025,6 @@ def windows_find_msvc( year=None, grade=None, version=None):
     '''
     Finds Visual Studio command-line tools.
     
-    Returns `(year, version, directory, vcvars, cl, link, devenv)` for latest
-    matching MSVC.
-    
     year:
         None or, for example, '2019'.
     grade:
@@ -1036,7 +1033,26 @@ def windows_find_msvc( year=None, grade=None, version=None):
             'Professional'
             'Enterprise'
     version:
-        None or, for example, '14.28.29910'.
+        None or, for example: '14.28.29910'
+    
+    Returns `(year, version, directory, vcvars, cl, link, devenv)` for latest
+    matching MSVC:
+    
+        year:
+            E.g. '2019'.
+        version:
+            E.g. '14.28.29910'
+        directory:
+            Root of VS tools.
+            E.g.: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community'
+        vcvars:
+            E.g.: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat'
+        cl:
+            E.g.: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29910\bin\Hostx64\x64\cl.exe'
+        link:
+            E.g.: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29910\bin\Hostx64\x64\link.exe'
+        devenv:
+            E.g.: 'C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\devenv.com'
     '''
     
     # Find devenv.com
@@ -1061,7 +1077,7 @@ def windows_find_msvc( year=None, grade=None, version=None):
     if year:
         assert year2 == year
     else:
-        year == year2
+        year = year2
     if grade:
         assert grade2 == grade
     else:
@@ -1099,47 +1115,13 @@ def windows_find_msvc( year=None, grade=None, version=None):
     link_s.sort()
     link = link_s[ -1]
     
+    _log( f'pipcl.py:windows_find_msvc(): Returning:')
+    _log( f'    year:      {year}')
+    _log( f'    version:   {version}')
+    _log( f'    directory: {directory}')
+    _log( f'    vcvars:    {vcvars}')
+    _log( f'    cl:        {cl}')
+    _log( f'    link:      {link}')
+    _log( f'    devenv:    {devenv}')
     return year, version, directory, vcvars, cl, link, devenv
     
-    '''
-    pattern_ = pattern.replace( '\\', '/')
-    regex = r'$(C:\\Program Files[^\\]*\\Microsoft Visual Studio)\\([^\\]+)\\([^\\]+)\\VC\\Tools\\MSVC\\([^\\]+)\\bin\\Hostx64\\x64$'
-    _log(  f'{pattern=}')
-    _log(  f'{regex=}')
-    _log(  f'{pattern_=}')
-    _log(  f'pattern_={pattern_}')
-    directories = glob.glob( pattern)
-    directories.sort()
-    matches = []
-    for directory in directories:
-        m = re.match( regex, directory)
-        assert m
-        root = m.group(1)
-        year2 = m.group(2)
-        grade2 = m.group(3)
-        if grade2 not in ( 'Community', 'Professional', 'Enterprise'):
-            _log( f'Warning, grade expected to be "Community", "Professional" or "Enterprise", but {grade=}: {directory}')
-        version2 = m.group(4)
-        match = False
-        if (not year or year == year2) and (not grade or grade == grade2) and (not version or version == version2):
-            match = True
-            matches.append( (year, grade, version, directory))
-        _log( f'[{"*" if match else " "}] {year=} {version=}: {directory}')
-    if not matches:
-        raise Exception( f'No matching MSVC for year={year if year else "ANY"} version={version if version else "ANY"}')
-    year, grade, version, directory = matches[-1]
-    vcvars = rf'{root}\{year}\{grade}\VC\Auxiliary\Build\vcvars64.bat'
-    cl = rf'{directory}\cl.exe'
-    link = rf'{directory}\link.exe'
-    devenv = rf'{root}\{year}\{grade}\Common7\IDE\devenv.com'
-    if not os.path.isfile( vcvars):
-        raise Exception( f'vcvars.bat does not exist: {vcvars}')
-    if not os.path.isfile( cl):
-        raise Exception( f'cl.exe does not exist: {cl}')
-    if not os.path.isfile( link):
-        raise Exception( f'link.exe does not exist: {link}')
-    if not os.path.isfile( devenv):
-        raise Exception( f'devenv.com does not exist: {devenv}')
-    _log( f'Found MSVC: {year=} {version=}: {directory}')
-    return year, version, directory, vcvars, cl, link, devenv
-    '''
