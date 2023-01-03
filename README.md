@@ -43,7 +43,7 @@ OpenBSD. No testing has been done on other platforms such as Windows.
 * Potential support for multithreaded use (native PyMuPDF is explicitly
   single-threaded).
 
-* Access to the underlying MuPDF Python API in the `mupdf` module.
+* Access to the underlying MuPDF Python API in the `fitz.mupdf` module.
 
 
 ## License
@@ -114,9 +114,12 @@ These can be run in the usual way, for example:
     pip install pytest fontTools
     pytest PyMuPDF
 
-### Known failures as of 2022-12-08:
+### Known issues as of 2023-1-03:
 
-    Stories are not implemented so all the Story tests fail.
+* Stories are not implemented so all the Story tests fail.
+
+* On Windows, low level callbacks do not handle fz exceptions (because the C
+  API is not visible at the moment).
  
 
 ## Details
