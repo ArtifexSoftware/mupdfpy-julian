@@ -1475,7 +1475,7 @@ static int page_count_pdf( mupdf::PdfDocument& pdf)
 
 static int page_count( mupdf::FzDocument& document)
 {
-    static fz_context* ctx = mupdf::internal_context_get();
+    //static fz_context* ctx = mupdf::internal_context_get();
     //return ::fz_count_pages( ctx, document.m_internal);
     return mupdf::fz_count_pages( document);
 }
