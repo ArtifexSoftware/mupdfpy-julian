@@ -346,88 +346,106 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     libs = list()
     libs.append( 'mupdfcpp')
     libs_text = ''
-    for lib in libs:
-        libs_text += f' /l {lib}'
+    #for lib in libs:
+    #    libs_text += f' /l {lib}'
 
     cpp_flags = ''
     #cpp_flags += f' /nologo'
-    cpp_flags += f' /D "FZ_DLL_CLIENT"'  # Activates __declspec() in headers.
-    cpp_flags += f' /D "NDEBUG"'
-    cpp_flags += f' /D "UNICODE"'
-    cpp_flags += f' /D "WIN{64}"'
-    cpp_flags += f' /D "_UNICODE"'
-    cpp_flags += f' /EHsc'               # Enable C++ exceptions.
-    cpp_flags += f' /FC'                 # Display full path of source code files passed to cl.exe in diagnostic text.
-    #cpp_flags += f' /Fa{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/'       # Sets the listing file name.
-    #cpp_flags += f' /Fd{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/'       # Specifies a file name for the program database (PDB) file
-    #cpp_flags += f' /Fp"Release/_mupdf.pch"' # Specifies a precompiled header file name.
-    cpp_flags += f' /GL'                 # Enables whole program optimization.
-    cpp_flags += f' /GS'                 # Buffers security check.
-    cpp_flags += f' /Gd'                 # Uses the __cdecl calling convention (x86 only).
-    cpp_flags += f' /Gm-'                # Deprecated. Enables minimal rebuild.
-    cpp_flags += f' /Gy'                 # Enables function-level linking.
-    cpp_flags += f' /MD'                 # Creates a multithreaded DLL using MSVCRT.lib.
-    cpp_flags += f' /O2'
-    cpp_flags += f' /Oi'
-    cpp_flags += f' /Oy-'                # Omits frame pointer (x86 only).
-    cpp_flags += f' /W3'                 # Sets which warning level to output.
-    cpp_flags += f' /WX-'                # Treats all warnings as errors.
-    cpp_flags += f' /Zc:forScope'
-    cpp_flags += f' /Zc:inline'
-    cpp_flags += f' /Zc:wchar_t'
-    cpp_flags += f' /Zi'
-    cpp_flags += f' /analyze-'           # Enable code analysis.
-    cpp_flags += f' /c'                  # Compiles without linking.
-    cpp_flags += f' /diagnostics:column' # Controls the format of diagnostic messages.
-    cpp_flags += f' /errorReport:prompt' # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
-    cpp_flags += f' /fp:precise'         # Specify floating-point behavior.
+    
+    #cpp_flags += f' /D "FZ_DLL_CLIENT"'  # Activates __declspec() in headers.
+    #cpp_flags += f' /c /nologo /Ox /W3 /GL /DNDEBUG /MD'
+    
+    
+    if 1:
+        cpp_flags += f' /c'                  # Compiles without linking.
+        cpp_flags += f' /nologo'
+        cpp_flags += f' /Ox'
+        cpp_flags += f' /W3'                 # Sets which warning level to output.
+        cpp_flags += f' /GL'                 # Enables whole program optimization.
+        cpp_flags += f' /D NDEBUG'
+        cpp_flags += f' /MD'                 # Creates a multithreaded DLL using MSVCRT.lib.
+        cpp_flags += rf' /I"{p_root}/include"'
+        cpp_flags += f' /D FZ_DLL_CLIENT'  # Activates __declspec() in headers.
+        cpp_flags += f' /EHsc'               # Enable C++ exceptions.
+        cpp_flags += f' /FC'                 # Display full path of source code files passed to cl.exe in diagnostic text.
+        cpp_flags += f' /WX-'                # Treats all warnings as errors.
+        
+    if 0:
+        #cpp_flags += f' /D "UNICODE"'
+        #cpp_flags += f' /D "WIN{64}"'
+        #cpp_flags += f' /D "_UNICODE"'
+        #cpp_flags += f' /Fa{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/'       # Sets the listing file name.
+        #cpp_flags += f' /Fd{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/'       # Specifies a file name for the program database (PDB) file
+        #cpp_flags += f' /Fp"Release/_mupdf.pch"' # Specifies a precompiled header file name.
+        cpp_flags += f' /GS'                 # Buffers security check.
+        cpp_flags += f' /Gd'                 # Uses the __cdecl calling convention (x86 only).
+        #cpp_flags += f' /Gm-'                # Deprecated. Enables minimal rebuild.
+        cpp_flags += f' /Gy'                 # Enables function-level linking.
+        #cpp_flags += f' /O2'
+        #cpp_flags += f' /Oi'
+        #cpp_flags += f' /Oy-'                # Omits frame pointer (x86 only).
+        cpp_flags += f' /Zc:inline'
+        cpp_flags += f' /Zc:wchar_t'
+        cpp_flags += f' /Zi'                # Generates complete debugging information.
+        #cpp_flags += f' /analyze-'           # Enable code analysis.
+        #cpp_flags += f' /errorReport:prompt' # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
+        #cpp_flags += f' /fp:precise'         # Specify floating-point behavior.
+        cpp_flags += f' /permissive-'        # Set standard-conformance mode.
+        cpp_flags += f' /sdl'                # Enables additional security features and warnings.
+
+    cpp_flags += f' {include1}'
+    cpp_flags += f' {include2}'
+    cpp_flags += f' /Tp{path_cpp}'          # /Tp specifies C++ source file.
+    cpp_flags += f' /Fo{path_so}.obj'
+    cpp_flags += f' /I {p_root}\\include'
     cpp_flags += f' /permissive-'        # Set standard-conformance mode.
-    cpp_flags += f' /sdl'                # Enables additional security features and warnings.
-    cpp_flags += rf' /I"{p_root}/include"'
-
-
+    cpp_flags += f' /Zc:forScope'
+    cpp_flags += f' /diagnostics:column' # Controls the format of diagnostic messages.
 
     _run( f'''
             "{vcvars}"&&"{cl}"
                 {cpp_flags}
-                {include1}
-                {include2}
-                {path_cpp}
-                /Fo {path_so}.obj
-                /L {build_dir}
-                {libs_text}
-                /I {p_root}/include
             ''')
     link_flags = ''
-    link_flags += '/NOLOGO'
-    link_flags += '/DLL'
-    link_flags += '/DYNAMICBASE'        # Specifies whether to generate an executable image that's rebased at load time by using the address space layout randomizationLR) feature.
-    link_flags += '/ERRORREPORT:PROMPT' # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
-    link_flags += '/IMPLIB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.lib"'
-    link_flags += '/INCREMENTAL:NO'     # Controls incremental linking.
-    link_flags += '/LIBPATH:"platform/win32/{build_dirs.cpu.windows_subdir}Release"'
-    link_flags += '/LIBPATH:"{p_root}/libs"'
-    link_flags += '/LTCG:incremental'
-    link_flags += '/LTCGOUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.iobj"'
-    link_flags += '/MACHINE:{build_dirs.cpu.windows_name.upper()}'   # Specifies the target platform.
-    link_flags += '/MANIFEST'           # Creates a side-by-side manifest file and optionally embeds it in the binary.
-    link_flags += '/MANIFESTUAC:NO'     # Specifies whether User Account Control (UAC) information is embedded in the program manifest.
-    link_flags += '/ManifestFile:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll.intermediate.manifest"'
-    link_flags += '/NXCOMPAT'           # Marks an executable as verified to be compatible with the Windows Data Execution Prevention feature.
-    link_flags += '/OPT:ICF'
-    link_flags += '/OPT:REF'
-    link_flags += '/OUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll"'
-    link_flags += '/PDB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.pdb"'
-    link_flags += f'{"/SAFESEH" if build_dirs.cpu.bits==32 else ""}'    # Not supported on x64.
-    link_flags += '/SUBSYSTEM:WINDOWS'  # Tells the operating system how to run the .exe file.
-    link_flags += '/TLBID:1'            # A user-specified value for a linker-created type library. It overrides the default resource ID of 1.
-    link_flags += '"kernel32.lib" "user32.lib" "gdi32.lib" "winspool.lib" "comdlg32.lib" "advapi32.lib"'
-    link_flags += '"shell32.lib" "ole32.lib" "oleaut32.lib" "uuid.lib" "odbc32.lib" "odbccp32.lib"'
+    
+    #link_flags += '"kernel32.lib" "user32.lib" "gdi32.lib" "winspool.lib" "comdlg32.lib" "advapi32.lib"'
+    #link_flags += '"shell32.lib" "ole32.lib" "oleaut32.lib" "uuid.lib" "odbc32.lib" "odbccp32.lib"'
     #link_flags += '#' python3.lib'         # not needed because on Windows Python.h has info about library.
-    link_flags += f'{path_so}.obj'
-    link_flags += 'mupdfcpp.lib'
+    link_flags += ' /DLL'
+    #link_flags += '/DYNAMICBASE'        # Specifies whether to generate an executable image that's rebased at load time by using the address space layout randomizationLR) feature.
+    #link_flags += '/ERRORREPORT:PROMPT' # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
+    #link_flags += '/IMPLIB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.lib"'
+    link_flags += ' /INCREMENTAL:NO'     # Controls incremental linking.
+    link_flags +=f' /LIBPATH:"{mupdf_local}\\platform\\win32\\x64\\Release"'
+    link_flags +=f' /LIBPATH:"{mupdf_local}\\platform\\win32\\x64\\ReleaseTesseract"'
+    link_flags +=f' /LIBPATH:"{p_root}\\libs"'
+    link_flags += ' /LTCG'
+    #link_flags += '/LTCGOUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.iobj"'
+    #link_flags += '/MACHINE:{build_dirs.cpu.windows_name.upper()}'   # Specifies the target platform.
+    #link_flags += '/MANIFEST'           # Creates a side-by-side manifest file and optionally embeds it in the binary.
+    link_flags += ' /MANIFEST:EMBED,ID=2'
+    link_flags += ' /MANIFESTUAC:NO'     # Specifies whether User Account Control (UAC) information is embedded in the program manifest.
+    #link_flags += '/ManifestFile:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll.intermediate.manifest"'
+    link_flags += ' /nologo'
+    #link_flags += '/NXCOMPAT'           # Marks an executable as verified to be compatible with the Windows Data Execution Prevention feature.
+    #link_flags += '/OPT:ICF'
+    #link_flags += '/OPT:REF'
+    #link_flags += '/OUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll"'
+    #link_flags += '/PDB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.pdb"'
+    #link_flags += '/SUBSYSTEM:WINDOWS'  # Tells the operating system how to run the .exe file.
+    #link_flags += '/TLBID:1'            # A user-specified value for a linker-created type library. It overrides the default resource ID of 1.
+    #link_flags += ' libmupdf.lib'
+    link_flags += f' libmupdf.lib'
+    link_flags += f' mupdfcpp64.lib'
+    #link_flags += f'{"/SAFESEH" if build_dirs.cpu.bits==32 else ""}'    # Not supported on x64.
+    #link_flags += f'{path_so}.obj'
+    link_flags += f' /EXPORT:PyInit__extra'
+    link_flags += f' {path_so}.obj'
+    link_flags += f' /OUT:fitz\_extra.cp39-win_amd64.pyd'
+    link_flags += f' /IMPLIB:fitz\_extra.cp39-win_amd64.lib'
+    link_flags += f' /NODEFAULTLIB:MSVCRT'
     _run( f'''
-            {vcvars}&&{link}
+            "{vcvars}"&&"{link}"
                 {link_flags}
             ''')
 
@@ -450,6 +468,8 @@ def build():
     path_i = f'{g_root}/extra.i'
     path_cpp = f'{g_root}/fitz/extra.cpp'
     if windows:
+        path_i.replace( '/', '\\')
+        path_cpp.replace( '/', '\\')
         path_so_tail = 'fitz/_extra.pyd'
     else:
         path_so_tail = 'fitz/_extra.so'
