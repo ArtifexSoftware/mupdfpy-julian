@@ -25,7 +25,8 @@ native Python bindings](http://mupdf.com/r/C-and-Python-APIs) instead of SWIG
 and C code.
 
 To improve speed, some routines have alternative implementations that use
-MuPDF's C++ API. This can be disabled by setting `MUPDFPY_USE_EXTRA=0`.
+MuPDF's C++ API (which is also used by the MuPDF Python API). This can be
+disabled by setting `MUPDFPY_USE_EXTRA=0`.
 
 As of 2022-11-23, only limited testing has been done, and only on Linux and
 OpenBSD. No testing has been done on other platforms such as Windows.
@@ -61,12 +62,12 @@ Supported OS's:
 
 Steps:
 
-* Install SWIG.
 * Get MuPDF, 1.21.x branch.
 * Get mupdfpy, master branch.
-* Set up a Python virtual environment.
-* Install libclang.
-* Build mupdfpy, using `PYMUPDF_SETUP_MUPDF_BUILD` to point to the local MuPDF checkout.
+* Set up a Python virtual environment (venv).
+* Install libclang and swig into venv.
+* Build mupdfpy, setting environmental variable `PYMUPDF_SETUP_MUPDF_BUILD` to
+  point to the local MuPDF checkout.
 
 So:
 
@@ -86,8 +87,8 @@ So:
     python3 -m venv pylocal
     . pylocal/bin/activate
     
-    # Install clang python into venv.
-    pip install libclang
+    # Install clang python and swig into venv.
+    pip install libclang swig
     
     # Build mupdfpy (will also build MuPDF).
     cd mupdfpy
