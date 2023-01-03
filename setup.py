@@ -357,7 +357,7 @@ windows = platform.system() == 'Windows' or platform.system().startswith('CYGWIN
 
 def build_windows( include1, include2, path_cpp, path_so, build_dir):
     vs = pipcl.WindowsVS()
-    p_path, p_version, p_root, p_cpu = pipcl.windows_find_python()
+    python = pipcl.WindowsPython()
     mupdf_local, mupdf_branch = get_mupdf()
     
     # cl.exe flags:
@@ -365,26 +365,26 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #   https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-alphabetically?view=msvc-170
     #
     _run( f'''
-            "{vcvars}"&&"{vs.cl}"
-                /D FZ_DLL_CLIENT        # Activates __declspec() in MuPDF C++ API headers.
-                /D NDEBUG               #
+            "{vs.vcvars}"&&"{vs.cl}"
+                /D FZ_DLL_CLIENT            # Activates __declspec() in MuPDF C++ API headers.
+                /D NDEBUG                   #
                 /D UNICODE 
                 /D _UNICODE 
-                /EHsc                   # Enable C++ exceptions.
-                /FC                     # Display full path of source code files passed to cl.exe in diagnostic text.
+                /EHsc                       # Enable C++ exceptions.
+                /FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
                 /Fo{path_so}.obj 
-                /GL                     # Enables whole program optimization.
-                /I {p_root}\\include    # Include path for Python headers.
-                /MD                     # Creates a multithreaded DLL using MSVCRT.lib.
-                /Ox                     # Optimisation.
-                /Tp{path_cpp}           # /Tp specifies C++ source file.
-                /W3                     # Sets which warning level to output.
-                /WX-                    # Treats all warnings as errors.
+                /GL                         # Enables whole program optimization.
+                /I {python.root}\\include   # Include path for Python headers.
+                /MD                         # Creates a multithreaded DLL using MSVCRT.lib.
+                /Ox                         # Optimisation.
+                /Tp{path_cpp}               # /Tp specifies C++ source file.
+                /W3                         # Sets which warning level to output.
+                /WX-                        # Treats all warnings as errors.
                 /Zc:forScope 
-                /c                      # Compiles without linking.
-                /diagnostics:column     # Controls the format of diagnostic messages.
-                /nologo                 #
-                /permissive-            # Set standard-conformance mode.
+                /c                          # Compiles without linking.
+                /diagnostics:column         # Controls the format of diagnostic messages.
+                /nologo                     #
+                /permissive-                # Set standard-conformance mode.
                 {include1}
                 {include2}
                 ''')
@@ -394,14 +394,14 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #   https://learn.microsoft.com/en-us/cpp/build/reference/linker-options?view=msvc-170
     #
     _run( f'''
-            "{vcvars}"&&"{vs.link}"
+            "{vs.vcvars}"&&"{vs.link}"
                 /DLL                   # Builds a DLL.
                 /EXPORT:PyInit__extra  # Exports a function.
                 /IMPLIB:{path_so.replace( ".pyd", ".lib")}     # Overrides the default import library name.
                 /INCREMENTAL:NO        # Controls incremental linking.
                 /LIBPATH:"{mupdf_local}\\platform\\win32\\x64\\Release"
                 /LIBPATH:"{mupdf_local}\\platform\\win32\\x64\\ReleaseTesseract"
-                /LIBPATH:"{p_root}\\libs"
+                /LIBPATH:"{python.root}\\libs"
                 /LTCG                  # Specifies link-time code generation.
                 /MANIFEST:EMBED,ID=2   # Creates a side-by-side manifest file and optionally embeds it in the binary.
                 /MANIFESTUAC:NO        # Specifies whether User Account Control (UAC) information is embedded in the program manifest.
