@@ -962,17 +962,12 @@ def python_version():
     return '.'.join(platform.python_version().split('.')[:2])
 
 
-def windows_find_python( cpu=None, version=None):
+class WindowsPython:
     '''
-    Windows only. Finds installed Python with specific word size and version.
+    Windows only. Information aboutinstalled Python with specific word size and
+    version.
 
-    cpu:
-        A WindowsCpu instance. If None, we use whatever we are running on.
-    version:
-        Two-digit Python version as a string such as '3.8'. If None we use
-        current Python's version.
-
-    Returns (path, version, root, cpu):
+    Members:
 
         path:
             Path of python binary.
@@ -990,43 +985,64 @@ def windows_find_python( cpu=None, version=None):
     We parse the output from 'py -0p' to find all available python
     installations.
     '''
-    if cpu is None:
-        cpu = WindowsCpu(cpu_name())
-    if version is None:
-        version = python_version()
-    command = 'py -0p'
-    _log(f'Running: {command}')
-    text = subprocess.check_output( command, shell=True, text=True)
-    for line in text.split('\n'):
-        _log( f'    {line}')
-        m = re.match( '^ *-([0-9.]+)-((64)|(32)) +([^\\r*]+)[\\r*]*$', line)
-        if not m:
-            continue
-        version2 = m.group(1)
-        bits = int(m.group(2))
-        if bits != cpu.bits or version2 != version:
-            continue
-        path = m.group(5).strip()
-        root = path[ :path.rfind('\\')]
-        if not os.path.exists(path):
-            # Sometimes it seems that the specified .../python.exe does not exist,
-            # and we have to change it to .../python<version>.exe.
-            #
-            assert path.endswith('.exe'), f'path={path!r}'
-            path2 = f'{path[:-4]}{version}.exe'
-            _log( f'Python {path!r} does not exist; changed to: {path2!r}')
-            assert os.path.exists( path2)
-            path = path2
+    
+    def __init__( self, cpu=None, version=None):
+        '''
+        cpu:
+            A WindowsCpu instance. If None, we use whatever we are running on.
+        version:
+            Two-digit Python version as a string such as '3.8'. If None we use
+            current Python's version.
 
-        _log(f'{cpu=} {version=}: returning {path=} {version=} {root=} {cpu=}')
-        return path, version, root, cpu
+        We parse the output from 'py -0p' to find all available python
+        installations.
+        '''
+        if cpu is None:
+            cpu = WindowsCpu(cpu_name())
+        if version is None:
+            version = python_version()
+        command = 'py -0p'
+        _log(f'Running: {command}')
+        text = subprocess.check_output( command, shell=True, text=True)
+        for line in text.split('\n'):
+            _log( f'    {line}')
+            m = re.match( '^ *-([0-9.]+)-((64)|(32)) +([^\\r*]+)[\\r*]*$', line)
+            if not m:
+                continue
+            version2 = m.group(1)
+            bits = int(m.group(2))
+            if bits != cpu.bits or version2 != version:
+                continue
+            path = m.group(5).strip()
+            root = path[ :path.rfind('\\')]
+            if not os.path.exists(path):
+                # Sometimes it seems that the specified .../python.exe does not exist,
+                # and we have to change it to .../python<version>.exe.
+                #
+                assert path.endswith('.exe'), f'path={path!r}'
+                path2 = f'{path[:-4]}{version}.exe'
+                _log( f'Python {path!r} does not exist; changed to: {path2!r}')
+                assert os.path.exists( path2)
+                path = path2
 
-    raise Exception( f'Failed to find python matching cpu={cpu}. Run "py -0p" to see available pythons')
+            self.path = path
+            self.version = version
+            self.root = root
+            self.cpu = cpu
+            _log( f'pipcl.py:WindowsPython():')
+            _log( f'    root:    {self.root}')
+            _log( f'    path:    {self.path}')
+            _log( f'    version: {self.version}')
+            _log( f'    cpu:     {self.cpu}')
+            return
+
+        raise Exception( f'Failed to find python matching cpu={cpu}. Run "py -0p" to see available pythons')
 
 
 class WindowsVS:
     '''
-    Finds locations of Visual Studio command-line tools.
+    Finds locations of Visual Studio command-line tools. Assumes VS2019-style
+    paths.
     
     Members and example values:
     
