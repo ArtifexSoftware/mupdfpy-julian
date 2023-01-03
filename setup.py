@@ -443,8 +443,8 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #link_flags += f'{path_so}.obj'
     link_flags += f' /EXPORT:PyInit__extra'
     link_flags += f' {path_so}.obj'
-    link_flags += f' /OUT:fitz\_extra.cp39-win_amd64.pyd'
-    link_flags += f' /IMPLIB:fitz\_extra.cp39-win_amd64.lib'
+    link_flags += f' /OUT:{path_so}'
+    link_flags += f' /IMPLIB:{path_so.replace( ".pyd", ".lib")}'
     #link_flags += f' /NODEFAULTLIB:MSVCRT'
     _run( f'''
             "{vcvars}"&&"{link}"
@@ -472,7 +472,7 @@ def build():
     if windows:
         path_i.replace( '/', '\\')
         path_cpp.replace( '/', '\\')
-        path_so_tail = 'fitz/_extra.pyd'
+        path_so_tail = '_extra.cp39-win_amd64.pyd'
     else:
         path_so_tail = 'fitz/_extra.so'
     path_so = f'{g_root}/{path_so_tail}'
@@ -591,7 +591,7 @@ def build():
             for leaf in (
                     'mupdf.py',
                     '_mupdf.pyd',
-                    'libmupdfcpp.dll',
+                    'mupdfcpp64.dll',
                     ):
                 from_ = f'{build_dir}/{leaf}'
                 to_ = f'fitz/{leaf}'
