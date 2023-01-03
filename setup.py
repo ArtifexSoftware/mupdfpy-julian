@@ -472,7 +472,7 @@ def build():
     if windows:
         path_i.replace( '/', '\\')
         path_cpp.replace( '/', '\\')
-        path_so_tail = '_extra.cp39-win_amd64.pyd'
+        path_so_tail = 'fitz/_extra.cp39-win_amd64.pyd'
     else:
         path_so_tail = 'fitz/_extra.so'
     path_so = f'{g_root}/{path_so_tail}'
