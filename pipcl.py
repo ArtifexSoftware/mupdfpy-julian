@@ -465,11 +465,10 @@ class Package:
         if root is None:
             root = sysconfig.get_path('platlib')
             if verbose:
-                _log( f'Using sysconfig.get_path("platlib")={root!r}.')
+                _log( f'argv_install(): Using sysconfig.get_path("platlib")={root!r}.')
             # todo: for pure-python we should use sysconfig.get_path('purelib') ?
         
-        if verbose:
-            _log( f'Installing into {root=}')
+        _log( f'argv_install(): Installing into {root=}')
         dist_info_dir = self._dist_info_dir()
         
         if not record_path:
@@ -478,16 +477,16 @@ class Package:
         
         def add_file(from_abs, from_rel, to_abs, to_rel):
             if verbose:
-                _log(f'copying from {from_abs} to {to_abs}')
+                _log(f'argv_install(): copying from {from_abs} to {to_abs}')
             os.makedirs( os.path.dirname( to_abs), exist_ok=True)
             shutil.copy2( from_abs, to_abs)
             if verbose:
-                _log(f'adding to record: {from_rel=} {to_rel=}')
+                _log(f'argv_install(): adding to record: {from_rel=} {to_rel=}')
             record.add_file(from_rel, to_rel)
 
         def add_str(content, to_abs, to_rel):
             if verbose:
-                _log( f'Writing to: {to_abs}')
+                _log( f'argv_install(): Writing to: {to_abs}')
             with open( to_abs, 'w') as f:
                 f.write( content)
             record.add_content(content, to_rel)
@@ -500,7 +499,7 @@ class Package:
         add_str( self._metainfo(), f'{root}/{dist_info_dir}/METADATA', f'{dist_info_dir}/METADATA')
 
         if verbose:
-            _log( f'Writing to: {record_path}')
+            _log( f'argv_install(): Writing to: {record_path}')
         with open(record_path, 'w') as f:
             f.write(record.get())
 
@@ -613,10 +612,9 @@ class Package:
                                 Creates files in <egg-base>/.egg-info/, where
                                 <egg-base> is as specified with --egg-base.
                             install
-                                Installs into location from Python's
-                                site.getsitepackages() array. Writes installation
-                                information to <record> if --record
-                                was specified.
+                                Builds and installs. Writes installation
+                                information to <record> if --record was
+                                specified.
                             sdist
                                 Make a source distribution:
                                     <dist-dir>/<name>-<version>.tar.gz
@@ -732,7 +730,7 @@ class Package:
                     assert '\n' not in value, f'key={key} value contains newline: {value!r}'
                     ret[0] += f'{key}: {value}\n'
         #add('Description', self.description)
-        add('Metadata-Version', '1.2')
+        add('Metadata-Version', '2.1')
         
         # These names are from:
         # https://packaging.python.org/specifications/core-metadata/
@@ -967,8 +965,8 @@ def python_version():
 
 class WindowsPython:
     '''
-    Windows only. Information aboutinstalled Python with specific word size and
-    version.
+    Windows only. Information about installed Python with specific word size
+    and version.
 
     Members:
 
