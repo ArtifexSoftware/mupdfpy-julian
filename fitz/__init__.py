@@ -6,6 +6,18 @@ License:
     SPDX-License-Identifier: GPL-3.0-only
 '''
 
+# Try to detect if we are being used with current directory set to a mupdfpy/ checkout.
+import glob
+import os
+if os.path.exists( 'fitz/__init__.py'):
+    if not glob.glob( 'fitz/_extra*') or not glob.glob( 'fitz/_mupdf*'):
+        print( '#' * 40)
+        print( '# Warning: current directory appears to contain an incomplete')
+        print( '# fitz/ installation directory so "import fitz" may fail.')
+        print( '# This can happen if current directory is a mupdfpy source tree.')
+        print( '# Suggest changing to a different current directory.')
+        print( '#' * 40)
+
 jlib = None
 if 0:
     try:
