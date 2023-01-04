@@ -449,11 +449,12 @@ class Package:
                 shutil.rmtree(path, ignore_errors=True)
 
 
-    def argv_install(self, record_path, root):
+    def argv_install(self, record_path, root, verbose=False):
         '''
         Called by `handle_argv()`.
         '''
-        #_log( f'argv_install(): {record_path=} {root=}')
+        if verbose:
+            _log( f'argv_install(): {record_path=} {root=}')
         
         # Do a build and get list of files to install.
         #
@@ -463,30 +464,12 @@ class Package:
 
         if root is None:
             root = sysconfig.get_path('platlib')
-            _log( f'Using sysconfig.get_path("platlib")={root!r}.')
+            if verbose:
+                _log( f'Using sysconfig.get_path("platlib")={root!r}.')
             # todo: for pure-python we should use sysconfig.get_path('purelib') ?
-        if 0:
-            # We install to the first item in site.getsitepackages()[] that exists.
-            #
-            sitepackages_all = site.getsitepackages()
-            # Look for preferred location.
-            for p in sitepackages_all:
-                if os.path.exists(p) and os.path.basename( p) == 'site-packages':
-                    root = p
-                    break
-            if not root:
-                # Look for any location that exists.
-                for p in sitepackages_all:
-                    if os.path.exists(p):
-                        root = p
-                        break
-            else:
-                text = 'No item exists in site.getsitepackages():\n'
-                for i in sitepackages_all:
-                    text += f'    {i}\n'
-                raise Exception(text)
         
-        _log( f'Installing into {root=}')
+        if verbose:
+            _log( f'Installing into {root=}')
         dist_info_dir = self._dist_info_dir()
         
         if not record_path:
@@ -494,14 +477,17 @@ class Package:
         record = _Record()
         
         def add_file(from_abs, from_rel, to_abs, to_rel):
-            _log(f'copying from {from_abs} to {to_abs}')
+            if verbose:
+                _log(f'copying from {from_abs} to {to_abs}')
             os.makedirs( os.path.dirname( to_abs), exist_ok=True)
             shutil.copy2( from_abs, to_abs)
-            _log(f'adding to record: {from_rel=} {to_rel=}')
+            if verbose:
+                _log(f'adding to record: {from_rel=} {to_rel=}')
             record.add_file(from_rel, to_rel)
 
         def add_str(content, to_abs, to_rel):
-            _log( f'Writing to: {to_abs}')
+            if verbose:
+                _log( f'Writing to: {to_abs}')
             with open( to_abs, 'w') as f:
                 f.write( content)
             record.add_content(content, to_rel)
@@ -513,11 +499,13 @@ class Package:
         
         add_str( self._metainfo(), f'{root}/{dist_info_dir}/METADATA', f'{dist_info_dir}/METADATA')
 
-        _log( f'Writing to: {record_path}')
+        if verbose:
+            _log( f'Writing to: {record_path}')
         with open(record_path, 'w') as f:
             f.write(record.get())
 
-        _log(f'argv_install(): Finished.')
+        if verbose:
+            _log(f'argv_install(): Finished.')
 
 
     def argv_dist_info(self, egg_base):
