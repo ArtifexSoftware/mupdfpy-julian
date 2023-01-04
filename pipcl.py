@@ -14,6 +14,7 @@ import shutil
 import site
 import subprocess
 import sys
+import sysconfig
 import tarfile
 import textwrap
 import time
@@ -461,19 +462,31 @@ class Package:
             items = self.fn_build()
 
         if root is None:
+            root = sysconfig.get_path('platlib')
+            _log( f'Using sysconfig.get_path("platlib")={root!r}.')
+            # todo: for pure-python we should use sysconfig.get_path('purelib') ?
+        if 0:
             # We install to the first item in site.getsitepackages()[] that exists.
             #
             sitepackages_all = site.getsitepackages()
+            # Look for preferred location.
             for p in sitepackages_all:
-                if os.path.exists(p):
+                if os.path.exists(p) and os.path.basename( p) == 'site-packages':
                     root = p
                     break
+            if not root:
+                # Look for any location that exists.
+                for p in sitepackages_all:
+                    if os.path.exists(p):
+                        root = p
+                        break
             else:
                 text = 'No item exists in site.getsitepackages():\n'
                 for i in sitepackages_all:
                     text += f'    {i}\n'
                 raise Exception(text)
         
+        _log( f'Installing into {root=}')
         dist_info_dir = self._dist_info_dir()
         
         if not record_path:
@@ -481,13 +494,14 @@ class Package:
         record = _Record()
         
         def add_file(from_abs, from_rel, to_abs, to_rel):
-            #_log(f'copying from {from_abs} to {to_abs}')
+            _log(f'copying from {from_abs} to {to_abs}')
             os.makedirs( os.path.dirname( to_abs), exist_ok=True)
             shutil.copy2( from_abs, to_abs)
-            #_log(f'adding to record: {from_rel=} {to_rel=}')
+            _log(f'adding to record: {from_rel=} {to_rel=}')
             record.add_file(from_rel, to_rel)
 
         def add_str(content, to_abs, to_rel):
+            _log( f'Writing to: {to_abs}')
             with open( to_abs, 'w') as f:
                 f.write( content)
             record.add_content(content, to_rel)
@@ -499,6 +513,7 @@ class Package:
         
         add_str( self._metainfo(), f'{root}/{dist_info_dir}/METADATA', f'{dist_info_dir}/METADATA')
 
+        _log( f'Writing to: {record_path}')
         with open(record_path, 'w') as f:
             f.write(record.get())
 
