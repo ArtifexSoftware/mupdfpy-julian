@@ -163,16 +163,18 @@ class Package:
             we copy file `from_` to `to_` inside the wheel archive.
 
             If we are installing (e.g. 'install' command in the argv
-            passed to `self.handle_argv()`), we copy `from_` to
-            `sitepackages`/`to_`, where `sitepackages` is the first item in
-            `site.getsitepackages()[]` that exists.
+            passed to `self.handle_argv()`), then we copy `from_` to
+            `sitepackages`/`to_`, where `sitepackages` is the installation
+            directory, default being `sysconfig.get_path('platlib')` e.g.
+            `myvenv/lib/python3.9/site-packages/`.
         fn_clean:
             A function taking a single arg `all_` that cleans generated files.
             `all_` is true iff '--all' is in argv.
 
             For safety and convenience, can also returns a list of
             files/directory paths to be deleted. Relative paths are interpreted
-            as relative to `root`. Paths are asserted to be within `root`.
+            as relative to `root` and other paths are asserted to be within
+            `root`.
         fn_sdist:
             A function taking no args that returns a list of paths, e.g. using
             `pipcl.git_items()`, for files that should be copied into the
@@ -180,18 +182,15 @@ class Package:
             an error if a path does not exist or is not a file.
         tag_python:
             First element of wheel tag defined in
-            https://peps.python.org/pep-0425/. Default is `py<version>`.
-            
-            On OpenBSD, `cp3` makes pip fail with (for example):
-                <name>-<version>-cp3-none-openbsd_7_0_amd64.whl is not a
-                supported wheel on this platform.
+            https://peps.python.org/pep-0425/. If None we use 'py<version>'.
         tag_abi:
             Second element of wheel tag defined in
-            https://peps.python.org/pep-0425/. Default is `none`.
+            https://peps.python.org/pep-0425/. If None we use 'none'.
         tag_platform:
             Third element of wheel tag defined in
-            https://peps.python.org/pep-0425/. Default is generated from
-            distutils.util.get_platform(), e.g. `openbsd_7_0_amd64`.
+            https://peps.python.org/pep-0425/; default is derived from
+            `distutils.util.get_platform()` as specified in the PEP, e.g.
+            'openbsd_7_0_amd64'.
             
             For pure python packages use: `tag_platform='any'`
         '''        
@@ -227,6 +226,12 @@ class Package:
         assert_str_or_multi( project_url)
         assert_str_or_multi( provides_extra)
         
+        # https://packaging.python.org/en/latest/specifications/core-metadata/.
+        assert re.match('([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$', name, re.IGNORECASE)
+        
+        # https://peps.python.org/pep-0440/
+        assert re.match(r'^([1-9][0-9]*!)?(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$', version)
+        
         self.name = name
         self.version = version
         self.platform = platform
@@ -249,7 +254,7 @@ class Package:
         self.project_url = project_url
         self.provides_extra = provides_extra
         
-        self.root_sep = os.path.abspath(root if root else os.getcwd()) + os.sep
+        self.root = os.path.abspath(root if root else os.getcwd())
         self.fn_build = fn_build
         self.fn_clean = fn_clean
         self.fn_sdist = fn_sdist
@@ -389,7 +394,7 @@ class Package:
             for path in paths:
                 path_abs, path_rel = self._path_relative_to_root( path)
                 if path_abs.startswith(f'{os.path.abspath(sdist_directory)}/'):
-                    # Ignore files inside <sdist_directory>.
+                    # Source files should not be inside <sdist_directory>.
                     assert 0, f'Path is inside sdist_directory={sdist_directory}: {path_abs!r}'
                 if not os.path.exists(path_abs):
                     assert 0, f'Path does not exist: {path_abs!r}'
@@ -442,9 +447,11 @@ class Package:
             if isinstance(paths, str):
                 paths = paths,
             for path in paths:
+                if not os.path.isabs(path):
+                    path = ps.path.join(self.root, path)
                 path = os.path.abspath(path)
-                assert path.startswith(self.root_sep), \
-                        f'path={path!r} does not start with root={self.root_sep!r}'
+                assert path.startswith(self.root+os.sep), \
+                        f'path={path!r} does not start with root={self.root+os.sep!r}'
                 _log(f'Removing: {path}')
                 shutil.rmtree(path, ignore_errors=True)
 
@@ -527,11 +534,11 @@ class Package:
 
     def _write_info(self, dirpath=None):
         '''
-        Writes egg/dist info to files in directory `dirpath` or `self.root_sep`
-        if `None`.
+        Writes egg/dist info to files in directory `dirpath` or `self.root` if
+        `None`.
         '''
         if dirpath is None:
-            dirpath = self.root_sep
+            dirpath = self.root
         _log(f'_write_info(): creating files in directory {dirpath}')
         os.makedirs(dirpath, exist_ok=True)
         with open(os.path.join(dirpath, 'PKG-INFO'), 'w') as f:
@@ -772,23 +779,23 @@ class Package:
     def _path_relative_to_root(self, path, assert_within_root=True):
         '''
         Returns `(path_abs, path_rel)`, where `path_abs` is absolute path and
-        `path_rel` is relative to `self.root_sep`.
+        `path_rel` is relative to `self.root`.
 
-        Interprets `path` as relative to `self.root_sep` if not absolute.
+        Interprets `path` as relative to `self.root` if not absolute.
 
         We use `os.path.realpath()` to resolve any links.
 
         if assert_within_root is true, assert-fails if `path` is not within
-        `self.root_sep`.
+        `self.root`.
         '''
         if os.path.isabs(path):
             p = path
         else:
-            p = os.path.join(self.root_sep, path)
+            p = os.path.join(self.root, path)
         p = os.path.realpath(os.path.abspath(p))
         if assert_within_root:
-            assert p.startswith(self.root_sep), f'Path not within root={self.root_sep}: {path}'
-        p_rel = os.path.relpath(p, self.root_sep)
+            assert p.startswith(self.root+os.sep), f'Path not within root={self.root+os.sep!r}: {path}'
+        p_rel = os.path.relpath(p, self.root)
         return p, p_rel
 
     def _fromto(self, p):
@@ -797,16 +804,16 @@ class Package:
 
         If `p` is a string we convert to `(p, p)`. Otherwise we assert that
         `p` is a tuple of two strings. Non-absolute paths are assumed to be
-        relative to `self.root_sep`.
+        relative to `self.root`.
         
         If `to_` starts with `$dist-info/`, we replace this with
         `self._dist_info_dir()`.
 
         `from_abs` and `to_abs` are absolute paths. We assert that `to_abs` is
-        `within self.root_sep`.
+        `within self.root`.
 
         `from_rel` and `to_rel` are derived from the `_abs` paths and are
-        `relative to self.root_sep`.
+        `relative to self.root`.
         '''
         ret = None
         if isinstance(p, str):
