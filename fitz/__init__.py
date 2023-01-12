@@ -16092,7 +16092,7 @@ def jm_bbox_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, 
         raise
 
 
-def jm_bbox_fill_shade( ctx, dev, shade, ctm, alpha, color_params):
+def jm_bbox_fill_shade( dev, ctx, shade, ctm, alpha, color_params):
     try:
         jm_bbox_add_rect( dev, ctx, mupdf.ll_fz_bound_shade( shade, ctm), "fill-shade")
     except Exception as e:
@@ -16100,7 +16100,7 @@ def jm_bbox_fill_shade( ctx, dev, shade, ctm, alpha, color_params):
         raise
 
 
-def jm_bbox_stroke_text( ctx, dev, text, stroke, ctm, *args):
+def jm_bbox_stroke_text( dev, ctx, text, stroke, ctm, *args):
     try:
         m_bbox_add_rect( dev, ctx, mupdf.ll_fz_bound_text( text, stroke, ctm), "stroke-text")
     except Exception:
@@ -16108,7 +16108,7 @@ def jm_bbox_stroke_text( ctx, dev, text, stroke, ctm, *args):
         raise
 
 
-def jm_bbox_fill_text( ctx, dev, text, ctm, *args):
+def jm_bbox_fill_text( dev, ctx, text, ctm, *args):
     try:
         jm_bbox_add_rect( dev, ctx, mupdf.ll_fz_bound_text( text, None, ctm), "fill-text")
     except Exception:
@@ -16116,7 +16116,7 @@ def jm_bbox_fill_text( ctx, dev, text, ctm, *args):
         raise
 
 
-def jm_bbox_ignore_text( ctx, dev, text, ctm):
+def jm_bbox_ignore_text( dev, ctx, text, ctm):
     jm_bbox_add_rect( dev, ctx, mupdf.ll_fz_bound_text(text, None, ctm), "ignore-text")
 
 
@@ -16644,7 +16644,7 @@ def jm_tracedraw_stroke_text(dev, ctx, text, stroke, ctm, colorspace, color, alp
 
 def jm_dev_linewidth( dev, ctx, path, stroke, matrix, colorspace, color, alpha, color_params):
     trace_device.dev_linewidth = stroke.linewidth
-    jm_increase_seqno( ctx, dev)
+    jm_increase_seqno( dev, ctx)
 
 
 def jm_increase_seqno( dev, ctx, *vargs):
