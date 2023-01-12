@@ -276,6 +276,10 @@ class Package:
                 f' config_settings={config_settings}'
                 f' metadata_directory={metadata_directory}'
                 )
+        _log('build_wheel(): os.environ is:')
+        for n in sorted( os.environ.keys()):
+            v = os.environ[ n]
+            _log( f'    {n}: {v!r}')
 
         # Get two-digit python version, e.g. 3.8 for python-3.8.6.
         #
@@ -291,7 +295,7 @@ class Package:
             tag_abi = 'none'
         
         # Find platform tag used in wheel filename, as described in
-        # https://peps.python.org/pep-0425/. E.g. 'openbsd_6_8_amd64',
+        # https://peps.python.org/pep-0425/#platform-tag. E.g. 'openbsd_6_8_amd64',
         # 'win_amd64' or 'win32'.
         #
         if self.tag_platform:
@@ -615,6 +619,9 @@ class Package:
                                 and <details> encodes ABI and platform etc.
                             clean
                                 Cleans build files.
+                            dist_info
+                                Creates files in <egg-base>/.egg-info/, where
+                                <egg-base> is as specified with --egg-base.
                             egg_info
                                 Creates files in <egg-base>/.egg-info/, where
                                 <egg-base> is as specified with --egg-base.
@@ -637,6 +644,8 @@ class Package:
                                 Default is "dist".
                             --egg-base <egg-base>
                                 Used by "egg_info".
+                            --formats <formats>
+                                Used by "sdist".
                             --install-headers <directory>
                                 Ignored.
                             --python-tag <python-tag>
