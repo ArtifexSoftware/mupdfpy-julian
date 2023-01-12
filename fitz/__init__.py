@@ -5102,12 +5102,17 @@ class Font:
         return mupdf.fz_advance_glyph(font, gid, wmode)
 
 
-    def glyph_bbox(self, chr, language=None, script=0):
+    def glyph_bbox(self, char, language=None, script=0, small_caps=0):
         """Return the glyph bbox of a unicode (font size 1)."""
-        # fixme: not translated to python yet.
-        val = _fitz.Font_glyph_bbox(self, chr, language, script)
-        val = Rect(val)
-        return val
+        #val = _fitz.Font_glyph_bbox(self, chr, language, script)
+        lang = mupdf.fz_text_language_from_string(language)
+        if small_caps:
+            gid = mupdf.fz_encode_character_sc( thisfont, char)
+            if gid >= 0:
+                font = self.this
+        else:
+            gid, font = mupdf.fz_encode_character_with_fallback( self.this, char, script, lang)
+        return Rect(mupdf.fz_bound_glyph( font, gid, mupdf.FzMatrix()))
 
     @property
     def glyph_count(self):
