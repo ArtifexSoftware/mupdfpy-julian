@@ -6371,7 +6371,7 @@ class Page:
     def _add_text_annot(self, point, text, icon=None):
         #return _fitz.Page__add_text_annot(self, point, text, icon)
         page = self._pdf_page()
-        p = point
+        p = JM_point_from_py( point)
         ASSERT_PDF(page)
         annot = mupdf.pdf_create_annot(page, mupdf.PDF_ANNOT_TEXT)
         r = mupdf.pdf_annot_rect(annot)
