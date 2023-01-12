@@ -356,6 +356,9 @@ windows = platform.system() == 'Windows' or platform.system().startswith('CYGWIN
     
 
 def build_windows( include1, include2, path_cpp, path_so, build_dir):
+    '''
+    Builds by calling cl.exe and link.exe.
+    '''
     vs = pipcl.WindowsVS()
     python = pipcl.WindowsPython()
     mupdf_local, mupdf_branch = get_mupdf()
