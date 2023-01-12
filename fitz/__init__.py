@@ -6225,6 +6225,7 @@ class Page:
         ASSERT_PDF(page);
         if not PySequence_Check(list):
             raise ValueError( MSG_BAD_ARG_INK_ANNOT)
+        ctm = mupdf.FzMatrix()
         mupdf.pdf_page_transform(page, mupdf.FzRect(0), ctm)
         inv_ctm = mupdf.fz_invert_matrix(ctm)
         annot = mupdf.pdf_create_annot(page, mupdf.PDF_ANNOT_INK)
