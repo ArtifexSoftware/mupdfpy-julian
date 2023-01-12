@@ -10839,13 +10839,12 @@ class TextWriter:
     @property
     def _bbox(self):
         #val = _fitz.TextWriter__bbox(self)
-        val = JM_py_from_rect( mupdf.fz_bound_text( self.this, mupdf.FzStrokeState(0), mupdf.FzMatrix()))
+        val = JM_py_from_rect( mupdf.fz_bound_text( self.this, mupdf.FzStrokeState(None), mupdf.FzMatrix()))
         val = Rect(val)
         return val
 
     def append(self, pos, text, font=None, fontsize=11, language=None, right_to_left=0, small_caps=0):
         """Store 'text' at point 'pos' using 'font' and 'fontsize'."""
-        #jlib.log( '{=pos font fontsize language right_to_left small_caps}: {text!r}')
         pos = Point(pos) * self.ictm
         #jlib.log( '{font=}')
         if font is None:
