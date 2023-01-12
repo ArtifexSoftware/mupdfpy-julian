@@ -8615,7 +8615,12 @@ class Pixmap:
         """Get color tuple of pixel (x, y).
         Last item is the alpha if Pixmap.alpha is true."""
         # fixme: not translated to python yet.
-        return _fitz.Pixmap_pixel(self, x, y)
+        #return _fitz.Pixmap_pixel(self, x, y)
+        stride = self.this.m_internal.stride
+        n = self.this.m_internal.n
+        i = stride * y + n * x
+        ret = tuple( self.samples_mv[ i: i+n])
+        return ret
 
     @property
     def samples(self)->bytes:
