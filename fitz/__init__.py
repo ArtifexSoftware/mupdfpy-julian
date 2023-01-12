@@ -6942,7 +6942,6 @@ class Page:
         else:
             q = CheckMarkerArg(quads)
         ret = self._add_text_marker(q, mupdf.PDF_ANNOT_HIGHLIGHT)
-        jlib.log( 'add_highlight_annot() returning {ret=}')
         return ret
 
     def add_ink_annot(self, handwriting: list) -> "struct Annot *":
@@ -14344,7 +14343,7 @@ def JM_make_text_block(block, block_dict, raw, buff, tp_rect):
         line_dict[dictkey_dir] = JM_py_from_point(line.m_internal.dir)
         line_dict[dictkey_bbox] = JM_py_from_rect(line_rect)
         line_list.append(line_dict)
-    block_dict[dictkey_bbox] = block_rect
+    block_dict[dictkey_bbox] = JM_py_from_rect(block_rect)
     block_dict[dictkey_lines] = line_list
 
 
