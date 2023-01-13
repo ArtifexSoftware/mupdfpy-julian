@@ -65,6 +65,7 @@ import binascii
 #import gzip
 #import importlib
 #import inspect # Slow, so try to avoid needing it.
+import io
 import math
 import os
 import re
@@ -74,6 +75,7 @@ import sys
 import typing
 import warnings
 import weakref
+import zipfile
 
 from . import extra
 
@@ -1628,6 +1630,813 @@ class Annot:
         annot = self.this
         return mupdf.pdf_to_num(annot.pdf_annot_obj())
 
+class Archive:
+    def __init__( self, *args):
+        '''
+        Archive(dirname [, path]) - from folder
+        Archive(file [, path]) - from file name or object
+        Archive(data, name) - from memory item
+        Archive() - empty archive
+        Archive(archive [, path]) - from archive
+        '''
+        self._subarchives = list()
+        self.this = mupdf.fz_new_multi_archive()
+        if args:
+            self.add( *args)
+    
+    def has_entry( self, name):
+        return mupdf.fz_has_archive_entry( self.this, name)
+    
+    def read_entry( self, name):
+        buff = mupdf.fz_read_archive_entry( arch, name)
+        return JM_BinFromBuffer( buff)
+    
+    def _add_dir( self, folder, path=None):
+        sub = mupdf.fz_open_directory( folder)
+        mupdf.fz_mount_multi_archive( arch, sub, path)
+    
+    def _add_arch( subarch, path=None):
+        mupdf.fz_mount_multi_archive( self.this, sub, path)
+    
+    def _add_ziptarfile( self, filepath, type_, path=None):
+        if type_ == 1:
+            sub = mupdf.fz_open_zip_archive( filepath)
+        else:
+            sub = mupdf.fz_open_tar_archive( filepath)
+        mupdf.fz_mount_multi_archive( self.this, sub, path)
+    
+    def _add_ziptarmemory( self, memory, type_, path=None):
+        buff = JM_BufferFromBytes( memory)
+        stream = mupdf.fz_open_buffer( buff)
+        if type_==1:
+            sub = mupdf.fz_open_zip_archive_with_stream( stream)
+        else:
+            sub = mupdf.fz_open_tar_archive_with_stream( stream)
+        mupdf.fz_mount_multi_archive( self.this, sub, path)
+    
+    def _add_treeitem( self, memory, name, path=None):
+            drop_sub = False
+            buff = JM_BufferFromBytes( memory)
+            sub = JM_last_tree( self.this, path)
+            if not sub:
+                sub = mupdf.fz_new_tree_archive( None)
+                drop_sub = True
+            mupdf.fz_tree_archive_add_buffer( sub, name, buff)
+            if drop_sub:
+                mupdf.fz_mount_multi_archive( self.this, sub, path)
+    
+    def add( self, content, path=None):
+        '''
+        Add a sub-archive.
+
+        Args:
+            content: content to be added. May be one of Archive, folder
+                 name, file name, raw bytes (bytes, bytearray), zipfile,
+                 tarfile, or a sequence of any of these types.
+            path: (str) a "virtual" path name, under which the elements
+                of content can be retrieved. Use it to e.g. cope with
+                duplicate element names.
+        '''
+        bin_ok = lambda x: isinstance(x, (bytes, bytearray, io.BytesIO))
+
+        entries = []
+        mount = None
+        fmt = None
+
+        def make_subarch():
+            subarch = {"fmt": fmt, "entries": entries, "path": mount}
+            if fmt != "tree" or self._subarchives == []:
+                self._subarchives.append(subarch)
+            else:
+                ltree = self._subarchives[-1]
+                if ltree["fmt"] != "tree" or ltree["path"] != subarch["path"]:
+                    self._subarchives.append(subarch)
+                else:
+                    ltree["entries"].extend(subarch["entries"])
+                    self._subarchives[-1] = ltree
+            return
+
+        if isinstance(content, zipfile.ZipFile):
+            fmt = "zip"
+            entries = content.namelist()
+            mount = path
+            filename = getattr(content, "filename", None)
+            fp = getattr(content, "fp", None)
+            if filename:
+                self._add_ziptarfile(filename, 1, path)
+            else:
+                self._add_ziptarmemory(fp.getvalue(), 1, path)
+            return make_subarch()
+
+        if isinstance(content, tarfile.TarFile):
+            fmt = "tar"
+            entries = content.getnames()
+            mount = path
+            filename = getattr(content.fileobj, "name", None)
+            fp = content.fileobj
+            if not isinstance(fp, io.BytesIO) and not filename:
+                fp = fp.fileobj
+            if filename:
+                self._add_ziptarfile(filename, 0, path)
+            else:
+                self._add_ziptarmemory(fp.getvalue(), 0, path)
+            return make_subarch()
+
+        if isinstance(content, Archive):
+            fmt = "multi"
+            mount = path
+            self._add_arch(content, path)
+            return make_subarch()
+
+        if bin_ok(content):
+            if not (path and type(path) is str):
+                raise ValueError("need name for binary content")
+            fmt = "tree"
+            mount = None
+            entries = [path]
+            self._add_treeitem(content, path)
+            return make_subarch()
+
+        if hasattr(content, "name"):
+            content = content.name
+        elif isinstance(content, pathlib.Path):
+            content = str(content)
+
+        if os.path.isdir(str(content)):
+            a0 = str(content)
+            fmt = "dir"
+            mount = path
+            entries = os.listdir(a0)
+            self._add_dir(a0, path)
+            return make_subarch()
+
+        if os.path.isfile(str(content)):
+            if not (path and type(path) is str):
+                raise ValueError("need name for binary content")
+            a0 = str(content)
+            _ = open(a0, "rb")
+            ff = _.read()
+            _.close()
+            fmt = "tree"
+            mount = None
+            entries = [path]
+            self._add_treeitem(ff, path)
+            return make_subarch()
+
+        if type(content) is str or not getattr(content, "__getitem__", None):
+            raise ValueError("bad archive content")
+
+        #----------------------------------------
+        # handling sequence types here
+        #----------------------------------------
+
+        if len(content) == 2: # covers the tree item plus path
+            data, name = content
+            if bin_ok(data) or os.path.isfile(str(data)):
+                if not type(name) is str:
+                    raise ValueError(f"bad item name {name}")
+                mount = path
+                fmt = "tree"
+                if bin_ok(data):
+                    self._add_treeitem(data, name, path=mount)
+                else:
+                    _ = open(str(data), "rb")
+                    ff = _.read()
+                    _.close()
+                    seld._add_treeitem(ff, name, path=mount)
+                entries = [name]
+                return make_subarch()
+
+        # deal with sequence of disparate items
+        for item in content:
+            self.add(item, path)
+
+    @property
+    def entry_list( self):
+        '''
+        List of sub archives.
+        '''
+        return self._subarchives
+    
+    def __repr__( self):
+        return f'Archive, sub-archives: {len(self._subarchives)}'
+
+
+class Xml:
+    def __init__( self, rhs):
+        if isinstance( rhs, mupdf.FzXml):
+            self.this = rhs
+        elif isinstance( str):
+            buff = mupdf.fz_new_buffer_from_copied_data( rhs)
+            self.this = mupdf.fz_parse_xml_from_html5( buff)
+        else:
+            assert 0, f'Unsupported type for rhs: {type(rhs)}'
+    
+    @property
+    def root( self):
+        return Xml( mupdf.fz_xml_root( self.this))
+    
+    def bodytag( self):
+        return Xml( mupdf.fz_dom_body( self.this))
+    
+    def append_child( self, child):
+        mupdf.fz_dom_append_child( self.this, child.this)
+    
+    def create_text_node( self, text):
+        return Xml( mupdf.fz_dom_create_text_node( self.this, text))
+    
+    def create_element( self, tag):
+        return Xml( mupdf.fz_dom_create_element( self.this, tag))
+    
+    def find( self, tag, att, match):
+        ret = mupdf.fz_dom_find( self.this, tag, att, match)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    def find_next( self, tag, att, match):
+        ret = mupdf.fz_dom_find_next( self.this, tag, att, match)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    @property
+    def next( self):
+        ret = mupdf.fz_dom_next( self.this)
+        if ret.m_internal:
+            return Xml( ret)
+            
+    @property
+    def previous( self):
+        ret = mupdf.fz_dom_previous( self.this)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    def set_attribute( self, key, value):
+        assert key
+        mupdf.fz_dom_add_attribute( self.this, key, value)
+    
+    def remove_attribute( self, key):
+        assert key
+        mupdf.fz_dom_remove_attribute( self.this, key)
+    
+    def get_attribute_value( self, key):
+        assert key
+        return mupdf.fz_dom_attribute( self.this, key)
+    
+    def get_attributes( self):
+        if mupdf.fz_xml_text( self.this):
+            # text node, has no attributes.
+            return
+        
+        result = dict()
+        i = 0
+        while 1:
+            val, key = mupdf.fz_dom_get_attribute( self.this, i)
+            if not val or not key:
+                break
+            ret[ key] = val
+            i += 1
+        return result
+    
+    def insert_before( self, node):
+        mupdf.fz_dom_insert_before( self.this, node.this)
+    
+    def insert_after( self, node):
+        mupdf.fz_dom_insert_after( self.this, node.this)
+    
+    def clone( self):
+        ret = mupdf.fz_dom_clone( self.this)
+        return Xml( ret)
+    
+    @property
+    def parent( self):
+        ret = mupdf.fz_dom_parent( self.this)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    @property
+    def first_child( self):
+        if mupdf.fz_xml_text( self.this):
+            # text node, has no child.
+            return
+        ret = mupdf.fz_dom_first_child( self)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    def remove( self):
+        mupdf.fz_dom_remove( self.this)
+    
+    @property
+    def text( self):
+        return mupdf.fz_xml_text( self.this)
+    
+    @property
+    def tagname( self):
+        return mupdf.fz_xml_tag( self.this)
+    
+    def _get_node_tree( self):
+        def show_node(node, items, shift):
+            while node != None:
+                if node.is_text:
+                    items.append((shift, f'"{node.text}"'))
+                    node = node.next
+                    continue
+                items.append((shift, f"({node.tagname}"))
+                for k, v in node.get_attributes().items():
+                    items.append((shift, f"={k} '{v}'"))
+                child = node.first_child
+                if child:
+                    items = show_node(child, items, shift + 1)
+                items.append((shift, f"){node.tagname}"))
+                node = node.next
+            return items
+
+        shift = 0
+        items = []
+        items = show_node(self, items, shift)
+        return items
+    
+    def debug(self):
+        """Print a list of the node tree below self."""
+        items = self._get_node_tree()
+        for item in items:
+            print("  " * item[0] + item[1].replace("\n", "\\n"))
+
+    @property
+    def is_text(self):
+        """Check if this is a text node."""
+        return self.text != None
+
+    @property
+    def last_child(self):
+        """Return last child node."""
+        child = self.first_child
+        if child==None:
+            return None
+        while True:
+            next = child.next
+            if not next:
+                return child
+            child = next
+
+    @staticmethod
+    def color_text(color):
+        if type(color) is str:
+            return color
+        if type(color) is int:
+            return f"rgb({sRGB_to_rgb(color)})"
+        if type(color) in (tuple, list):
+            return f"rgb{tuple(color)}"
+        return color
+
+    def add_number_list(self, start=1, numtype=None):
+        """Add numbered list ("ol" tag)"""
+        child = self.create_element("ol")
+        if start > 1:
+            child.set_attribute("start", str(start))
+        if numtype != None:
+            child.set_attribute("type", numtype)
+        self.append_child(child)
+        return child
+
+    def add_description_list(self):
+        """Add description list ("dl" tag)"""
+        child = self.create_element("dl")
+        self.append_child(child)
+        return child
+
+    def add_image(self, name, width=None, height=None, imgfloat=None, align=None):
+        """Add image node (tag "img")."""
+        child = self.create_element("img")
+        if width != None:
+            child.set_attribute("width", f"{width}")
+        if height != None:
+            child.set_attribute("height", f"{height}")
+        if imgfloat != None:
+            child.set_attribute("style", f"float: {imgfloat}")
+        if align != None:
+            child.set_attribute("align", f"{align}")
+        child.set_attribute("src", f"{name}")
+        self.append_child(child)
+        return child
+
+    def add_bullet_list(self):
+        """Add bulleted list ("ul" tag)"""
+        child = self.create_element("ul")
+        self.append_child(child)
+        return child
+
+    def add_list_item(self):
+        """Add item ("li" tag) under a (numbered or bulleted) list."""
+        if self.tagname not in ("ol", "ul"):
+            raise ValueError("cannot add list item to", self.tagname)
+        child = self.create_element("li")
+        self.append_child(child)
+        return child
+
+    def add_span(self):
+        child = self.create_element("span")
+        self.append_child(child)
+        return child
+
+    def add_paragraph(self):
+        """Add "p" tag"""
+        child = self.create_element("p")
+        if self.tagname != "p":
+            self.append_child(child)
+        else:
+            self.parent.append_child(child)
+        return child
+
+    def add_header(self, level=1):
+        """Add header tag"""
+        if level not in range(1, 7):
+            raise ValueError("Header level must be in [1, 6]")
+        this_tag = self.tagname
+        new_tag = f"h{level}"
+        child = self.create_element(new_tag)
+        prev = self
+        if this_tag not in ("h1", "h2", "h3", "h4", "h5", "h6", "p"):
+            self.append_child(child)
+            return child
+        self.parent.append_child(child)
+        return child
+
+    def add_division(self):
+        """Add "div" tag"""
+        child = self.create_element("div")
+        self.append_child(child)
+        return child
+
+    def add_horizontal_line(self):
+        """Add horizontal line ("hr" tag)"""
+        child = self.create_element("hr")
+        self.append_child(child)
+        return child
+
+    def add_link(self, href, text=None):
+        """Add a hyperlink ("a" tag)"""
+        child = self.create_element("a")
+        if not isinstance(text, str):
+            text = href
+        child.set_attribute("href", href)
+        child.append_child(self.create_text_node(text)) 
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(child)
+        return self
+
+    def add_code(self, text=None):
+        """Add a "code" tag"""
+        child = self.create_element("code")
+        if type(text) is str:
+           child.append_child(self.create_text_node(text)) 
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(child)
+        return self
+
+    add_var = add_code
+    add_samp = add_code
+    add_kbd = add_code
+
+    def add_superscript(self, text=None):
+        """Add a superscript ("sup" tag)"""
+        child = self.create_element("sup")
+        if type(text) is str:
+           child.append_child(self.create_text_node(text)) 
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(child)
+        return self
+
+    def add_subscript(self, text=None):
+        """Add a subscript ("sub" tag)"""
+        child = self.create_element("sub")
+        if type(text) is str:
+           child.append_child(self.create_text_node(text)) 
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(child)
+        return self
+
+    def add_codeblock(self):
+        """Add monospaced lines ("pre" node)"""
+        child = self.create_element("pre")
+        self.append_child(child)
+        return child
+
+    def span_bottom(self):
+        """Find deepest level in stacked spans."""
+        sys.stdout = sys.stderr
+        parent = self
+        child = self.last_child
+        if child == None:
+            return None
+        while child.is_text:
+            child = child.previous
+            if child == None:
+                break
+        if child == None or child.tagname != "span":
+            return None
+
+        while True:
+            if child == None:
+                return parent
+            if child.tagname in ("a", "sub","sup","body") or child.is_text:
+                child = child.next
+                continue
+            if child.tagname == "span":
+                parent = child
+                child = child.first_child
+            else:
+                return parent
+
+    def append_styled_span(self, style):
+        span = self.create_element("span")
+        span.add_style(style)
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(span)
+        return prev
+
+    def set_margins(self, val):
+        """Set margin values via CSS style"""
+        text = "margins: %s" % val
+        self.append_styled_span(text)
+        return self
+
+    def set_font(self, font):
+        """Set font-family name via CSS style"""
+        text = "font-family: %s" % font
+        self.append_styled_span(text)
+        return self
+
+    def set_color(self, color):
+        """Set text color via CSS style"""
+        text = f"color: %s" % self.color_text(color)
+        self.append_styled_span(text)
+        return self
+
+    def set_columns(self, cols):
+        """Set number of text columns via CSS style"""
+        text = f"columns: {cols}"
+        self.append_styled_span(text)
+        return self
+
+    def set_bgcolor(self, color):
+        """Set background color via CSS style"""
+        text = f"background-color: %s" % self.color_text(color)
+        self.add_style(text)  # does not work on span level
+        return self
+
+    def set_opacity(self, opacity):
+        """Set opacity via CSS style"""
+        text = f"opacity: {opacity}"
+        self.append_styled_span(text)
+        return self
+
+    def set_align(self, align):
+        """Set text alignment via CSS style"""
+        text = "text-align: %s"
+        if isinstance( align, str):
+            t = align
+        elif align == TEXT_ALIGN_LEFT:
+            t = "left"
+        elif align == TEXT_ALIGN_CENTER:
+            t = "center"
+        elif align == TEXT_ALIGN_RIGHT:
+            t = "right"
+        elif align == TEXT_ALIGN_JUSTIFY:
+            t = "justify"
+        else:
+            raise ValueError(f"Unrecognised align={align}")
+        text = text % t
+        self.add_style(text)
+        return self
+
+    def set_underline(self, val="underline"):
+        text = "text-decoration: %s" % val
+        self.append_styled_span(text)
+        return self
+
+    def set_pagebreak_before(self):
+        """Insert a page break before this node."""
+        text = "page-break-before: always"
+        self.add_style(text)
+        return self
+
+    def set_pagebreak_after(self):
+        """Insert a page break after this node."""
+        text = "page-break-after: always"
+        self.add_style(text)
+        return self
+
+    def set_fontsize(self, fontsize):
+        """Set font size name via CSS style"""
+        if type(fontsize) is str:
+            px=""
+        else:
+            px="px"
+        text = f"font-size: {fontsize}{px}"
+        self.append_styled_span(text)
+        return self
+
+    def set_lineheight(self, lineheight):
+        """Set line height name via CSS style - block-level only."""
+        text = f"line-height: {lineheight}"
+        self.add_style(text)
+        return self
+
+    def set_leading(self, leading):
+        """Set inter-line spacing value via CSS style - block-level only."""
+        text = f"-mupdf-leading: {leading}"
+        self.add_style(text)
+        return self
+
+    def set_word_spacing(self, spacing):
+        """Set inter-word spacing value via CSS style"""
+        text = f"word-spacing: {spacing}"
+        self.append_styled_span(text)
+        return self
+
+    def set_letter_spacing(self, spacing):
+        """Set inter-letter spacing value via CSS style"""
+        text = f"letter-spacing: {spacing}"
+        self.append_styled_span(text)
+        return self
+
+    def set_text_indent(self, indent):
+        """Set text indentation name via CSS style - block-level only."""
+        text = f"text-indent: {indent}"
+        self.add_style(text)
+        return self
+
+    def set_bold(self, val=True):
+        """Set bold on / off via CSS style"""
+        if val:
+            val="bold"
+        else:
+            val="normal"
+        text = "font-weight: %s" % val
+        self.append_styled_span(text)
+        return self
+
+    def set_italic(self, val=True):
+        """Set italic on / off via CSS style"""
+        if val:
+            val="italic"
+        else:
+            val="normal"
+        text = "font-style: %s" % val
+        self.append_styled_span(text)
+        return self
+
+    def set_properties(
+        self,
+        align=None,
+        bgcolor=None,
+        bold=None,
+        color=None,
+        columns=None,
+        font=None,
+        fontsize=None,
+        indent=None,
+        italic=None,
+        leading=None,
+        letter_spacing=None,
+        lineheight=None,
+        margins=None,
+        pagebreak_after=None,
+        pagebreak_before=None,
+        word_spacing=None,
+        unqid=None,
+        cls=None,
+    ):
+        """Set any or all properties of a node.
+
+        To be used for existing nodes preferrably.
+        """
+        root = self.root
+        temp = root.add_division()
+        if align is not None:
+            temp.set_align(align)
+        if bgcolor is not None:
+            temp.set_bgcolor(bgcolor)
+        if bold is not None:
+            temp.set_bold(bold)
+        if color is not None:
+            temp.set_color(color)
+        if columns is not None:
+            temp.set_columns(columns)
+        if font is not None:
+            temp.set_font(font)
+        if fontsize is not None:
+            temp.set_fontsize(fontsize)
+        if indent is not None:
+            temp.set_text_indent(indent)
+        if italic is not None:
+            temp.set_italic(italic)
+        if leading is not None:
+            temp.set_leading(leading)
+        if letter_spacing is not None:
+            temp.set_letter_spacing(letter_spacing)
+        if lineheight is not None:
+            temp.set_lineheight(lineheight)
+        if margins is not None:
+            temp.set_margins(margins)
+        if pagebreak_after is not None:
+            temp.set_pagebreak_after()
+        if pagebreak_before is not None:
+            temp.set_pagebreak_before()
+        if word_spacing is not None:
+            temp.set_word_spacing(word_spacing)
+        if unqid is not None:
+            self.set_id(unqid)
+        if cls is not None:
+            self.add_class(cls)
+
+        styles = []
+        top_style = temp.get_attribute_value("style")
+        if top_style is not None:
+            styles.append(top_style)
+        child = temp.first_child
+        while child:
+            styles.append(child.get_attribute_value("style"))
+            child = child.first_child
+        self.set_attribute("style", ";".join(styles))
+        temp.remove()
+        return self
+
+    def set_id(self, unique):
+        """Set a unique id."""
+        # check uniqueness
+        tagname = self.tagname
+        root = self.root
+        if root.find(None, "id", unique):
+            raise ValueError(f"id '{unique}' already exists")
+        self.set_attribute("id", unique)
+        return self
+
+    def add_text(self, text):
+        """Add text. Line breaks are honored."""
+        lines = text.splitlines()
+        line_count = len(lines)
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+
+        for i, line in enumerate(lines):
+            prev.append_child(self.create_text_node(line))
+            if i < line_count - 1:
+                prev.append_child(self.create_element("br"))
+        return self
+
+    def add_style(self, text):
+        """Set some style via CSS style. Replaces complete style spec."""
+        style = self.get_attribute_value("style")
+        if style != None and text in style:
+            return self
+        self.remove_attribute("style")
+        if style == None:
+            style = text
+        else:
+            style += ";" + text
+        self.set_attribute("style", style)
+        return self
+
+    def add_class(self, text):
+        """Set some class via CSS. Replaces complete class spec."""
+        cls = self.get_attribute_value("class")
+        if cls != None and text in cls:
+            return self
+        self.remove_attribute("class")
+        if cls == None:
+            cls = text
+        else:
+            cls += " " + text
+        self.set_attribute("class", cls)
+        return self
+
+    def insert_text(self, text):
+        lines = text.splitlines()
+        line_count = len(lines)
+        for i, line in enumerate(lines):
+            self.append_child(self.create_text_node(line))
+            if i < line_count - 1:
+                self.append_child(self.create_element("br"))
+        return self
+
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+            
 
 class Colorspace:
     def __init__(self, type_):
@@ -1658,7 +2467,10 @@ class Colorspace:
 
 class DeviceWrapper:
     def __init__(self, *args):
-        if args_match( args, fitz.Pixmap, None):
+        if args_match( args, mupdf.FzDevice):
+            device, = args
+            self.this = device
+        elif args_match( args, fitz.Pixmap, None):
             pm, clip = args
             bbox = JM_irect_from_py( clip)
             if mupdf.fz_is_infinite_irect( bbox):
@@ -1668,7 +2480,7 @@ class DeviceWrapper:
         elif args_match( args, mupdf.FzDisplayList):
             dl, = args
             self.this = mupdf.fz_new_list_device( dl)
-        elif args_match( args, mupdf.FzTextPage, None):
+        elif args_match( args, mupdf.FzStextPage, None):
             tp, flags = args
             opts = mupdf.FzStextOptions( flags)
             self.this = mupdf.fz_new_stext_device( tp, opts)
@@ -4913,6 +5725,42 @@ class Document:
 open = Document
 
 
+class DocumentWriter:
+    def __init__(self, path, options=''):
+        if isinstance( path, str):
+            pass
+        elif hasattr( path, 'absolute'):
+            path = str( path)
+        elif hasattr( path, 'name'):
+            path = path.name
+        if isinstance( path, str):
+            self.this = mupdf.FzDocumentWriter( path, options, mupdf.FzDocumentWriter.PathType_PDF)
+        else:
+            # Need to keep the Python JM_new_output_fileptr_Output instance
+            # alive for the lifetime of this DocumentWriter, otherwise calls
+            # to virtual methods implemented in Python fail. So we make it a
+            # member of this DocumentWriter.
+            #
+            # Unrelated to this, mupdf.FzDocumentWriter will set
+            # self._out.m_internal to null because ownership is passed in.
+            #
+            self._out = JM_new_output_fileptr( path)
+            self.this = mupdf.FzDocumentWriter( self._out, options, mupdf.FzDocumentWriter.OutputType_PDF)
+            assert self._out.m_internal_value() == 0
+    
+    def begin_page( self, mediabox):
+        mediabox2 = JM_rect_from_py(mediabox)
+        device = mupdf.fz_begin_page( self.this, mediabox2)
+        device_wrapper = DeviceWrapper( device)
+        return device_wrapper
+    
+    def end_page( self):
+        mupdf.fz_end_page( self.this)
+    
+    def close( self):
+        mupdf.fz_close_document_writer( self.this)
+        
+
 class Font:
 
     def __del__(self):
@@ -8095,7 +8943,21 @@ class Pixmap:
         if 0:
             pass
 
-        elif args_match(args, (fitz.Colorspace, mupdf.FzColorspace), (mupdf.FzRect, tuple), (int, bool)):
+        elif args_match(args,
+                (fitz.Colorspace, mupdf.FzColorspace),
+                (mupdf.FzRect, mupdf.FzIrect, IRect, Rect, tuple)
+                ):
+            # create empty pixmap with colorspace and IRect
+            cs, rect = args
+            alpha = 0
+            pm = mupdf.fz_new_pixmap_with_bbox(cs, JM_irect_from_py(rect), mupdf.FzSeparations(0), alpha)
+            self.this = pm
+
+        elif args_match(args,
+                (fitz.Colorspace, mupdf.FzColorspace),
+                (mupdf.FzRect, mupdf.FzIrect, IRect, Rect, tuple),
+                (int, bool)
+                ):
             # create empty pixmap with colorspace and IRect
             cs, rect, alpha = args
             pm = mupdf.fz_new_pixmap_with_bbox(cs, JM_irect_from_py(rect), mupdf.FzSeparations(0), alpha)
@@ -10488,6 +11350,254 @@ class Shape:
                 self.rect.x1 = max(self.rect.x1, x.x1)
                 self.rect.y1 = max(self.rect.y1, x.y1)
 
+
+class Story:
+    def __init__( self, html='', user_css=None, em=12, archive=None):
+        buffer_ = mupdf.fz_new_buffer_from_copied_data( html.encode('utf-8'))
+        arch = archive.this if archive else mupdf.FzArchive( None)
+        self.this = mupdf.FzStoryS( buffer_, user_css, em, arch)
+    
+    def reset( self):
+        mupdf.fz_reset_story( self.this)
+    
+    def place( self, where):
+        where = JM_rect_from_py( where)
+        filled = mupdf.FzRect()
+        more = mupdf.fz_place_story( self.this, where, filled)
+        return more, JM_py_from_rect( filled)
+
+    def draw( self, device, matrix=None):
+        #print( f'{device=} {matrix=}')
+        ctm2 = JM_matrix_from_py( matrix)
+        #print( f'{ctm2=} {str(ctm2)=}')
+        dev = device.this if device else mupdf.FzDevice( None)
+        #print( f'{dev=}')
+        sys.stdout.flush()
+        mupdf.fz_draw_story( self.this, dev, ctm2)
+
+    def document( self):
+        dom = mupdf.fz_story_document( self.this)
+        return Xml( dom)
+
+    def element_positions( self, function, args=None):
+        def function2( position):
+            class Position2:
+                pass
+            position2 = Position2()
+            position2.depth = position.depth
+            position2.heading = position.heading
+            position2.id = position.id
+            position2.rect = JM_py_from_rect(position.rect)
+            position2.text = position.text
+            position2.open_close = position.open_close
+            position2.rect_num = position.rectangle_num
+            position2.href = position.href
+            if args:
+                for k, v in args.items():
+                    setattr( position2, k, v)
+            function( position2)
+        mupdf.fz_story_positions( self.this, function2)
+
+    def write(self, writer, rectfn, positionfn=None, pagefn=None):
+        dev = None
+        page_num = 0
+        rect_num = 0
+        filled = Rect(0, 0, 0, 0)
+        while 1:
+            mediabox, rect, ctm = rectfn(rect_num, filled)
+            rect_num += 1
+            if mediabox:
+                # new page.
+                page_num += 1
+            more, filled = self.place( rect)
+            #print(f"write(): positionfn={positionfn}")
+            if positionfn:
+                def positionfn2(position):
+                    # We add a `.page_num` member to the
+                    # `ElementPosition` instance.
+                    position.page_num = page_num
+                    #print(f"write(): position={position}")
+                    positionfn(position)
+                self.element_positions(positionfn2)
+            if writer:
+                if mediabox:
+                    # new page.
+                    if dev:
+                        if pagefn:
+                            pagefn(page_num, medibox, dev, 1)
+                        writer.end_page()
+                    dev = writer.begin_page( mediabox)
+                    if pagefn:
+                        pagefn(page_num, mediabox, dev, 0)
+                self.draw( dev, ctm)
+                if not more:
+                    if pagefn:
+                        pagefn( page_num, mediabox, dev, 1)
+                    writer.end_page()
+            else:
+                self.draw(None, ctm)
+            if not more:
+                break
+
+    @staticmethod
+    def write_stabilized(writer, contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
+        positions = list()
+        content = None
+        # Iterate until stable.
+        while 1:
+            content_prev = content
+            content = contentfn( positions)
+            stable = False
+            if content == content_prev:
+                stable = True
+            content2 = content
+            story = Story(content2, user_css, em, archive)
+
+            if add_header_ids:
+                story.add_header_ids()
+
+            positions = list()
+            def positionfn2(position):
+                #print(f"write_stabilized(): stable={stable} positionfn={positionfn} position={position}")
+                positions.append(position)
+                if stable and positionfn:
+                    positionfn(position)
+            story.write(
+                    writer if stable else None,
+                    rectfn,
+                    positionfn2,
+                    pagefn,
+                    )
+            if stable:
+                break
+
+    def add_header_ids(self):
+        '''
+        Look for `<h1..6>` items in `self` and adds unique `id`
+        attributes if not already present.
+        '''
+        dom = self.body
+        i = 0
+        x = dom.find(None, None, None)
+        while x:
+            name = x.tagname
+            if len(name) == 2 and name[0]=="h" and name[1] in "123456":
+                attr = x.get_attribute_value("id")
+                if not attr:
+                    id_ = f"h_id_{i}"
+                    #print(f"name={name}: setting id={id_}")
+                    x.set_attribute("id", id_)
+                    i += 1
+            x = x.find_next(None, None, None)
+
+    def write_with_links(self, rectfn, positionfn=None, pagefn=None):
+        #print("write_with_links()")
+        stream = io.BytesIO()
+        writer = DocumentWriter(stream)
+        positions = []
+        def positionfn2(position):
+            #print(f"write_with_links(): position={position}")
+            positions.append(position)
+            if positionfn:
+                positionfn(position)
+        self.write(writer, rectfn, positionfn=positionfn2, pagefn=pagefn)
+        writer.close()
+        stream.seek(0)
+        return Story.add_pdf_links(stream, positions)
+
+    @staticmethod
+    def write_stabilized_with_links(contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
+        #print("write_stabilized_with_links()")
+        stream = io.BytesIO()
+        writer = DocumentWriter(stream)
+        positions = []
+        def positionfn2(position):
+            #print(f"write_stabilized_with_links(): position={position}")
+            positions.append(position)
+            if positionfn:
+                positionfn(position)
+        Story.write_stabilized(writer, contentfn, rectfn, user_css, em, positionfn2, pagefn, archive, add_header_ids)
+        writer.close()
+        stream.seek(0)
+        return Story.add_pdf_links(stream, positions)
+
+    @staticmethod
+    def add_pdf_links(document_or_stream, positions):
+        """
+        Adds links to PDF document.
+        Args:
+            document_or_stream:
+                A PDF `Document` or raw PDF content, for example an
+                `io.BytesIO` instance.
+            positions:
+                List of `ElementPosition`'s for `document_or_stream`,
+                typically from Story.element_positions(). We raise an
+                exception if two or more positions have same id.
+        Returns:
+            `document_or_stream` if a `Document` instance, otherwise a
+            new `Document` instance.
+        We raise an exception if an `href` in `positions` refers to an
+        internal position `#<name>` but no item in `postions` has `id =
+        name`.
+        """
+        if isinstance(document_or_stream, Document):
+            document = document_or_stream
+        else:
+            document = Document("pdf", document_or_stream)
+
+        # Create dict from id to position, which we will use to find
+        # link destinations.
+        #
+        id_to_position = dict()
+        #print(f"positions: {positions}")
+        for position in positions:
+            #print(f"add_pdf_links(): position: {position}")
+            if (position.open_close & 1) and position.id:
+                #print(f"add_pdf_links(): position with id: {position}")
+                if position.id in id_to_position:
+                    #print(f"Ignoring duplicate positions with id={position.id!r}")
+                    pass
+                else:
+                    id_to_position[ position.id] = position
+
+        # Insert links for all positions that have an `href` starting
+        # with '#'.
+        #
+        for position_from in positions:
+            if ((position_from.open_close & 1)
+                    and position_from.href
+                    and position_from.href.startswith("#")
+                    ):
+                # This is a `<a href="#...">...</a>` internal link.
+                #print(f"add_pdf_links(): position with href: {position}")
+                target_id = position_from.href[1:]
+                try:
+                    position_to = id_to_position[ target_id]
+                except Exception as e:
+                    raise RuntimeError(f"No destination with id={target_id}, required by position_from: {position_from}")
+                # Make link from `position_from`'s rect to top-left of
+                # `position_to`'s rect.
+                if 0:
+                    print(f"add_pdf_links(): making link from:")
+                    print(f"add_pdf_links():    {position_from}")
+                    print(f"add_pdf_links(): to:")
+                    print(f"add_pdf_links():    {position_to}")
+                link = dict()
+                link["kind"] = LINK_GOTO
+                link["from"] = Rect(position_from.rect)
+                x0, y0, x1, y1 = position_to.rect
+                # This appears to work well with viewers which scroll
+                # to make destination point top-left of window.
+                link["to"] = Point(x0, y0)
+                link["page"] = position_to.page_num - 1
+                document[position_from.page_num - 1].insert_link(link)
+        return document
+
+    @property
+    def body(self):
+        dom = self.document()
+        return dom.bodytag()
+        
 
 class TextPage:
 
