@@ -8552,11 +8552,18 @@ class Page:
         page = self.this
         rc = []
         prect = mupdf.fz_bound_page(page)
-        dev = JM_new_tracetext_device_Device(
-                rc,
-                rot=mupdf.FzMatrix(),
-                ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1),
-                )
+        if g_use_extra:
+            dev = extra.JM_new_tracetext_device(
+                    rc,
+                    rot=mupdf.FzMatrix().internal(),
+                    ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1).internal(),
+                    )
+        else:
+            dev = JM_new_tracetext_device_Device(
+                    rc,
+                    rot=mupdf.FzMatrix(),
+                    ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1),
+                    )
         mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device(dev)
 

@@ -73,6 +73,33 @@ const char MSG_PIXEL_OUTSIDE[] = "pixel(s) outside image";
 #define EMPTY_STRING PyUnicode_FromString("")
 #define JM_StrAsChar(x) (char *)PyUnicode_AsUTF8(x)
 
+PyObject* JM_EscapeStrFromStr(const char* c)
+{
+    if (!c) return EMPTY_STRING;
+    PyObject* val = PyUnicode_DecodeRawUnicodeEscape(c, (Py_ssize_t) strlen(c), "replace");
+    if (!val)
+    {
+        val = EMPTY_STRING;
+        PyErr_Clear();
+    }
+    return val;
+}
+
+PyObject* JM_EscapeStrFromBuffer(fz_context* ctx, fz_buffer* buff)
+{
+    if (!buff) return EMPTY_STRING;
+    unsigned char *s = NULL;
+    size_t len = fz_buffer_storage(ctx, buff, &s);
+    PyObject* val = PyUnicode_DecodeRawUnicodeEscape((const char*) s, (Py_ssize_t) len, "replace");
+    if (!val)
+    {
+        val = EMPTY_STRING;
+        PyErr_Clear();
+    }
+    return val;
+}
+
+
 typedef struct
 {
     int x;
@@ -689,6 +716,15 @@ static int DICT_SETITEM_DROP(PyObject *dict, PyObject *key, PyObject *value)
     return rc;
 }
 
+static int DICT_SETITEMSTR_DROP(PyObject* dict, const char* key, PyObject* value)
+{
+    if (!dict || !PyDict_Check(dict) || !key || !value) return -2;
+    int rc = PyDict_SetItemString(dict, key, value);
+    Py_DECREF(value);
+    return rc;
+}
+
+
 static void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items)
 {
     PyObject *item=NULL, *itemdict=NULL, *xrefs=nullptr, *bold, *italic, *collapse, *zoom;
@@ -787,10 +823,17 @@ static void Document_extend_toc_items(mupdf::FzDocument& document, PyObject *ite
 //-----------------------------------------------------------------------------
 // PySequence from fz_rect
 //-----------------------------------------------------------------------------
-static PyObject *
-JM_py_from_rect(fz_rect r)
+static PyObject* JM_py_from_rect(fz_rect r)
 {
     return Py_BuildValue("ffff", r.x0, r.y0, r.x1, r.y1);
+}
+
+//-----------------------------------------------------------------------------
+// PySequence from fz_point
+//-----------------------------------------------------------------------------
+static PyObject* JM_py_from_point(fz_point p)
+{
+    return Py_BuildValue("ff", p.x, p.y);
 }
 
 //----------------------------------------------------------------
@@ -855,7 +898,7 @@ JM_matrix_from_py(PyObject *m)
 
 PyObject *util_transform_rect(PyObject *rect, PyObject *matrix)
 {
-	return JM_py_from_rect(mupdf::ll_fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)));
+    return JM_py_from_rect(mupdf::ll_fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)));
 }
 
 //----------------------------------------------------------------------------
@@ -1618,7 +1661,399 @@ static std::string getMetadata(mupdf::FzDocument& doc, const char *key)
 }
 
 
+#if 1
+enum
+{
+    TEXT_FONT_SUPERSCRIPT = 1,
+    TEXT_FONT_ITALIC = 2,
+    TEXT_FONT_SERIFED = 4,
+    TEXT_FONT_MONOSPACED = 8,
+    TEXT_FONT_BOLD = 16,
+};
+
+int skip_quad_corrections = 0;
+int subset_fontnames = 0;
+
+struct jm_tracedraw_device
+{
+    fz_device super;
+    PyObject* out;
+    size_t seqno = 0;
+    int linewidth = 0;
+    fz_matrix rot = {};
+    fz_matrix ptm = {};
+};
+
+// need own versions of ascender / descender
+static float JM_font_ascender(fz_context* ctx, fz_font* font)
+{
+    if (skip_quad_corrections) {
+        return 0.8f;
+    }
+    return fz_font_ascender(ctx, font);
+}
+
+static float JM_font_descender(fz_context *ctx, fz_font *font)
+{
+    if (skip_quad_corrections) {
+        return -0.2f;
+    }
+    return fz_font_descender(ctx, font);
+}
+static const char* JM_font_name(fz_context *ctx, fz_font *font)
+{
+    const char *name = fz_font_name(ctx, font);
+    const char *s = strchr(name, '+');
+    if (subset_fontnames || s == NULL || s-name != 6) {
+        return name;
+    }
+    return s + 1;
+}
+
+static void jm_trace_text_span(
+        fz_context* ctx,
+        jm_tracedraw_device* dev,
+        fz_text_span* span,
+        int type,
+        fz_matrix ctm,
+        fz_colorspace* colorspace,
+        const float* color,
+        float alpha,
+        size_t seqno
+        )
+{
+    fz_font *out_font = NULL;
+    int i;
+    const char *fontname = JM_font_name(ctx, span->font);
+    float rgb[3];
+    PyObject *chars = PyTuple_New(span->len);
+    fz_matrix join = fz_concat(span->trm, ctm);
+    fz_point dir = fz_transform_vector(fz_make_point(1, 0), join);
+    double fsize = sqrt(fabs((double) join.a * (double) join.d));
+    double linewidth, adv, asc, dsc;
+    double space_adv = 0;
+    float x0, y0, x1, y1;
+    asc = (double) JM_font_ascender(ctx, span->font);
+    dsc = (double) JM_font_descender(ctx, span->font);
+    if (asc < 1e-3) {  // probably Tesseract font
+        dsc = -0.1;
+        asc = 0.9;
+    }
+
+    double ascsize = asc * fsize / (asc - dsc);
+    double dscsize = dsc * fsize / (asc - dsc);
+    int fflags = 0;
+    int mono = fz_font_is_monospaced(ctx, span->font);
+    fflags += mono * TEXT_FONT_MONOSPACED;
+    fflags += fz_font_is_italic(ctx, span->font) * TEXT_FONT_ITALIC;
+    fflags += fz_font_is_serif(ctx, span->font) * TEXT_FONT_SERIFED;
+    fflags += fz_font_is_bold(ctx, span->font) * TEXT_FONT_BOLD;
+    fz_matrix mat = dev->ptm;
+    fz_matrix ctm_rot = fz_concat(ctm, dev->rot);
+    mat = fz_concat(mat, ctm_rot);
+
+    if (dev->linewidth > 0) {
+        linewidth = (double) dev->linewidth;
+    } else {
+        linewidth = fsize * 0.05;
+    }
+    fz_point char_orig;
+    double last_adv = 0;
+
+    // walk through characters of span
+    fz_rect span_bbox;
+    dir = fz_normalize_vector(dir);
+    fz_matrix rot = fz_make_matrix(dir.x, dir.y, -dir.y, dir.x, 0, 0);
+    if (dir.x == -1) {  // left-right flip
+        rot.d = 1;
+    }
+
+    for (i = 0; i < span->len; i++) {
+        adv = 0;
+        if (span->items[i].gid >= 0) {
+            adv = (double) fz_advance_glyph(ctx, span->font, span->items[i].gid, span->wmode);
+        }
+        adv *= fsize;
+        last_adv = adv;
+        if (span->items[i].ucs == 32) {
+            space_adv = adv;
+        }
+        char_orig = fz_make_point(span->items[i].x, span->items[i].y);
+        char_orig.y = dev->ptm.f - char_orig.y;
+        char_orig = fz_transform_point(char_orig, mat);
+        fz_matrix m1 = fz_make_matrix(1, 0, 0, 1, -char_orig.x, -char_orig.y);
+        m1 = fz_concat(m1, rot);
+        m1 = fz_concat(m1, fz_make_matrix(1, 0, 0, 1, char_orig.x, char_orig.y));
+        x0 = char_orig.x;
+        x1 = x0 + adv;
+        if (dir.x == 1 && span->trm.d < 0) {  // up-down flip
+            y0 = char_orig.y + dscsize;
+            y1 = char_orig.y + ascsize;
+        } else {
+            y0 = char_orig.y - ascsize;
+            y1 = char_orig.y - dscsize;
+        }
+        fz_rect char_bbox = fz_make_rect(x0, y0, x1, y1);
+        char_bbox = fz_transform_rect(char_bbox, m1);
+        PyTuple_SET_ITEM(chars, (Py_ssize_t) i, Py_BuildValue("ii(ff)(ffff)",
+            span->items[i].ucs, span->items[i].gid,
+            char_orig.x, char_orig.y, char_bbox.x0, char_bbox.y0, char_bbox.x1, char_bbox.y1));
+        if (i > 0) {
+            span_bbox = fz_union_rect(span_bbox, char_bbox);
+        } else {
+            span_bbox = char_bbox;
+        }
+    }
+    if (!space_adv) {
+        if (!mono) {
+            space_adv = fz_advance_glyph(ctx, span->font,
+            fz_encode_character_with_fallback(ctx, span->font, 32, 0, 0, &out_font),
+            span->wmode);
+            space_adv *= fsize;
+            if (!space_adv) {
+                space_adv = last_adv;
+            }
+        } else {
+            space_adv = last_adv; // for mono fonts this suffices
+        }
+    }
+    // make the span dictionary
+    PyObject *span_dict = PyDict_New();
+    DICT_SETITEMSTR_DROP(span_dict, "dir", JM_py_from_point(dir));
+    DICT_SETITEM_DROP(span_dict, dictkey_font, JM_EscapeStrFromStr(fontname));
+    DICT_SETITEM_DROP(span_dict, dictkey_wmode, PyLong_FromLong((long) span->wmode));
+    DICT_SETITEM_DROP(span_dict, dictkey_flags, PyLong_FromLong((long) fflags));
+    DICT_SETITEMSTR_DROP(span_dict, "bidi_lvl", PyLong_FromLong((long) span->bidi_level));
+    DICT_SETITEMSTR_DROP(span_dict, "bidi_dir", PyLong_FromLong((long) span->markup_dir));
+    DICT_SETITEM_DROP(span_dict, dictkey_ascender, PyFloat_FromDouble(asc));
+    DICT_SETITEM_DROP(span_dict, dictkey_descender, PyFloat_FromDouble(dsc));
+    if (colorspace) {
+        fz_convert_color(ctx, colorspace, color, fz_device_rgb(ctx),
+                         rgb, NULL, fz_default_color_params);
+        DICT_SETITEM_DROP(span_dict, dictkey_colorspace, PyLong_FromLong(3));
+        DICT_SETITEM_DROP(span_dict, dictkey_color, Py_BuildValue("fff", rgb[0], rgb[1], rgb[2]));
+    } else {
+        DICT_SETITEM_DROP(span_dict, dictkey_colorspace, PyLong_FromLong(1));
+        DICT_SETITEM_DROP(span_dict, dictkey_color, PyFloat_FromDouble(1));
+    }
+    DICT_SETITEM_DROP(span_dict, dictkey_size, PyFloat_FromDouble(fsize));
+    DICT_SETITEMSTR_DROP(span_dict, "opacity", PyFloat_FromDouble((double) alpha));
+    DICT_SETITEMSTR_DROP(span_dict, "linewidth", PyFloat_FromDouble((double) linewidth));
+    DICT_SETITEMSTR_DROP(span_dict, "spacewidth", PyFloat_FromDouble(space_adv));
+    DICT_SETITEM_DROP(span_dict, dictkey_type, PyLong_FromLong((long) type));
+    DICT_SETITEM_DROP(span_dict, dictkey_chars, chars);
+    DICT_SETITEM_DROP(span_dict, dictkey_bbox, JM_py_from_rect(span_bbox));
+    DICT_SETITEMSTR_DROP(span_dict, "seqno", PyLong_FromSize_t(seqno));
+    LIST_APPEND_DROP(dev->out, span_dict);
+}
+
+static void jm_increase_seqno(fz_context *ctx, fz_device *dev_)
+{
+    jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
+    dev->seqno += 1;
+}
+
+static void jm_fill_path(
+        fz_context* ctx,
+        fz_device* dev,
+        const fz_path*,
+        int even_odd,
+        fz_matrix,
+        fz_colorspace*,
+        const float* color,
+        float alpha,
+        fz_color_params
+        )
+{
+    jm_increase_seqno( ctx, dev);
+}
+
+static void jm_fill_shade(
+        fz_context* ctx,
+        fz_device* dev,
+        fz_shade* shd,
+        fz_matrix ctm,
+        float alpha,
+        fz_color_params color_params
+        )
+{
+    jm_increase_seqno( ctx, dev);
+}
+
+static void jm_fill_image(
+        fz_context* ctx,
+        fz_device* dev,
+        fz_image* img,
+        fz_matrix ctm,
+        float alpha,
+        fz_color_params color_params
+        )
+{
+    jm_increase_seqno( ctx, dev);
+}
+
+static void jm_fill_image_mask(
+        fz_context* ctx,
+        fz_device* dev,
+        fz_image* img,
+        fz_matrix ctm,
+        fz_colorspace* cs,
+        const float* color,
+        float alpha,
+        fz_color_params color_params
+        )
+{
+    jm_increase_seqno( ctx, dev);
+}
+
+static void jm_tracedraw_drop_device(fz_context *ctx, fz_device *dev_)
+{
+    jm_tracedraw_device *dev = (jm_tracedraw_device *)dev_;
+    Py_CLEAR(dev->out);
+    dev->out = NULL;
+}
+
+static void jm_dev_linewidth(
+        fz_context* ctx,
+        fz_device* dev_,
+        const fz_path* path,
+        const fz_stroke_state* stroke,
+        fz_matrix ctm,
+        fz_colorspace* colorspace,
+        const float* color,
+        float alpha,
+        fz_color_params color_params
+        )
+{
+    jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
+    dev->linewidth = stroke->linewidth;
+    jm_increase_seqno(ctx, dev_);
+}
+
+static void jm_trace_text(
+        fz_context* ctx,
+        jm_tracedraw_device* dev,
+        const fz_text* text,
+        int type,
+        fz_matrix ctm,
+        fz_colorspace* colorspace,
+        const float* color,
+        float alpha,
+        size_t seqno
+        )
+{
+    fz_text_span *span;
+    for (span = text->head; span; span = span->next)
+        jm_trace_text_span(ctx, dev, span, type, ctm, colorspace, color, alpha, seqno);
+}
+
+/*---------------------------------------------------------
+There are 3 text trace types:
+0 - fill text (PDF Tr 0)
+1 - stroke text (PDF Tr 1)
+3 - ignore text (PDF Tr 3)
+---------------------------------------------------------*/
+static void
+jm_tracedraw_fill_text(
+        fz_context* ctx,
+        fz_device* dev_,
+        const fz_text* text,
+        fz_matrix ctm,
+        fz_colorspace* colorspace,
+        const float* color,
+        float alpha,
+        fz_color_params color_params
+        )
+{
+    jm_tracedraw_device *dev = (jm_tracedraw_device *)dev_;
+    jm_trace_text(ctx, dev, text, 0, ctm, colorspace, color, alpha, dev->seqno);
+    dev->seqno += 1;
+}
+
+static void
+jm_tracedraw_stroke_text(
+        fz_context* ctx,
+        fz_device* dev_,
+        const fz_text* text,
+        const fz_stroke_state* stroke,
+        fz_matrix ctm,
+        fz_colorspace* colorspace,
+        const float* color,
+        float alpha,
+        fz_color_params color_params
+        )
+{
+    jm_tracedraw_device *dev = (jm_tracedraw_device *)dev_;
+    jm_trace_text(ctx, dev, text, 1, ctm, colorspace, color, alpha, dev->seqno);
+    dev->seqno += 1;
+}
+
+
+static void
+jm_tracedraw_ignore_text(
+        fz_context* ctx,
+        fz_device* dev_,
+        const fz_text* text,
+        fz_matrix ctm
+        )
+{
+    jm_tracedraw_device *dev = (jm_tracedraw_device *)dev_;
+    jm_trace_text(ctx, dev, text, 3, ctm, NULL, NULL, 1, dev->seqno);
+    dev->seqno += 1;
+}
+
+mupdf::FzDevice JM_new_tracetext_device( PyObject* out, fz_matrix* rot, fz_matrix* ptm)
+{
+    mupdf::FzDevice device( sizeof( jm_tracedraw_device));
+    jm_tracedraw_device* dev = (jm_tracedraw_device*) device.m_internal;
+    
+    dev->rot = *rot;
+    dev->ptm = *ptm;
+
+    dev->super.close_device = NULL;    
+    dev->super.drop_device = jm_tracedraw_drop_device;    
+    dev->super.fill_path = jm_fill_path;
+    dev->super.stroke_path = jm_dev_linewidth;
+    dev->super.clip_path = NULL;
+    dev->super.clip_stroke_path = NULL;
+
+    dev->super.fill_text = jm_tracedraw_fill_text;
+    dev->super.stroke_text = jm_tracedraw_stroke_text;
+    dev->super.clip_text = NULL;
+    dev->super.clip_stroke_text = NULL;
+    dev->super.ignore_text = jm_tracedraw_ignore_text;
+
+    dev->super.fill_shade = jm_fill_shade;
+    dev->super.fill_image = jm_fill_image;
+    dev->super.fill_image_mask = jm_fill_image_mask;
+    dev->super.clip_image_mask = NULL;
+
+    dev->super.pop_clip = NULL;
+
+    dev->super.begin_mask = NULL;
+    dev->super.end_mask = NULL;
+    dev->super.begin_group = NULL;
+    dev->super.end_group = NULL;
+
+    dev->super.begin_tile = NULL;
+    dev->super.end_tile = NULL;
+
+    dev->super.begin_layer = NULL;
+    dev->super.end_layer = NULL;
+
+    dev->super.render_flags = NULL;
+    dev->super.set_default_colorspaces = NULL;
+
+    Py_XINCREF(out);
+    dev->out = out;
+    dev->seqno = 0;
+    return device;
+}
+#endif
+
 %}
+
+/* Declarations for functions defined above. */
 
 typedef struct
 {
@@ -1756,6 +2191,11 @@ mupdf::FzDocument Document_init(
 int ll_fz_absi( int i);
 
 static std::string getMetadata(mupdf::FzDocument& doc, const char *key);
+
+
+#if 1
+mupdf::FzDevice JM_new_tracetext_device( PyObject* out, fz_matrix* rot, fz_matrix* ptm);
+#endif
 
 %pythoncode %{
 
