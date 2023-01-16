@@ -17483,7 +17483,7 @@ def jm_trace_text_span(dev, span, type_, ctm, colorspace, color, alpha, seqno):
     span_dict[ "opacity"] = alpha
     span_dict[ "linewidth"] =linewidth
     span_dict[ "spacewidth"] = space_adv
-    span_dict[ 'type'] =type
+    span_dict[ 'type'] = type_
     span_dict[ 'chars'] = chars
     span_dict[ 'bbox'] = JM_py_from_rect(span_bbox)
     span_dict[ "seqno"] = seqno
