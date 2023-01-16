@@ -981,8 +981,8 @@ def python_version():
 
 class WindowsPython:
     '''
-    Windows only. Information about installed Python with specific word size
-    and version.
+    Experimental. Windows only. Information about installed Python with
+    specific word size and version.
 
     Members:
 
@@ -1058,8 +1058,8 @@ class WindowsPython:
 
 class WindowsVS:
     '''
-    Finds locations of Visual Studio command-line tools. Assumes VS2019-style
-    paths.
+    Experimental. Windows only. Finds locations of Visual Studio command-line
+    tools. Assumes VS2019-style paths.
     
     Members and example values:
     
