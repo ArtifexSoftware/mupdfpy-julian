@@ -23,14 +23,15 @@ import zipfile
 
 class Package:
     '''
-    Helper for Python packaging operations.
+    Python packaging operations, including PEP-517 support, for use by a
+    `setup.py` script.
 
     Our constructor takes a definition of a Python package similar to that
-    passed to distutils.core.setup() or setuptools.setup() - name, version,
+    passed to `distutils.core.setup()` or `setuptools.setup()` - name, version,
     summary etc, plus callbacks for build, clean and sdist filenames.
 
     We then provide methods that can be used to implement a Python package's
-    PEP-517 backend and/or minimal setup.py support for use with a legacy
+    PEP-517 backend, plus basic command line handling for use with a legacy
     (pre-PEP-517) pip.
 
     A PEP-517 backend can be implemented with::
@@ -50,12 +51,15 @@ class Package:
         build_wheel = p.build_wheel
         build_sdist = p.build_sdist
 
-    Work as a setup.py script by appending::
+    Handle old-style setup.py command-line usage by appending::
 
         import sys
         if __name__ == '__main__':
             p.handle_argv(sys.argv)
-
+    
+    This supports some of the command-line usage expected by older versions of
+    `pip`, implemented by legacy distutils/setuptools, and also described in:
+    https://pip.pypa.io/en/stable/reference/build-system/setup-py/
     '''
     def __init__(self,
             name,
@@ -98,17 +102,18 @@ class Package:
         name:
             A string, the name of the Python package.
         version:
-            A string containing only 0-9 and '.'.
+            A string, the version of the Python package. Also see PEP-440
+            "Version Identification and Dependency Specification".
         platform:
-            String or list of strings.
+            A string or list of strings.
         supported_platform:
-            String or list of strings.
+            A string or list of strings.
         summary:
             A string.
         description:
             A string.
         description_content_type:
-            String describing markup of `description` arg. For example:
+            A string describing markup of `description` arg. For example:
                     text/markdown; variant=GFM
         keywords:
             A string containing comma-separated keywords.
@@ -125,21 +130,21 @@ class Package:
         maintainer_email:
             .
         license:
-            License text.
+            A string containing the license text.
         classifier:
-            String or list of strings. See:
+            A string or list of strings. Also see:
                 https://pypi.org/pypi?%3Aaction=list_classifiers
                 https://pypi.org/classifiers/
         requires_dist:
-            String or list of strings. See: https://peps.python.org/pep-0508/
+            A string or list of strings. Also see PEP-508.
         requires_python:
-            String or list of strings.
+            A string or list of strings.
         requires_external:
-            String or list of strings.
+            A string or list of strings.
         project_url:
-            String or list of strings, each of the form: `<name>, <url>`.
+            A string or list of strings, each of the form: `<name>, <url>`.
         provides_extra:
-            String or list of strings.
+            A string or list of strings.
         
         root:
             Root of package, defaults to current directory.
@@ -147,7 +152,7 @@ class Package:
             A function taking no args that builds the package.
 
             Should return a list of items; each item should be a tuple of two
-            strings `(from_, to_)` or a single string `path` which is treated
+            strings `(from_, to_)`, or a single string `path` which is treated
             as the tuple `(path, path)`.
 
             `from_` should be the path to a file; if a relative path it is
@@ -165,7 +170,7 @@ class Package:
             If we are installing (e.g. 'install' command in the argv
             passed to `self.handle_argv()`), then we copy `from_` to
             `sitepackages`/`to_`, where `sitepackages` is the installation
-            directory, default being `sysconfig.get_path('platlib')` e.g.
+            directory, the default being `sysconfig.get_path('platlib')` e.g.
             `myvenv/lib/python3.9/site-packages/`.
         fn_clean:
             A function taking a single arg `all_` that cleans generated files.
@@ -181,15 +186,14 @@ class Package:
             sdist. Relative paths are interpreted as relative to `root`. It is
             an error if a path does not exist or is not a file.
         tag_python:
-            First element of wheel tag defined in
-            https://peps.python.org/pep-0425/. If None we use 'py<version>'.
+            First element of wheel tag defined in PEP-425. If None we use
+            'cp<version>'.
         tag_abi:
-            Second element of wheel tag defined in
-            https://peps.python.org/pep-0425/. If None we use 'none'.
+            Second element of wheel tag defined in PEP-425. If None we use
+            'none'.
         tag_platform:
-            Third element of wheel tag defined in
-            https://peps.python.org/pep-0425/; default is derived from
-            `distutils.util.get_platform()` as specified in the PEP, e.g.
+            Third element of wheel tag defined in PEP-425. Default is derived
+            from `distutils.util.get_platform()` as specified in the PEP, e.g.
             'openbsd_7_0_amd64'.
             
             For pure python packages use: `tag_platform='any'`
@@ -229,7 +233,7 @@ class Package:
         # https://packaging.python.org/en/latest/specifications/core-metadata/.
         assert re.match('([A-Z0-9]|[A-Z0-9][A-Z0-9._-]*[A-Z0-9])$', name, re.IGNORECASE)
         
-        # https://peps.python.org/pep-0440/
+        # PEP-440.
         assert re.match(r'^([1-9][0-9]*!)?(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$', version)
         
         self.name = name
@@ -265,7 +269,7 @@ class Package:
 
     def build_wheel(self, wheel_directory, config_settings=None, metadata_directory=None):
         '''
-        Helper for implementing a PEP-517 backend's `build_wheel()` function.
+        A PEP-517 `build_wheel()` function.
 
         Also called by `handle_argv()` to handle the 'bdist_wheel' command.
 
@@ -281,7 +285,7 @@ class Package:
             v = os.environ[ n]
             _log( f'    {n}: {v!r}')
 
-        # Get two-digit python version, e.g. 3.8 for python-3.8.6.
+        # Get two-digit python version, e.g. 'cp3.8' for python-3.8.6.
         #
         if self.tag_python:
             tag_python = self.tag_python
@@ -295,8 +299,7 @@ class Package:
             tag_abi = 'none'
         
         # Find platform tag used in wheel filename, as described in
-        # https://peps.python.org/pep-0425/#platform-tag. E.g. 'openbsd_6_8_amd64',
-        # 'win_amd64' or 'win32'.
+        # PEP-425. E.g. 'openbsd_6_8_amd64', 'win_amd64' or 'win32'.
         #
         if self.tag_platform:
             tag_platform = self.tag_platform
@@ -362,10 +365,10 @@ class Package:
 
     def build_sdist(self, sdist_directory, formats, config_settings=None):
         '''
-        Helper for implementing a PEP-517 backend's `build_sdist()` function.
+        A PEP-517 `build_sdist()` function.
 
-        [Though as of 2021-03-24 pip doesn't actually seem to ever call the
-        backend's `build_sdist()` function?]
+        [As of 2021-03-24 pip doesn't actually seem to ever call the backend's
+        `build_sdist()` function?]
 
         Also called by `handle_argv()` to handle the 'sdist' command.
 
@@ -462,7 +465,7 @@ class Package:
 
     def argv_install(self, record_path, root, verbose=False):
         '''
-        Called by `handle_argv()`.
+        Called by `handle_argv()` to handle 'install' command..
         '''
         if verbose:
             _log( f'argv_install(): {record_path=} {root=}')
@@ -611,7 +614,7 @@ class Package:
                 _log(textwrap.dedent('''
                         Usage:
                             [<options>...] <command> [<options>...]
-                        commands:
+                        Commands:
                             bdist_wheel
                                 Creates a wheel called
                                 <dist-dir>/<name>-<version>-<details>.whl, where
@@ -652,8 +655,15 @@ class Package:
                                 Ignored.
                             --record <record>
                                 Used by "install".
+                            --root <path>
+                                Used by "install".
                             --single-version-externally-managed
                                 Ignored.
+                        Other:
+                            windows-vs [-y <year>] [-v <version>] [-g <grade] [--verbose]
+                                Windows only; looks for matching Visual Studio.
+                            windows-python [-v <version>] [--verbose]
+                                Windows only; looks for matching Python.
                         '''))
                 return
 
@@ -666,11 +676,18 @@ class Package:
             elif arg == '--dist-dir' or arg == '-d':            opt_dist_dir = args.next()
             elif arg == '--egg-base':                           opt_egg_base = args.next()
             elif arg == '--formats':                            opt_formats = args.next()
-            elif arg == '--root':                               opt_root = args.next()
             elif arg == '--install-headers':                    opt_install_headers = args.next()
             elif arg == '--python-tag':                         pass
             elif arg == '--record':                             opt_record = args.next()
+            elif arg == '--root':                               opt_root = args.next()
             elif arg == '--single-version-externally-managed':  pass
+            
+            elif arg == 'windows-vs':
+                command = arg
+                break
+            elif arg == 'windows-python':
+                command = arg
+                break
             else:
                raise Exception(f'Unrecognised arg: {arg}')
 
@@ -684,6 +701,45 @@ class Package:
         elif command == 'egg_info':     self.argv_egg_info(opt_egg_base)
         elif command == 'install':      self.argv_install(opt_record, opt_root)
         elif command == 'sdist':        self.build_sdist(opt_dist_dir, opt_formats)
+        
+        elif command == 'windows-python':
+            verbose = False
+            version = None
+            while 1:
+                arg = args.next(None)
+                if arg is None:
+                    break
+                elif arg == '-v':
+                    version = args.next()
+                elif arg == '--verbose':
+                    verbose = True
+                else:
+                    assert 0, f'Unrecognised {arg=}'
+            python = WindowsPython(version=version, verbose=verbose)
+            print(f'Python is:\n{python.description_ml("    ")}')
+            
+        elif command == 'windows-vs':
+            grade = None
+            verbose = False
+            version = None
+            year = None
+            while 1:
+                arg = args.next(None)
+                if arg is None:
+                    break
+                elif arg == '-g':
+                    grade = args.next()
+                elif arg == '-v':
+                    version = args.next()
+                elif arg == '-y':
+                    year = args.next()
+                elif arg == '--verbose':
+                    verbose = True
+                else:
+                    assert 0, f'Unrecognised {arg=}'
+            vs = WindowsVS(year=year, grade=grade, version=version, verbose=verbose)
+            print(f'Visual Studio is:\n{vs.description_ml("    ")}')
+        
         else:
             assert 0, f'Unrecognised command: {command}'
 
@@ -933,6 +989,7 @@ def cpu_name():
     #log(f'sys.maxsize={hex(sys.maxsize)}')
     return f'x{32 if sys.maxsize == 2**31 else 64}'
 
+
 class WindowsCpu:
     '''
     For Windows only. Paths and names that depend on cpu.
@@ -941,13 +998,13 @@ class WindowsCpu:
         .bits
             32 or 64.
         .windows_subdir
-            '' or 'x64/', e.g. platform/win32/x64/Release.
+            '' or 'x64/'.
         .windows_name
             'x86' or 'x64'.
         .windows_config
             'x64' or 'Win32', e.g. /Build Release|x64
         .windows_suffix
-            '64' or '', e.g. mupdfcpp64.dll
+            '64' or ''.
     '''
     def __init__(self, name=None):
         if not name:
@@ -972,13 +1029,6 @@ class WindowsCpu:
         return self.name
 
 
-def python_version():
-    '''
-    Returns two-digit version number of Python as a string, e.g. '3.9'.
-    '''
-    return '.'.join(platform.python_version().split('.')[:2])
-
-
 class WindowsPython:
     '''
     Experimental. Windows only. Information about installed Python with
@@ -986,30 +1036,32 @@ class WindowsPython:
 
     Members:
 
-        path:
+        .path:
             Path of python binary.
-        version:
-            Version as a string, e.g. '3.9'. Same as <version> if not None,
-            otherwise the inferred version.
-        root:
-            The parent directory of <path>; allows
+        .version:
+            `<major>.<minor>`, e.g. '3.9' or '3.11'. Same as `version` passed
+            to `__init__()` if not None, otherwise the inferred version.
+        .root:
+            The parent directory of `.path`; allows
             Python headers to be found, for example
-            <root>/include/Python.h.
-        cpu:
-            A WindowsCpu instance, same as <cpu> if not None, otherwise the
-            inferred cpu.
+            `<root>/include/Python.h`.
+        .cpu:
+            A `WindowsCpu` instance, same as `cpu` passed to `__init__()` if
+            not None, otherwise the inferred cpu.
 
     We parse the output from 'py -0p' to find all available python
     installations.
     '''
     
-    def __init__( self, cpu=None, version=None):
+    def __init__( self, cpu=None, version=None, verbose=False):
         '''
         cpu:
             A WindowsCpu instance. If None, we use whatever we are running on.
         version:
             Two-digit Python version as a string such as '3.8'. If None we use
             current Python's version.
+        verbose:
+            If true we show diagnostics.
 
         We parse the output from 'py -0p' to find all available python
         installations.
@@ -1017,20 +1069,26 @@ class WindowsPython:
         if cpu is None:
             cpu = WindowsCpu(cpu_name())
         if version is None:
-            version = python_version()
+            version = '.'.join(platform.python_version().split('.')[:2])
         command = 'py -0p'
-        _log(f'Running: {command}')
+        if verbose:
+            _log(f'Running: {command}')
         text = subprocess.check_output( command, shell=True, text=True)
         for line in text.split('\n'):
-            _log( f'    {line}')
-            m = re.match( '^ *-([0-9.]+)-((64)|(32)) +([^\\r*]+)[\\r*]*$', line)
+            #_log( f'    {line}')
+            m = re.match( '^ *-V:([0-9.]+)(-32)? ([*])? +(.+)$', line)
             if not m:
+                if verbose:
+                    _log( f'No match for {line=}')
                 continue
             version2 = m.group(1)
-            bits = int(m.group(2))
+            bits = 32 if m.group(2) else 64
+            current = m.group(3)
+            if verbose:
+                _log( f'{version2=} {bits=}')
             if bits != cpu.bits or version2 != version:
                 continue
-            path = m.group(5).strip()
+            path = m.group(4).strip()
             root = path[ :path.rfind('\\')]
             if not os.path.exists(path):
                 # Sometimes it seems that the specified .../python.exe does not exist,
@@ -1046,14 +1104,19 @@ class WindowsPython:
             self.version = version
             self.root = root
             self.cpu = cpu
-            _log( f'pipcl.py:WindowsPython():')
-            _log( f'    root:    {self.root}')
-            _log( f'    path:    {self.path}')
-            _log( f'    version: {self.version}')
-            _log( f'    cpu:     {self.cpu}')
+            #_log( f'pipcl.py:WindowsPython():\n{self.description_ml("    ")}')
             return
-
+        
         raise Exception( f'Failed to find python matching cpu={cpu}. Run "py -0p" to see available pythons')
+        
+    def description_ml(self, indent=''):
+        ret = textwrap.dedent(f'''
+                root:    {self.root}
+                path:    {self.path}
+                version: {self.version}
+                cpu:     {self.cpu}
+                ''')
+        return textwrap.indent( ret, indent)
 
 
 class WindowsVS:
@@ -1063,28 +1126,29 @@ class WindowsVS:
     
     Members and example values:
     
-        year:      2019
-        version:   14.28.29910
-        directory: C:\Program Files (x86)\Microsoft Visual Studio\2019\Community
-        vcvars:    C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat
-        cl:        C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29910\bin\Hostx64\x64\cl.exe
-        link:      C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29910\bin\Hostx64\x64\link.exe
-        devenv:    C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\devenv.com
+        .year:      2019
+        .grade:     Community
+        .version:   14.28.29910
+        .directory: C:\Program Files (x86)\Microsoft Visual Studio\2019\Community
+        .vcvars:    C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Auxiliary\Build\vcvars64.bat
+        .cl:        C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29910\bin\Hostx64\x64\cl.exe
+        .link:      C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\VC\Tools\MSVC\14.28.29910\bin\Hostx64\x64\link.exe
+        .devenv:    C:\Program Files (x86)\Microsoft Visual Studio\2019\Community\Common7\IDE\devenv.com
     '''
-    def __init__( self, year=None, grade=None, version=None, cpu=None):
+    def __init__( self, year=None, grade=None, version=None, cpu=None, verbose=False):
         '''
         Args:
             year:
                 None or, for example, '2019'.
             grade:
-                None or, for example:
+                None or, for example, one of:
                     'Community'
                     'Professional'
                     'Enterprise'
             version:
                 None or, for example: '14.28.29910'
             cpu:
-                None or a WindowsCpu instance.
+                None or a `WindowsCpu` instance.
         '''
         if not cpu:
             cpu = WindowsCpu()
@@ -1093,6 +1157,9 @@ class WindowsVS:
         #
         pattern = f'C:\\Program Files*\\Microsoft Visual Studio\\{year if year else "2*"}\\{grade if grade else "*"}'
         directories = glob.glob( pattern)
+        if verbose:
+            _log( f'Matches for: {pattern=}')
+            _log( f'{directories=}')
         assert directories, f'No match found for: {pattern}'
         directories.sort()
         directory = directories[-1]
@@ -1107,8 +1174,9 @@ class WindowsVS:
         # We use r'...' for regex strings because an extra level of escaping is
         # required for backslashes.
         #
-        m = re.match( rf'^C:\\Program Files.*\\Microsoft Visual Studio\\([^\\]+)\\([^\\]+)', directory)
-        assert m
+        regex = rf'^C:\\Program Files.*\\Microsoft Visual Studio\\([^\\]+)\\([^\\]+)'
+        m = re.match( regex, directory)
+        assert m, f'No match: {regex=} {directory=}'
         year2 = m.group(1)
         grade2 = m.group(2)
         if year:
@@ -1118,7 +1186,7 @@ class WindowsVS:
         if grade:
             assert grade2 == grade
         else:
-            grade == grade2
+            grade = grade2
 
         # Find vcvars.bat.
         #
@@ -1152,20 +1220,28 @@ class WindowsVS:
         link_s.sort()
         link = link_s[ -1]
 
-        self.year = year
-        self.version = version
-        self.directory = directory
-        self.vcvars = vcvars
         self.cl = cl
-        self.link = link
         self.devenv = devenv
+        self.directory = directory
+        self.grade = grade
+        self.link = link
+        self.vcvars = vcvars
+        self.version = version
+        self.year = year
 
-        _log( f'pipcl.py:WindowsVS():')
-        _log( f'    year:      {self.year}')
-        _log( f'    version:   {self.version}')
-        _log( f'    directory: {self.directory}')
-        _log( f'    vcvars:    {self.vcvars}')
-        _log( f'    cl:        {self.cl}')
-        _log( f'    link:      {self.link}')
-        _log( f'    devenv:    {self.devenv}')
+    def description_ml( self, indent=''):
+        ret = textwrap.dedent(f'''
+                year:         {self.year}
+                grade:        {self.grade}
+                version:      {self.version}
+                directory:    {self.directory}
+                vcvars:       {self.vcvars}
+                cl:           {self.cl}
+                link:         {self.link}
+                devenv:       {self.devenv}
+                ''')
+        return textwrap.indent( ret, indent)
+    
+    def __str__( self):
+        return ' '.join( self._description())
     
