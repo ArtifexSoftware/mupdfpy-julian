@@ -42,6 +42,18 @@ catch(...) {
     
 #endif
 
+/* Returns equivalent of `repr(x)`. */
+static std::string repr(PyObject* x)
+{
+    PyObject* repr = PyObject_Repr( x);
+    PyObject* repr_str = PyUnicode_AsEncodedString(repr, "utf-8", "~E~");
+    const char *repr_str_s = PyBytes_AS_STRING(repr_str);
+    std::string ret = repr_str_s;
+    Py_DECREF(repr_str);
+    Py_DECREF(repr);
+    return ret;
+}
+
 const char MSG_BAD_ANNOT_TYPE[] = "bad annot type";
 const char MSG_BAD_APN[] = "bad or missing annot AP/N";
 const char MSG_BAD_ARG_INK_ANNOT[] = "arg must be seq of seq of float pairs";
@@ -85,11 +97,11 @@ PyObject* JM_EscapeStrFromStr(const char* c)
     return val;
 }
 
-PyObject* JM_EscapeStrFromBuffer(fz_context* ctx, fz_buffer* buff)
+PyObject* JM_EscapeStrFromBuffer(fz_buffer* buff)
 {
     if (!buff) return EMPTY_STRING;
     unsigned char *s = NULL;
-    size_t len = fz_buffer_storage(ctx, buff, &s);
+    size_t len = mupdf::ll_fz_buffer_storage(buff, &s);
     PyObject* val = PyUnicode_DecodeRawUnicodeEscape((const char*) s, (Py_ssize_t) len, "replace");
     if (!val)
     {
@@ -250,7 +262,7 @@ static void JM_merge_range( mupdf::PdfDocument& doc_des, mupdf::PdfDocument& doc
     int page, afterpage;
     afterpage = apage;
     int counter = 0;  // copied pages counter
-    int total = fz_absi(epage - spage) + 1;  // total pages to copy
+    int total = mupdf::ll_fz_absi(epage - spage) + 1;  // total pages to copy
 
     if (spage < epage) {
         for (page = spage; page <= epage; page++, afterpage++) {
@@ -571,7 +583,7 @@ JM_FLOAT_ITEM(PyObject *obj, Py_ssize_t idx, double *result)
 
 static mupdf::FzPoint JM_point_from_py(PyObject *p)
 {
-    fz_point p0 = fz_make_point(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT);
+    fz_point p0 = mupdf::ll_fz_make_point(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT);
     double x, y;
 
     if (!p || !PySequence_Check(p) || PySequence_Size(p) != 2)
@@ -785,9 +797,9 @@ static void Document_extend_toc_items(mupdf::PdfDocument& pdf, PyObject *items)
             mupdf::PdfObj col = mupdf::pdf_dict_get( bm, PDF_NAME(C));
             if (mupdf::pdf_is_array( col) && mupdf::pdf_array_len( col) == 3) {
                 PyObject *color = PyTuple_New(3);
-                PyTuple_SET_ITEM(color, 0, Py_BuildValue("f", mupdf::pdf_to_real( pdf_array_get( col, 0))));
-                PyTuple_SET_ITEM(color, 1, Py_BuildValue("f", mupdf::pdf_to_real( pdf_array_get( col, 1))));
-                PyTuple_SET_ITEM(color, 2, Py_BuildValue("f", mupdf::pdf_to_real( pdf_array_get( col, 2))));
+                PyTuple_SET_ITEM(color, 0, Py_BuildValue("f", mupdf::pdf_to_real( mupdf::pdf_array_get( col, 0))));
+                PyTuple_SET_ITEM(color, 1, Py_BuildValue("f", mupdf::pdf_to_real( mupdf::pdf_array_get( col, 1))));
+                PyTuple_SET_ITEM(color, 2, Py_BuildValue("f", mupdf::pdf_to_real( mupdf::pdf_array_get( col, 2))));
                 DICT_SETITEM_DROP(itemdict, dictkey_color, color);
             }
             float z=0;
@@ -875,7 +887,7 @@ JM_rect_from_py(PyObject *r)
         if (f[i] > FZ_MAX_INF_RECT) f[i] = FZ_MAX_INF_RECT;
     }
 
-    return fz_make_rect((float) f[0], (float) f[1], (float) f[2], (float) f[3]);
+    return mupdf::ll_fz_make_rect((float) f[0], (float) f[1], (float) f[2], (float) f[3]);
 }
 
 //-----------------------------------------------------------------------------
@@ -893,7 +905,7 @@ JM_matrix_from_py(PyObject *m)
     for (i = 0; i < 6; i++)
         if (JM_FLOAT_ITEM(m, i, &a[i]) == 1) return *mupdf::FzMatrix().internal();
 
-    return fz_make_matrix((float) a[0], (float) a[1], (float) a[2], (float) a[3], (float) a[4], (float) a[5]);
+    return mupdf::ll_fz_make_matrix((float) a[0], (float) a[1], (float) a[2], (float) a[3], (float) a[4], (float) a[5]);
 }
 
 PyObject *util_transform_rect(PyObject *rect, PyObject *matrix)
@@ -1169,23 +1181,19 @@ static PyObject *JM_Exc_CurrentException = nullptr;
 static int64_t
 JM_bytesio_tell(fz_context *ctx, void *opaque)
 {  // returns bio.tell() -> int
-    PyObject *bio = (PyObject*) opaque, *rc = NULL, *name = NULL;
+    PyObject* bio = (PyObject*) opaque;
+    PyObject* name = PyUnicode_FromString("tell");
+    std::string e;
     int64_t pos = 0;
-    fz_try(ctx) {
-        name = PyUnicode_FromString("tell");
-        rc = PyObject_CallMethodObjArgs(bio, name, NULL);
-        if (!rc) {
-            RAISEPY(ctx, "could not tell Py file obj", PyErr_Occurred());
-        }
-        pos = (int64_t) PyLong_AsUnsignedLongLong(rc);
-    }
-    fz_always(ctx) {
-        Py_XDECREF(name);
-        Py_XDECREF(rc);
-        PyErr_Clear();
-    }
-    fz_catch(ctx) {
-        fz_rethrow(ctx);
+    PyObject* rc = PyObject_CallMethodObjArgs(bio, name, NULL);
+    if (rc) pos = (int64_t) PyLong_AsUnsignedLongLong(rc);
+    else    e = "could not tell Py file obj: " + repr(bio);
+    Py_XDECREF(name);
+    Py_XDECREF(rc);
+    PyErr_Clear();
+    if (!e.empty())
+    {
+        throw std::runtime_error( e);
     }
     return pos;
 }
@@ -1193,24 +1201,23 @@ JM_bytesio_tell(fz_context *ctx, void *opaque)
 static void
 JM_bytesio_seek(fz_context *ctx, void *opaque, int64_t off, int whence)
 {  // bio.seek(off, whence=0)
-    PyObject *bio = (PyObject*) opaque, *rc = NULL, *name = NULL, *pos = NULL;
-    fz_try(ctx) {
-        name = PyUnicode_FromString("seek");
-        pos = PyLong_FromUnsignedLongLong((unsigned long long) off);
-        PyObject_CallMethodObjArgs(bio, name, pos, whence, NULL);
-        rc = PyErr_Occurred();
-        if (rc) {
-            RAISEPY(ctx, "could not seek Py file obj", rc);
-        }
+    PyObject* bio = (PyObject*) opaque;
+    PyObject* name = PyUnicode_FromString("seek");
+    PyObject* pos = PyLong_FromUnsignedLongLong((unsigned long long) off);
+    PyObject_CallMethodObjArgs(bio, name, pos, whence, NULL);
+    std::string e;
+    PyObject* rc = PyErr_Occurred();
+    if (rc)
+    {
+        e = "Could not write to Py file obj: " + repr(bio);
     }
-    fz_always(ctx) {
-        Py_XDECREF(rc);
-        Py_XDECREF(name);
-        Py_XDECREF(pos);
-        PyErr_Clear();
-    }
-    fz_catch(ctx) {
-        fz_rethrow(ctx);
+    Py_XDECREF(rc);
+    Py_XDECREF(name);
+    Py_XDECREF(pos);
+    PyErr_Clear();
+    if (!e.empty())
+    {
+        throw std::runtime_error( "JM_bytesio_seek() error");
     }
 }
 
@@ -1220,24 +1227,24 @@ JM_bytesio_seek(fz_context *ctx, void *opaque, int64_t off, int whence)
 static void
 JM_bytesio_write(fz_context *ctx, void *opaque, const void *data, size_t len)
 {  // bio.write(bytes object)
-    PyObject *bio = (PyObject*) opaque, *b, *name, *rc;
-    fz_try(ctx){
-        b = PyBytes_FromStringAndSize((const char *) data, (Py_ssize_t) len);
-        name = PyUnicode_FromString("write");
-        PyObject_CallMethodObjArgs(bio, name, b, NULL);
-        rc = PyErr_Occurred();
-        if (rc) {
-            RAISEPY(ctx, "could not write to Py file obj", rc);
-        }
+    PyObject *bio = (PyObject*) opaque;
+    PyObject* b = PyBytes_FromStringAndSize((const char *) data, (Py_ssize_t) len);
+    PyObject* name = PyUnicode_FromString("write");
+    PyObject_CallMethodObjArgs(bio, name, b, NULL);
+    std::string e;
+    PyObject* rc = PyErr_Occurred();
+    if (rc)
+    {
+        e = "Could not write to Py file obj: " + repr(bio);
     }
-    fz_always(ctx) {
-        Py_XDECREF(b);
-        Py_XDECREF(name);
-        Py_XDECREF(rc);
-        PyErr_Clear();
-    }
-    fz_catch(ctx) {
-        fz_rethrow(ctx);
+    Py_XDECREF(b);
+    Py_XDECREF(name);
+    Py_XDECREF(rc);
+    PyErr_Clear();
+    
+    if (!e.empty())
+    {
+        throw std::runtime_error( e);
     }
 }
 
@@ -1245,25 +1252,23 @@ static void
 JM_bytesio_truncate(fz_context *ctx, void *opaque)
 {  // bio.truncate(bio.tell()) !!!
     PyObject *bio = (PyObject*) opaque, *trunc = NULL, *tell = NULL, *rctell= NULL, *rc = NULL;
-    fz_try(ctx) {
-        trunc = PyUnicode_FromString("truncate");
-        tell = PyUnicode_FromString("tell");
-        rctell = PyObject_CallMethodObjArgs(bio, tell, NULL);
-        PyObject_CallMethodObjArgs(bio, trunc, rctell, NULL);
-        rc = PyErr_Occurred();
-        if (rc) {
-            RAISEPY(ctx, "could not truncate Py file obj", rc);
-        }
-    }
-    fz_always(ctx) {
-        Py_XDECREF(tell);
-        Py_XDECREF(trunc);
-        Py_XDECREF(rc);
-        Py_XDECREF(rctell);
-        PyErr_Clear();
-    }
-    fz_catch(ctx) {
-        fz_rethrow(ctx);
+        
+    trunc = PyUnicode_FromString("truncate");
+    tell = PyUnicode_FromString("tell");
+    rctell = PyObject_CallMethodObjArgs(bio, tell, NULL);
+    PyObject_CallMethodObjArgs(bio, trunc, rctell, NULL);
+    std::string e;
+    rc = PyErr_Occurred();
+    if (rc) e = "Could not truncate Py file obj: " + repr(bio);
+    Py_XDECREF(tell);
+    Py_XDECREF(trunc);
+    Py_XDECREF(rc);
+    Py_XDECREF(rctell);
+    PyErr_Clear();
+    
+    if (!e.empty())
+    {
+        throw std::runtime_error("could not truncate Py file obj");
     }
 }
 
@@ -1431,13 +1436,12 @@ static mupdf::PdfObj JM_pdf_obj_from_str( const mupdf::PdfDocument& doc, char *s
 static PyObject *Page_addAnnot_FromString( mupdf::PdfPage& page, PyObject *linklist)
 {
     //pdf_obj *annots, *annot, *ind_obj;
-    //pdf_page *page = pdf_page_from_fz_page(gctx, (fz_page *) $self);
+    //pdf_page *page = mupdf::ll_pdf_page_from_fz_page(gctx, (fz_page *) $self);
     PyObject *txtpy = NULL;
     char *text = NULL;
     int lcount = (int) PySequence_Size(linklist); // link count
     if (lcount < 1) Py_RETURN_NONE;
     int i = -1;
-    fz_var(text);
 
     try
     {
@@ -1650,7 +1654,7 @@ static mupdf::FzDocument Document_init(
 
 int ll_fz_absi( int i)
 {
-    return fz_absi(i);
+    return mupdf::ll_fz_absi(i);
 }
 
 static std::string getMetadata(mupdf::FzDocument& doc, const char *key)
@@ -1685,24 +1689,24 @@ struct jm_tracedraw_device
 };
 
 // need own versions of ascender / descender
-static float JM_font_ascender(fz_context* ctx, fz_font* font)
+static float JM_font_ascender(fz_font* font)
 {
     if (skip_quad_corrections) {
         return 0.8f;
     }
-    return fz_font_ascender(ctx, font);
+    return mupdf::ll_fz_font_ascender(font);
 }
 
-static float JM_font_descender(fz_context *ctx, fz_font *font)
+static float JM_font_descender(fz_font *font)
 {
     if (skip_quad_corrections) {
         return -0.2f;
     }
-    return fz_font_descender(ctx, font);
+    return mupdf::ll_fz_font_descender(font);
 }
-static const char* JM_font_name(fz_context *ctx, fz_font *font)
+static const char* JM_font_name(fz_font *font)
 {
-    const char *name = fz_font_name(ctx, font);
+    const char *name = mupdf::ll_fz_font_name(font);
     const char *s = strchr(name, '+');
     if (subset_fontnames || s == NULL || s-name != 6) {
         return name;
@@ -1711,7 +1715,6 @@ static const char* JM_font_name(fz_context *ctx, fz_font *font)
 }
 
 static void jm_trace_text_span(
-        fz_context* ctx,
         jm_tracedraw_device* dev,
         fz_text_span* span,
         int type,
@@ -1724,17 +1727,17 @@ static void jm_trace_text_span(
 {
     fz_font *out_font = NULL;
     int i;
-    const char *fontname = JM_font_name(ctx, span->font);
+    const char *fontname = JM_font_name(span->font);
     float rgb[3];
     PyObject *chars = PyTuple_New(span->len);
-    fz_matrix join = fz_concat(span->trm, ctm);
-    fz_point dir = fz_transform_vector(fz_make_point(1, 0), join);
+    fz_matrix join = mupdf::ll_fz_concat(span->trm, ctm);
+    fz_point dir = mupdf::ll_fz_transform_vector(fz_make_point(1, 0), join);
     double fsize = sqrt(fabs((double) join.a * (double) join.d));
     double linewidth, adv, asc, dsc;
     double space_adv = 0;
     float x0, y0, x1, y1;
-    asc = (double) JM_font_ascender(ctx, span->font);
-    dsc = (double) JM_font_descender(ctx, span->font);
+    asc = (double) JM_font_ascender(span->font);
+    dsc = (double) JM_font_descender(span->font);
     if (asc < 1e-3) {  // probably Tesseract font
         dsc = -0.1;
         asc = 0.9;
@@ -1743,14 +1746,14 @@ static void jm_trace_text_span(
     double ascsize = asc * fsize / (asc - dsc);
     double dscsize = dsc * fsize / (asc - dsc);
     int fflags = 0;
-    int mono = fz_font_is_monospaced(ctx, span->font);
+    int mono = mupdf::ll_fz_font_is_monospaced(span->font);
     fflags += mono * TEXT_FONT_MONOSPACED;
-    fflags += fz_font_is_italic(ctx, span->font) * TEXT_FONT_ITALIC;
-    fflags += fz_font_is_serif(ctx, span->font) * TEXT_FONT_SERIFED;
-    fflags += fz_font_is_bold(ctx, span->font) * TEXT_FONT_BOLD;
+    fflags += mupdf::ll_fz_font_is_italic(span->font) * TEXT_FONT_ITALIC;
+    fflags += mupdf::ll_fz_font_is_serif(span->font) * TEXT_FONT_SERIFED;
+    fflags += mupdf::ll_fz_font_is_bold(span->font) * TEXT_FONT_BOLD;
     fz_matrix mat = dev->ptm;
-    fz_matrix ctm_rot = fz_concat(ctm, dev->rot);
-    mat = fz_concat(mat, ctm_rot);
+    fz_matrix ctm_rot = mupdf::ll_fz_concat(ctm, dev->rot);
+    mat = mupdf::ll_fz_concat(mat, ctm_rot);
 
     if (dev->linewidth > 0) {
         linewidth = (double) dev->linewidth;
@@ -1762,8 +1765,8 @@ static void jm_trace_text_span(
 
     // walk through characters of span
     fz_rect span_bbox;
-    dir = fz_normalize_vector(dir);
-    fz_matrix rot = fz_make_matrix(dir.x, dir.y, -dir.y, dir.x, 0, 0);
+    dir = mupdf::ll_fz_normalize_vector(dir);
+    fz_matrix rot = mupdf::ll_fz_make_matrix(dir.x, dir.y, -dir.y, dir.x, 0, 0);
     if (dir.x == -1) {  // left-right flip
         rot.d = 1;
     }
@@ -1771,19 +1774,19 @@ static void jm_trace_text_span(
     for (i = 0; i < span->len; i++) {
         adv = 0;
         if (span->items[i].gid >= 0) {
-            adv = (double) fz_advance_glyph(ctx, span->font, span->items[i].gid, span->wmode);
+            adv = (double) mupdf::ll_fz_advance_glyph(span->font, span->items[i].gid, span->wmode);
         }
         adv *= fsize;
         last_adv = adv;
         if (span->items[i].ucs == 32) {
             space_adv = adv;
         }
-        char_orig = fz_make_point(span->items[i].x, span->items[i].y);
+        char_orig = mupdf::ll_fz_make_point(span->items[i].x, span->items[i].y);
         char_orig.y = dev->ptm.f - char_orig.y;
-        char_orig = fz_transform_point(char_orig, mat);
-        fz_matrix m1 = fz_make_matrix(1, 0, 0, 1, -char_orig.x, -char_orig.y);
-        m1 = fz_concat(m1, rot);
-        m1 = fz_concat(m1, fz_make_matrix(1, 0, 0, 1, char_orig.x, char_orig.y));
+        char_orig = mupdf::ll_fz_transform_point(char_orig, mat);
+        fz_matrix m1 = mupdf::ll_fz_make_matrix(1, 0, 0, 1, -char_orig.x, -char_orig.y);
+        m1 = mupdf::ll_fz_concat(m1, rot);
+        m1 = mupdf::ll_fz_concat(m1, mupdf::ll_fz_make_matrix(1, 0, 0, 1, char_orig.x, char_orig.y));
         x0 = char_orig.x;
         x1 = x0 + adv;
         if (dir.x == 1 && span->trm.d < 0) {  // up-down flip
@@ -1793,21 +1796,21 @@ static void jm_trace_text_span(
             y0 = char_orig.y - ascsize;
             y1 = char_orig.y - dscsize;
         }
-        fz_rect char_bbox = fz_make_rect(x0, y0, x1, y1);
-        char_bbox = fz_transform_rect(char_bbox, m1);
+        fz_rect char_bbox = mupdf::ll_fz_make_rect(x0, y0, x1, y1);
+        char_bbox = mupdf::ll_fz_transform_rect(char_bbox, m1);
         PyTuple_SET_ITEM(chars, (Py_ssize_t) i, Py_BuildValue("ii(ff)(ffff)",
             span->items[i].ucs, span->items[i].gid,
             char_orig.x, char_orig.y, char_bbox.x0, char_bbox.y0, char_bbox.x1, char_bbox.y1));
         if (i > 0) {
-            span_bbox = fz_union_rect(span_bbox, char_bbox);
+            span_bbox = mupdf::ll_fz_union_rect(span_bbox, char_bbox);
         } else {
             span_bbox = char_bbox;
         }
     }
     if (!space_adv) {
         if (!mono) {
-            space_adv = fz_advance_glyph(ctx, span->font,
-            fz_encode_character_with_fallback(ctx, span->font, 32, 0, 0, &out_font),
+            space_adv = mupdf::ll_fz_advance_glyph(span->font,
+            mupdf::ll_fz_encode_character_with_fallback(span->font, 32, 0, 0, &out_font),
             span->wmode);
             space_adv *= fsize;
             if (!space_adv) {
@@ -1828,7 +1831,10 @@ static void jm_trace_text_span(
     DICT_SETITEM_DROP(span_dict, dictkey_ascender, PyFloat_FromDouble(asc));
     DICT_SETITEM_DROP(span_dict, dictkey_descender, PyFloat_FromDouble(dsc));
     if (colorspace) {
-        fz_convert_color(ctx, colorspace, color, fz_device_rgb(ctx),
+        #ifdef _WIN32
+        fz_color_params fz_default_color_params = { FZ_RI_RELATIVE_COLORIMETRIC, 1, 0, 0 };
+        #endif
+        mupdf::ll_fz_convert_color(colorspace, color, mupdf::ll_fz_device_rgb(),
                          rgb, NULL, fz_default_color_params);
         DICT_SETITEM_DROP(span_dict, dictkey_colorspace, PyLong_FromLong(3));
         DICT_SETITEM_DROP(span_dict, dictkey_color, Py_BuildValue("fff", rgb[0], rgb[1], rgb[2]));
@@ -1944,7 +1950,7 @@ static void jm_trace_text(
 {
     fz_text_span *span;
     for (span = text->head; span; span = span->next)
-        jm_trace_text_span(ctx, dev, span, type, ctm, colorspace, color, alpha, seqno);
+        jm_trace_text_span(dev, span, type, ctm, colorspace, color, alpha, seqno);
 }
 
 /*---------------------------------------------------------
