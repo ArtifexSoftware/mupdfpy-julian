@@ -157,6 +157,23 @@ def _python_compile_flags():
     return python_flags
 
 
+def _command_lines( command):
+    '''
+    Process multiline command by running through textwrap.dedent(), removes
+    comments (' #' until end of line), removes entirely blank lines.
+
+    Returns list of lines.
+    '''
+    command = textwrap.dedent( command)
+    lines = []
+    for line in command.split( '\n'):
+        h = line.find( ' #')
+        if h >= 0:
+            line = line[:h]
+        if line.strip():
+            lines.append(line.rstrip())
+    return lines
+
 def _run( command):
     '''
     Output diagnostic describing `command` than cleans it up and runs using
@@ -170,19 +187,12 @@ def _run( command):
     On Windows newlines are replaced by spaces. Otherwise each line is
     terminated by a '\' character.
     '''
-    command = textwrap.dedent( command)
-    lines = command.split( '\n')
-    for i, line in enumerate( lines):
-        h = line.find( ' #')
-        if h >= 0:
-            line = line[:h]
-        lines[i] = line.rstrip()
-    command = '\n'.join( lines)
-    log( f'Running: {command}')
-    command = command.strip()
-    command = command.replace( '\n', ' ' if windows else '\\\n')
-    sys.stdout.flush()
-    subprocess.run( command, shell=True, check=True)
+    lines = _command_lines( command)
+    nl = '\n'
+    log( f'Running: {nl.join(lines)}')
+    sep = ' ' if windows else '\\\n'
+    command2 = sep.join( lines) 
+    subprocess.run( command2, shell=True, check=True)
 
 def _fs_mtime( filename, default=0):
     '''
@@ -369,27 +379,36 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     #
     _run( f'''
             "{vs.vcvars}"&&"{vs.cl}"
-                /D FZ_DLL_CLIENT            # Activates __declspec() in MuPDF C++ API headers.
-                /D NDEBUG                   #
-                /D UNICODE 
-                /D _UNICODE 
-                /EHsc                       # Enable C++ exceptions.
-                /FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
-                /Fo{path_so}.obj 
-                /GL                         # Enables whole program optimization.
-                /I {python.root}\\include   # Include path for Python headers.
-                /MD                         # Creates a multithreaded DLL using MSVCRT.lib.
-                /Ox                         # Optimisation.
-                /Tp{path_cpp}               # /Tp specifies C++ source file.
-                /W3                         # Sets which warning level to output.
-                /WX-                        # Treats all warnings as errors.
-                /Zc:forScope 
+                # General:
                 /c                          # Compiles without linking.
-                /diagnostics:column         # Controls the format of diagnostic messages.
-                /nologo                     #
-                /permissive-                # Set standard-conformance mode.
+                /EHsc                       # Enable "Standard C++ exception handling".
+                /MD                         # Creates a multithreaded DLL using MSVCRT.lib.
+                
+                # Input/output files:
+                /Tp{path_cpp}               # /Tp specifies C++ source file.
+                /Fo{path_so}.obj            # Output file.
+                
+                # Include paths:
                 {include1}
                 {include2}
+                /I {python.root}\\include   # Include path for Python headers.
+                
+                # Code generation:
+                /O2                         # Optimisation.
+                /WX                         # Treats all warnings as errors.
+                /permissive-                # Set standard-conformance mode.
+                
+                # Diagnostics:
+                /FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
+                /W3                         # Sets which warning level to output. /W3 is IDE default.
+                /diagnostics:caret          # Controls the format of diagnostic messages.
+                /nologo                     #
+                
+                # Defines:
+                /D FZ_DLL_CLIENT            # Activates __declspec() in MuPDF C++ API headers.
+                /D NDEBUG
+                /D UNICODE 
+                /D _UNICODE 
                 ''')
     
     # link.exe flags:
@@ -418,12 +437,11 @@ def build_windows( include1, include2, path_cpp, path_so, build_dir):
     # Other possible cl.exe flags:
     #
     '''
-        /D UNICODE
         /D WIN64}
-        /D _UNICODE
-        /Fa{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/ # Sets the listing file name.
-        /Fd{mupdf_local}/platform/win32/{build_dirs.cpu.windows_subdir}Release/ # Specifies a file name for the program database (PDB) file
+        /FaFOO_LIST             # Sets the listing file name.
+        /FdPDB                  # Specifies a file name for the program database (PDB) file
         /Fp"Release/_mupdf.pch" # Specifies a precompiled header file name.
+        /GL                     # Enables whole program optimization.
         /GS                     # Buffers security check.
         /Gd                     # Uses the __cdecl calling convention (x86 only).
         /Gm-                    # Deprecated. Enables minimal rebuild.
@@ -497,7 +515,9 @@ def build():
     if windows:
         path_i.replace( '/', '\\')
         path_cpp.replace( '/', '\\')
-        path_so_tail = 'fitz/_extra.cp39-win_amd64.pyd'
+        wp = pipcl.WindowsPython()
+        python_version = ''.join( wp.version.split( '.')[:2])
+        path_so_tail = f'fitz/_extra.cp{python_version}-win_amd64.pyd'
     else:
         path_so_tail = 'fitz/_extra.so'
     path_so = f'{g_root}/{path_so_tail}'
@@ -642,7 +662,9 @@ def build_windows_mupdf():
     
     assert mupdf_local
     if mupdf_local:
-        windows_build_dir = f'{mupdf_local}\\build\\shared-release-x64-py3.9'
+        wp = pipcl.WindowsPython()
+        wpv = '.'.join( wp.version.split( '.')[:2])
+        windows_build_dir = f'{mupdf_local}\\build\\shared-release-x64-py{wpv}'
         #log( f'Building mupdf.')
         log( f'{mupdf_branch=}')
         if mupdf_branch == 'master':
