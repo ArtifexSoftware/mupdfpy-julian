@@ -260,11 +260,6 @@ class Annot:
         return self.__repr__()
 
     def _erase(self):
-        try:
-            self.parent._forget_annot(self)
-        except:
-            jlib.exception_info()
-            return
         if getattr(self, "thisown", False):
             self.thisown = False
 
@@ -1225,8 +1220,8 @@ class Annot:
     def type(self):
         """annotation type"""
         CheckParent(self)
-        #return _fitz.Annot_type(self)
-        assert self.this.m_internal, f'self.this={self.this} self.this.m_internal={self.this.m_internal}'
+        if not self.this.m_internal:
+            return 'null'
         type_ = self.this.pdf_annot_type()
         c = mupdf.pdf_string_from_annot_type(type_)
         o = self.this.pdf_annot_obj().pdf_dict_gets("IT")
@@ -6112,12 +6107,6 @@ class Link:
         return b
 
     def _erase(self):
-        try:
-            self.parent._forget_annot(self)
-        except:
-            # Verbose in PyMuPDF/tests.
-            #jlib.exception_info()
-            pass
         self.parent = None
         self.thisown = False
 
@@ -7314,12 +7303,6 @@ class Page:
         self._parent = None
         self.thisown = False
         self.number = None
-
-    def _forget_annot(self, annot):
-        """Remove an annot from reference dictionary."""
-        aid = id(annot)
-        if aid in self._annot_refs:
-            self._annot_refs[aid] = None
 
     def _get_optional_content(self, oc: OptInt) -> OptStr:
         if oc == None or oc == 0:
