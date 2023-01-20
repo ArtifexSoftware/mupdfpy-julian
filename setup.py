@@ -662,9 +662,13 @@ def build_windows_mupdf():
     
     assert mupdf_local
     if mupdf_local:
+        build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
+        assert build_type in ('debug', 'memento', 'release'), f'{unix_build_type=}'
+
         wp = pipcl.WindowsPython()
         wpv = '.'.join( wp.version.split( '.')[:2])
-        windows_build_dir = f'{mupdf_local}\\build\\shared-release-x64-py{wpv}'
+        windows_build_tail = f'build\\shared-{build_type}-x64-py{wpv}'
+        windows_build_dir = f'{mupdf_local}\\{windows_build_tail}'
         #log( f'Building mupdf.')
         log( f'{mupdf_branch=}')
         if mupdf_branch == 'master':
@@ -672,7 +676,8 @@ def build_windows_mupdf():
         else:
             shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
         vs = pipcl.WindowsVS()
-        command = f'cd {mupdf_local} && {sys.executable} ./scripts/mupdfwrap.py -b --devenv "{vs.devenv}" all'
+        command = f'cd {mupdf_local}'
+        command += F' && {sys.executable} ./scripts/mupdfwrap.py -d {windows_build_tail} -b --refcheck-if "#if 1" --devenv "{vs.devenv}" all'
         if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
             log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
         else:
