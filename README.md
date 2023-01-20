@@ -17,6 +17,7 @@ pre
 
 [TOC]
 
+
 ## Overview
 
 **mupdfpy** is an alternative implementation of
@@ -24,27 +25,13 @@ pre
 native Python bindings](http://mupdf.com/r/C-and-Python-APIs) instead of SWIG
 and C code.
 
-We provide a Python package/module called `fitz`, a drop-in replacement for
-PyMuPDF's package/module of the same name.
+**mupdfpy** provides a Python package/module called `fitz`, a drop-in
+replacement for PyMuPDF's package/module of the same name.
 
-To improve speed, some routines have alternative implementations that use
-MuPDF's C++ API (which is also used by the MuPDF Python API). This can be
-disabled by setting environmental variable `MUPDFPY_USE_EXTRA` to `0`.
-
-## Status
-
-As of *2023-1-20*:
-
-* Passes all PyMuPDF tests on Unix and Windows.
-* On Windows:
-    * We get lots of runtime warnings like:
-      `swig/python detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
-    * Debug builds fail to build due to SWIG generating code that tries to access
-      MuPDF global variables, which are not visible due to a problem with the
-      underlying MuPDF Python API.
-    * Unlike on Unix, release builds include refcheck debugging code. This code
-      is only active if environmental variables such as `MUPDF_trace` are set,
-      but it still may effect performance slightly.
+To improve speed, some internal routines have alternative implementations
+written in C++ (these use MuPDF's C++ API directly). Use of these optimised
+routines can be disabled by setting environmental variable `MUPDFPY_USE_EXTRA`
+to `0`.
 
 
 ## Benefits
@@ -59,6 +46,46 @@ As of *2023-1-20*:
   single-threaded).
 
 * Access to the underlying MuPDF Python API in the `fitz.mupdf` module.
+
+
+## Status
+
+* Passes all PyMuPDF tests on Unix and Windows.
+* On Windows:
+    * We get lots of runtime warnings like:
+      `swig/python detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
+    * Debug builds fail to build due to SWIG generating code that tries to access
+      MuPDF global variables, which are not visible due to a problem with the
+      underlying MuPDF Python API.
+    * Unlike on Unix, release builds include refcheck debugging code. This code
+      is only active if environmental variables such as `MUPDF_trace` are set,
+      but it still may effect performance slightly.
+ 
+
+## Changelog
+
+**2023-01-20**:
+
+* Simplified build/install instructions and added example commands for windows.
+* Installing with `pip` will now install `libclang` and `swig` automatically.
+* Removed unnecessary `WeakValueDictionary` code.
+* Some code cleanup.
+
+**2023-01-17**:
+
+* Added support for Windows.
+* Pass all PyMuPDF tests on Windows.
+* Added optimised tracetext device implemented in C++.
+* Moved all global trace_device state into individual devices.
+
+
+**2023-01-13**:
+* Added Story support.
+
+**2023-01-04**:
+
+* Recommend using pip to install libclang and swig, to simplify installation.
+* warn if incomplete fitz/ directory is in cwd
 
 
 ## License
@@ -112,6 +139,7 @@ So:
     set PYMUPDF_SETUP_MUPDF_BUILD=../mupdf
     python -m pip install -vv ./
 
+
 ## Testing
 
 **Note**: When testing or using mupdfpy, make sure that the current directory
@@ -119,11 +147,13 @@ is not `mupdfpy`, otherwise `import fitz` will look in the local `fitz/`
 directory, which contains only source files. Usually mupdfpy will output a
 warning in this case.
 
+
 ### Basic import check:
 
     python
     >>> import fitz
     platform/c++/implementation/internal.cpp:160:reinit_singlethreaded(): Reinitialising as single-threaded.
+
 
 ### PyMuPDF tests.
 
@@ -132,11 +162,6 @@ These can be run in the usual way, for example:
     pip install pytest fontTools
     pytest PyMuPDF
 
-### Known issues as of 2023-1-20:
-
-* On Windows, low level callbacks may not handle fz exceptions (because the C
-  API is not visible at the moment).
- 
 
 ## Details
 
@@ -161,6 +186,7 @@ directory:
         libmupdf.so     MuPDF C API.
         libmupdfcpp.so  MuPDF C++ API.
 
+
 ### Python code
 
 `fitz/__init__.py` contains most of the code. It has Python implementations of
@@ -173,6 +199,7 @@ and a `TOOLS` namespace containing functions such as `TOOLS.set_annot_stem()`.
 
 We also preserve PyMuPDF's alias deprecation system, albeit with a slightly
 different implementation - see `fitz/__init__.py:restore_aliases()`.
+
 
 ### Integrated MuPDF
 
