@@ -24,12 +24,27 @@ pre
 native Python bindings](http://mupdf.com/r/C-and-Python-APIs) instead of SWIG
 and C code.
 
+We provide a Python package/module called `fitz`, a drop-in replacement for
+PyMuPDF's package/module of the same name.
+
 To improve speed, some routines have alternative implementations that use
 MuPDF's C++ API (which is also used by the MuPDF Python API). This can be
-disabled by setting `MUPDFPY_USE_EXTRA=0`.
+disabled by setting environmental variable `MUPDFPY_USE_EXTRA` to `0`.
 
-As of 2022-11-23, only limited testing has been done, and only on Linux and
-OpenBSD. No testing has been done on other platforms such as Windows.
+## Status
+
+As of *2023-1-20*:
+
+* Passes all PyMuPDF tests on Unix and Windows.
+* On Windows:
+    * We get lots of runtime warnings like:
+      `swig/python detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
+    * Debug builds fail to build due to SWIG generating code that tries to access
+      MuPDF global variables, which are not visible due to a problem with the
+      underlying MuPDF Python API.
+    * Unlike on Unix, release builds include refcheck debugging code. This code
+      is only active if environmental variables such as `MUPDF_trace` are set,
+      but it still may effect performance slightly.
 
 
 ## Benefits
@@ -51,55 +66,58 @@ OpenBSD. No testing has been done on other platforms such as Windows.
 SPDX-License-Identifier: GPL-3.0-only
 
 
-## Build and install [last updated 2022-12-20]
+## Build and install [last updated 2023-1-20]
 
 Supported OS's:
 
 * Linux
+* Windows
 * OpenBSD
-
-[`mupdfpy/setup.py` does not yet support Windows.]
 
 Steps:
 
 * Get MuPDF, 1.21.x branch.
 * Get mupdfpy, master branch.
 * Set up a Python virtual environment (venv).
-* Install libclang and swig into venv.
-* Build mupdfpy, setting environmental variable `PYMUPDF_SETUP_MUPDF_BUILD` to
-  point to the local MuPDF checkout.
+* Update pip to latest version.
+* Use pip to install mupdfpy, setting environmental variable
+  `PYMUPDF_SETUP_MUPDF_BUILD` to point to the local MuPDF checkout. [Installing
+  with pip is better than running `setup.py` directly because it will
+  automatically install required packages (libclang and swig).
 
 So:
 
-    # Install SWIG:
-    sudo apt install swig   # Linux
-    sudo pkg_add swig       # OpenBSD
-    
     # Get MuPDF, branch 1.21.x.
     git clone --recursive git://git.ghostscript.com/mupdf.git
     git checkout 1.21.x
     git submodule update --init
 
     # Get mupdfpy (requires ghostscript login).
-    git clone USER@ghostscript.com:/home/julian/repos/mupdfpy.git
+    git clone ghostscript.com:/home/julian/repos/mupdfpy.git
 
     # Create and enter Python virtual environment.
     python3 -m venv pylocal
     . pylocal/bin/activate
     
-    # Install clang python and swig into venv.
-    pip install libclang swig
+    # Update pip to latest version.
+    python -m pip install --upgrade pip
     
-    # Build mupdfpy (will also build MuPDF).
+    # Use pip to build and install mupdfpy (will also build MuPDF).
+    
+    # Unix:
     cd mupdfpy
-    PYMUPDF_SETUP_MUPDF_BUILD=../mupdf ./setup.py install
+    PYMUPDF_SETUP_MUPDF_BUILD=../mupdf python -m pip install -vv ./
 
+    # Windows
+    set PYMUPDF_SETUP_MUPDF_BUILD=../mupdf
+    python -m pip install -vv ./
 
 ## Testing
 
 **Note**: When testing or using mupdfpy, make sure that the current directory
 is not `mupdfpy`, otherwise `import fitz` will look in the local `fitz/`
-directory, which contains only source files.
+directory, which contains only source files. Usually mupdfpy will output a
+warning in this case.
 
 ### Basic import check:
 
@@ -114,18 +132,15 @@ These can be run in the usual way, for example:
     pip install pytest fontTools
     pytest PyMuPDF
 
-### Known issues as of 2023-1-03:
+### Known issues as of 2023-1-20:
 
-* Stories are not implemented so all the Story tests fail.
-
-* On Windows, low level callbacks do not handle fz exceptions (because the C
+* On Windows, low level callbacks may not handle fz exceptions (because the C
   API is not visible at the moment).
  
 
 ## Details
 
-We provide a Python package/module called `fitz`, a drop-in replacement for
-PyMuPDF's package/module of the same name.
+### Layout
 
 As of 2022-11-23 a mupdfpy installation consists of these files in a `fitz`
 directory:
@@ -146,6 +161,8 @@ directory:
         libmupdf.so     MuPDF C API.
         libmupdfcpp.so  MuPDF C++ API.
 
+### Python code
+
 `fitz/__init__.py` contains most of the code. It has Python implementations of
 PyMuPDF's internal C code, and modified copies of PyMuPDF's Python code. For
 example it contains the top-level classes such as `fitz.Document`. It uses the
@@ -157,8 +174,10 @@ and a `TOOLS` namespace containing functions such as `TOOLS.set_annot_stem()`.
 We also preserve PyMuPDF's alias deprecation system, albeit with a slightly
 different implementation - see `fitz/__init__.py:restore_aliases()`.
 
+### Integrated MuPDF
+
 We currently include the MuPDF C, C++ and Python bindings within `fitz/`
-itself. It would be possible to install these separately (e.g. with `cd mupdf
+itself. It might be possible to install these separately (e.g. with `cd mupdf
 && ./setup.py install`), but it's not clear whether `_extra.so` (which contains
 C++ code that uses the MuPDF C++ API) would get access to `libmupdf.so` and
 `libmupdfcpp.so`.
