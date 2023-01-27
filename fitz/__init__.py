@@ -20232,6 +20232,7 @@ Document.tobytes            = Document.write
 IRect.get_area              = utils.get_area
 
 Page.apply_redactions       = utils.apply_redactions
+Page.delete_image           = utils.delete_image
 Page.delete_widget          = utils.delete_widget
 Page.draw_bezier            = utils.draw_bezier
 Page.draw_circle            = utils.draw_circle
@@ -20260,6 +20261,7 @@ Page.insert_link            = utils.insert_link
 Page.insert_text            = utils.insert_text
 Page.insert_textbox         = utils.insert_textbox
 Page.new_shape              = lambda x: utils.Shape(x)
+Page.replace_image          = utils.replace_image
 Page.search_for             = utils.search_for
 Page.show_pdf_page          = utils.show_pdf_page
 Page.update_link            = utils.update_link
