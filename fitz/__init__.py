@@ -3895,12 +3895,15 @@ class Document:
 
         if mupdf.pdf_is_jpx_image(obj):
             img_type = mupdf.FZ_IMAGE_JPX
+            res = mupdf.pdf_load_stream(obj)
             ext = "jpx"
         if JM_is_jbig2_image(obj):
             img_type = mupdf.FZ_IMAGE_JBIG2
+            res = mupdf.pdf_load_stream(obj)
             ext = "jb2"
         res = mupdf.pdf_load_raw_stream(obj)
         if img_type == mupdf.FZ_IMAGE_UNKNOWN:
+            res = mupdf.pdf_load_raw_stream(obj)
             _, c = res.fz_buffer_storage()
             #log( '{=_ c}')
             img_type = mupdf.fz_recognize_image_format(c)
@@ -5091,6 +5094,8 @@ class Document:
         if incremental:
             if self.name != filename or self.stream:
                 raise ValueError("incremental needs original file")
+        if user_pw and len(user_pw) > 40 or owner_pw and len(owner_pw) > 40:
+            raise ValueError("password length must not exceed 40")
         
         if g_use_extra:
             # Not sure this is much faster.
@@ -6478,6 +6483,7 @@ class linkDest:
             self.page = -1
             self.kind = LINK_NONE
         if isInt and self.uri:
+            self.uri = self.uri.replace("&zoom=nan", "&zoom=0")
             if self.uri.startswith("#"):
                 self.named = ""
                 self.kind = LINK_GOTO
@@ -17262,42 +17268,33 @@ def jm_checkrect(dev):
     ll = JM_point_from_py( line0[ 1])
     lr = JM_point_from_py( line0[ 2])
 
+    # no need to extract "line1"!
     line2 = items[ len_ - 1]
     ur = JM_point_from_py( line2[ 1])
     ul = JM_point_from_py( line2[ 2])
 
-    #Three connected lines: at least a quad! Check whether even a rect.
-    #For this, the lines must be parallel to the axes.
     #Assumption:
     #For decomposing rects, MuPDF always starts with a horizontal line,
     #followed by a vertical line, followed by a horizontal line.
     #We will also check orientation of the enclosed area and add this info
     #as '+1' for anti-clockwise, '-1' for clockwise orientation.
-    if ll.y != lr.y:    # not horizontal
-        #goto drop_out
-        return 0
-    if lr.x != ur.x:    # not vertical
-        #goto drop_out;
-        return 0
-    if ur.y != ul.y:    # not horizontal
-        #goto drop_out;
-        return 0
-    # we have a rect, determine orientation
-    if ll.x < lr.x: # move left to right
-        if lr.y > ur.y: # move upwards
-            orientation = 1
-        else:
-            orientation = -1
-    else:   # move right to left
-        if lr.y < ur.y: # move downwards
-            orientation = 1
-        else:
-            orientation = -1
-    # Replace last 3 "l" items by one "re" item.
-    r = mupdf.fz_make_rect(ul.x, ul.y, ul.x, ul.y)
-    r = mupdf.fz_include_point_in_rect(r, ur)
-    r = mupdf.fz_include_point_in_rect(r, ll)
-    r = mupdf.fz_include_point_in_rect(r, lr)
+    
+    if (0
+            or ll.y != lr.y
+            or ll.x != ul.x
+            or ur.y != ul.y
+            or ur.x != lr.x
+            ):
+       return 0 # not a rectangle
+    
+    # we have a rect, replace last 3 "l" items by one "re" item.
+    if ul.y < lr.y:
+        r = mupdf.fz_make_rect(ul.x, ul.y, lr.x, lr.y)
+        orientation = 1
+    else:
+        r = mupdf.fz_make_rect(ll.x, ll.y, ur.x, ur.y)
+        orientation = -1
+    
     rect = ( 're', JM_py_from_rect(r), orientation)
     items[ len_ - 3] = rect # replace item -3 by rect
     del items[ len_ - 2 : len_] # delete remaining 2 items
