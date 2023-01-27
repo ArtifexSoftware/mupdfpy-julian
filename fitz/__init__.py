@@ -16493,10 +16493,8 @@ def JM_set_widget_properties(annot, Widget):
             onstate = mupdf.pdf_button_field_on_state(annot_obj)
             on = mupdf.pdf_to_name(onstate)
             result = mupdf.pdf_set_field_value(pdf, annot_obj, on, 1)
-            mupdf.pdf_dict_put_name(annot_obj, PDF_NAME('V'), on)
         else:
             result = mupdf.pdf_set_field_value(pdf, annot_obj, "Off", 1)
-            mupdf.pdf_dict_put(annot_obj, PDF_NAME('V'), PDF_NAME('Off'))
     else:
         text = JM_StrAsChar(value)
         if text:
