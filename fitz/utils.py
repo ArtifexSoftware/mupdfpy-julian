@@ -7,17 +7,11 @@
 # maintained and developed by Artifex Software, Inc. https://artifex.com.
 # ------------------------------------------------------------------------
 import io
-#import json
 import math
 import os
-#import random
-#import string
 import typing
-#import warnings
-#import tempfile    # slow, e.g. 14ms.
 
 import fitz.fitz
-jlib = fitz.jlib
 
 mupdf = fitz.mupdf
 
@@ -618,7 +612,7 @@ def get_textpage_ocr(
             imgpage.extend_textpage(tpage, flags=0, matrix=mat)
             imgdoc.close()
         except RuntimeError:
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             tpage = None
             print("Falling back to full page OCR")
             return full_ocr(page, dpi, language, flags)
@@ -765,12 +759,12 @@ def get_text(
         cb = page.cropbox
     # fitz.TextPage with or without images
     tp = textpage
-    #jlib.exception_info()
+    #fitz.exception_info()
     if tp is None:
         tp = page.get_textpage(clip=clip, flags=flags)
     elif getattr(tp, "parent") != page:
         raise ValueError("not a textpage of this page")
-    #jlib.log( '{option=}')
+    #fitz.log( '{option=}')
     if option == "json":
         t = tp.extractJSON(cb=cb, sort=sort)
     elif option == "rawjson":
@@ -885,13 +879,13 @@ def get_page_pixmap(
 
 
 def getLinkDict(ln) -> dict:
-    #jlib.log( '{=type(ln) ln}')
+    #fitz.log( '{=type(ln) ln}')
     nl = {"kind": ln.dest.kind, "xref": 0}
     try:
         nl["from"] = ln.rect
     except Exception as e:
         # This seems to happen quite often in PyMuPDF/tests.
-        if g_exceptions_verbose:    jlib.exception_info()
+        if g_exceptions_verbose:    fitz.exception_info()
         pass
     pnt = fitz.Point(0, 0)
     if ln.dest.flags & fitz.LINK_FLAG_L_VALID:
@@ -1002,11 +996,13 @@ def get_toc(
         raise ValueError("document closed")
     doc.init_doc()
     olItem = doc.outline
+    print( f'get_toc(): {olItem=}')
     if not olItem:
         return []
     lvl = 1
     liste = []
     toc = recurse(olItem, liste, lvl)
+    print( f'get_toc(): {toc=}')
     if doc.is_pdf and simple is False:
         doc._extend_toc_items(toc)
     return toc
@@ -1380,46 +1376,46 @@ def set_toc(
             txt += ol["dest"]
         except Exception as e:
             # Verbose in PyMuPDF/tests.
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
         try:
             if ol["first"] > -1:
                 txt += "/First %i 0 R" % xref[ol["first"]]
         except Exception as e:
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
         try:
             if ol["last"] > -1:
                 txt += "/Last %i 0 R" % xref[ol["last"]]
         except Exception as e:
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
         try:
             if ol["next"] > -1:
                 txt += "/Next %i 0 R" % xref[ol["next"]]
         except Exception as e:
             # Verbose in PyMuPDF/tests.
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
         try:
             if ol["parent"] > -1:
                 txt += "/Parent %i 0 R" % xref[ol["parent"]]
         except Exception as e:
             # Verbose in PyMuPDF/tests.
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
         try:
             if ol["prev"] > -1:
                 txt += "/Prev %i 0 R" % xref[ol["prev"]]
         except Exception as e:
             # Verbose in PyMuPDF/tests.
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
         try:
             txt += "/Title" + ol["title"]
         except Exception as e:
             # Verbose in PyMuPDF/tests.
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             pass
 
         if ol.get("color") and len(ol["color"]) == 3:
@@ -1537,10 +1533,10 @@ def do_links(
     for i in range(len(xref_src)):
         page_src = doc2[pno_src[i]]  # load source page
         links = page_src.get_links()  # get all its links
-        #jlib.log( '{pno_src=}')
-        #jlib.log( '{type(page_src)=}')
-        #jlib.log( '{page_src=}')
-        #jlib.log( '{=i len(links)}')
+        #fitz.log( '{pno_src=}')
+        #fitz.log( '{type(page_src)=}')
+        #fitz.log( '{page_src=}')
+        #fitz.log( '{=i len(links)}')
         if len(links) == 0:  # no links there
             page_src = None
             continue
@@ -2848,7 +2844,7 @@ def getColor(name: str) -> tuple:
         c = getColorInfoList()[getColorList().index(name.upper())]
         return (c[1] / 255.0, c[2] / 255.0, c[3] / 255.0)
     except:
-        jlib.exception_info()
+        fitz.exception_info()
         return (1, 1, 1)
 
 
@@ -2861,7 +2857,7 @@ def getColorHSV(name: str) -> tuple:
     try:
         x = getColorInfoList()[getColorList().index(name.upper())]
     except Exception as e:
-        if g_exceptions_verbose:    jlib.exception_info()
+        if g_exceptions_verbose:    fitz.exception_info()
         return (-1, -1, -1)
 
     r = x[1] / 255.0
@@ -2909,7 +2905,7 @@ def _get_font_properties(doc: fitz.Document, xref: int) -> tuple:
                     dsc = bbox.y0
                 asc = 1 - dsc
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             asc *= 1.2
             dsc *= 1.2
         return fontname, ext, stype, asc, dsc
@@ -2919,7 +2915,7 @@ def _get_font_properties(doc: fitz.Document, xref: int) -> tuple:
             asc = font.ascender
             dsc = font.descender
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             asc *= 1.2
             dsc *= 1.2
     else:
@@ -3384,7 +3380,7 @@ class Shape:
         try:
             maxcode = max([ord(c) for c in " ".join(text)])
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             return 0
 
         # ensure valid 'fontname'
@@ -3984,7 +3980,7 @@ def apply_redactions(page: fitz.Page, images: int = 2) -> bool:
         try:
             text_width = fitz.get_text_length(text, font, fsize)
         except ValueError:  # unsupported font
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             return annot_rect
         line_height = fsize * 1.2
         limit = annot_rect.width
@@ -4420,7 +4416,7 @@ def fill_textbox(
             line, tl = new_lines.pop(0)
         except IndexError:
             # Verbose in PyMuPDF/tests.
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             break
 
         if right_to_left:  # Arabic, Hebrew
@@ -4626,7 +4622,7 @@ def get_ocmd(doc: fitz.Document, xref: int) -> dict:
         try:
             ve = json.loads(ve)
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             print("bad /VE key: ", ve)
             raise
     return {"xref": xref, "ocgs": ocgs, "policy": policy, "ve": ve}
@@ -5184,7 +5180,7 @@ def subset_fonts(doc: fitz.Document, verbose: bool = False) -> None:
         try:
             import fontTools.subset as fts
         except ImportError:
-            if g_exceptions_verbose:    jlib.exception_info()
+            if g_exceptions_verbose:    fitz.exception_info()
             print("This method requires fontTools to be installed.")
             raise
         import tempfile
@@ -5234,22 +5230,22 @@ def subset_fonts(doc: fitz.Document, verbose: bool = False) -> None:
             if len(font.valid_codepoints()) == 0:
                 new_buffer = None
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             new_buffer = None
         try:
             os.remove(uncfile_path)
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             pass
         try:
             os.remove(oldfont_path)
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             pass
         try:
             os.remove(newfont_path)
         except:
-            jlib.exception_info()
+            fitz.exception_info()
             pass
         return new_buffer
 

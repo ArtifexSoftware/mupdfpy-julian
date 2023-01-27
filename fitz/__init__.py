@@ -20,7 +20,7 @@ if os.path.exists( 'fitz/__init__.py'):
         print( '#' * 40)
 
 jlib = None
-if 0:
+if 1:
     try:
         import jlib # This is .../mupdf/scripts/jlib.py
         log = jlib.log
@@ -141,6 +141,8 @@ else:
     #g_timings.mid()
     from . import mupdf
     mupdf.reinit_singlethreaded()
+
+mupdf_version = (mupdf.FZ_VERSION_MAJOR, mupdf.FZ_VERSION_MINOR, mupdf.FZ_VERSION_PATCH)
 
 #g_timings.mid()
 
@@ -5671,9 +5673,10 @@ class DocumentWriter:
             # Unrelated to this, mupdf.FzDocumentWriter will set
             # self._out.m_internal to null because ownership is passed in.
             #
-            self._out = JM_new_output_fileptr( path)
-            self.this = mupdf.FzDocumentWriter( self._out, options, mupdf.FzDocumentWriter.OutputType_PDF)
-            assert self._out.m_internal_value() == 0
+            out = JM_new_output_fileptr( path)
+            self.this = mupdf.FzDocumentWriter( out, options, mupdf.FzDocumentWriter.OutputType_PDF)
+            assert out.m_internal_value() == 0
+            assert hasattr( self.this, '_out')
     
     def begin_page( self, mediabox):
         mediabox2 = JM_rect_from_py(mediabox)
@@ -7916,13 +7919,15 @@ class Page:
         """List of xref numbers of annotations, fields and links."""
         CheckParent(self)
         #return _fitz.Page_annot_xrefs(self)
-        if g_use_extra:
+        if 0 and g_use_extra:
             ret = extra.JM_get_annot_xref_list2( self.this)
             return ret
         page = self._pdf_page()
+        log( f'annot_xrefs(): {page.m_internal=}')
         if not page.m_internal:
             return []
         ret = JM_get_annot_xref_list(page.obj())
+        log( '{ret=}')
         return ret
 
     def annots(self, types=None):
@@ -8829,7 +8834,10 @@ class Page:
                     all fields are returned. E.g. types=[PDF_WIDGET_TYPE_TEXT]
                     will only yield text fields.
         """
+        for a in self.annot_xrefs():
+            log( '{a=}')
         widget_xrefs = [a[0] for a in self.annot_xrefs() if a[1] == PDF_ANNOT_WIDGET]
+        log(f'widgets(): {widget_xrefs=}')
         for xref in widget_xrefs:
             widget = self.load_widget(xref)
             if types == None or widget.field_type in types:
@@ -11278,7 +11286,10 @@ class Story:
     def __init__( self, html='', user_css=None, em=12, archive=None):
         buffer_ = mupdf.fz_new_buffer_from_copied_data( html.encode('utf-8'))
         arch = archive.this if archive else mupdf.FzArchive( None)
-        self.this = mupdf.FzStoryS( buffer_, user_css, em, arch)
+        if hasattr(mupdf, 'FzStoryS'):
+            self.this = mupdf.FzStoryS( buffer_, user_css, em, arch)
+        else:
+            self.this = mupdf.FzStory( buffer_, user_css, em, arch)
     
     def reset( self):
         mupdf.fz_reset_story( self.this)
@@ -14171,31 +14182,6 @@ def JM_fill_pixmap_rect_with_color(dest, col, b):
     return 1
 
 
-def JM_filter_content_stream(
-        doc,
-        in_stm,
-        in_res,
-        transform,
-        filter_,
-        struct_parents,
-        ):
-    '''
-    Returns (out_buf, out_res).
-    '''
-    out_buf = mupdf.FzBuffer( 1024)
-    proc_buffer = mupdf.pdf_new_buffer_processor( out_buf, filter_.ascii)
-    if filter_.sanitize:
-        out_res = mupdf.pdf_new_dict( doc, 1)
-        proc_filter = mupdf.pdf_new_filter_processor( doc, proc_buffer, in_res, out_res, struct_parents, transform, filter_)
-        mupdf.pdf_process_contents( proc_filter, doc, in_res, in_stm, mupdf.FzCookie())
-        mupdf.pdf_close_processor( proc_filter)
-    else:
-        out_res = in_res    #mupdf.pdf_keep_obj( in_res)
-        mupdf.pdf_process_contents( proc_buffer, doc, in_res, in_stm, mupdf.FzCookie())
-    mupdf.pdf_close_processor( proc_buffer)
-    return out_buf, out_res
-
-
 def JM_find_annot_irt(annot):
     '''
     Return the first annotation whose /IRT key ("In Response To") points to
@@ -14447,23 +14433,28 @@ def JM_get_annot_xref_list( page_obj):
     return the xrefs and /NM ids of a page's annots, links and fields
     '''
     if g_use_extra:
-        return extra.JM_get_annot_xref_list( page_obj)
+        names = extra.JM_get_annot_xref_list( page_obj)
+        log('{names=}')
+        return names
     
     names = []
     annots = mupdf.pdf_dict_get( page_obj, PDF_NAME('Annots'))
-    if not annots.m_internal:
-        return names
+    log(f'{annots.m_internal=}')
     n = mupdf.pdf_array_len( annots)
+    log(f'{n=}')
     for i in range( n):
         annot_obj = mupdf.pdf_array_get( annots, i)
         xref = mupdf.pdf_to_num( annot_obj)
+        log('{xref=}')
         subtype = mupdf.pdf_dict_get( annot_obj, PDF_NAME('Subtype'))
-        type_ = mupdf.PDF_ANNOT_UNKNOWN
-        if subtype.m_internal:
-            name = mupdf.pdf_to_name( subtype)
-            type_ = mupdf.pdf_annot_type_from_string( name)
+        if not subtype.m_internal:
+            continue    # subtype is required
+        type_ = mupdf.pdf_annot_type_from_string( mupdf.pdf_to_name( subtype))
+        if type_ == mupdf.PDF_ANNOT_UNKNOWN:
+            continue    # only accept valid annot types
         id_ = mupdf.pdf_dict_gets( annot_obj, "NM")
         names.append( (xref, type_, mupdf.pdf_to_text_string( id_)))
+    log(f'{names=}')
     return names
 
 
@@ -14924,15 +14915,17 @@ def JM_image_extension(type_):
 
 
 # fixme: need to avoid using a global for this.
-img_info = None
+g_img_info = None
 
 
 def JM_image_filter(opaque, ctm, name, image):
     assert isinstance(ctm, mupdf.FzMatrix)
     r = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
     q = mupdf.fz_transform_quad( mupdf.fz_quad_from_rect(r), ctm)
+    if mupdf_version >= (1, 22):
+        q = mupdf.fz_transform_quad( q, g_img_info_matrix)
     temp = name, JM_py_from_quad(q)
-    img_info.append(temp)
+    g_img_info.append(temp)
 
 
 def JM_image_profile( imagedata, keep_image):
@@ -14987,32 +14980,99 @@ def JM_image_profile( imagedata, keep_image):
         result[ dictkey_image] = image
     return result
 
+if mupdf_version >= (1, 22):
 
-def JM_image_reporter(page):
-    doc = page.doc()
+    def JM_image_reporter(page):
+        doc = page.doc()
 
-    filter_ = JM_image_reporter_Filter()
+        g_img_info_matrix = mupdf.FzMatrix()
+        mupdf.pdf_page_transform(page, None, g_img_info_matrix)
+        
+        #class FilterOptions(mupdf.PdfFilterOptions2):
+        #    def __init__(self):
+        #        super().__init__(self)
+        #        self.recurse = 0
+        #        self.instance_forms = 1
+        #        self.ascii = 1
+        #        self.no_update = 1
+        #    def image_filter(self, 
+        
+        sanitize_filter_options = mupdf.PdfFilterOptions()
+        sanitize_filter_options.opaque = page
+        sanitize_filter_options.image_filter = JM_image_filter
 
-    filter_._page = page
-    filter_.recurse = 0
-    filter_.instance_forms = 1
-    filter_.sanitize = 1
-    filter_.ascii = 1
+        class FilterFactory(mupdf.PdfFilterFactory2):
+            def __init__(self):
+                super().__init__()
+                self.use_virtual_filter()
+            def filter(self, ctx, doc, chain, struct_parents, transform, options, sopts):
+                return mupdf.ll_pdf_new_sanitize_filter(doc, chain, struct_parents, transform, options, sopts)
+        filter_factory = FilterFactory()
+        filter_factory.filter = mupdf.pdf_new_sanitize_filter
+        filter_factory.options = sanitize_filter_options
 
-    ctm = mupdf.FzMatrix()
-    mupdf.pdf_page_transform( page, mupdf.FzRect(0, 0, 0, 0), ctm)
-    struct_parents_obj = mupdf.pdf_dict_get( page.obj(), PDF_NAME('StructParents'))
-    struct_parents = -1
-    if mupdf.pdf_is_number( struct_parents_obj):
-        struct_parents = mupdf.pdf_to_int( struct_parents_obj)
+        filter_options.add_factory(filter_factory)
 
-    contents = mupdf.pdf_page_contents( page)
-    old_res = mupdf.pdf_page_resources( page)
-    global img_info
-    img_info = []
-    buffer_, new_res = JM_filter_content_stream( doc, contents, old_res, ctm, filter_, struct_parents)
-    rc = tuple( img_info)
-    return rc
+        global g_img_info
+        g_img_info = []
+
+        mupdf.pdf_filter_page_contents( doc, page, filter_options)
+
+        rc = tuple(g_img_info)
+        g_img_info = []
+        return rc
+
+else:
+    def JM_filter_content_stream(
+            doc,
+            in_stm,
+            in_res,
+            transform,
+            filter_,
+            struct_parents,
+            ):
+        '''
+        Returns (out_buf, out_res).
+        '''
+        out_buf = mupdf.FzBuffer( 1024)
+        proc_buffer = mupdf.pdf_new_buffer_processor( out_buf, filter_.ascii)
+        if filter_.sanitize:
+            out_res = mupdf.pdf_new_dict( doc, 1)
+            proc_filter = mupdf.pdf_new_filter_processor( doc, proc_buffer, in_res, out_res, struct_parents, transform, filter_)
+            mupdf.pdf_process_contents( proc_filter, doc, in_res, in_stm, mupdf.FzCookie())
+            mupdf.pdf_close_processor( proc_filter)
+        else:
+            out_res = in_res    #mupdf.pdf_keep_obj( in_res)
+            mupdf.pdf_process_contents( proc_buffer, doc, in_res, in_stm, mupdf.FzCookie())
+        mupdf.pdf_close_processor( proc_buffer)
+        return out_buf, out_res
+
+
+    def JM_image_reporter(page):
+        doc = page.doc()
+
+        filter_ = JM_image_reporter_Filter()
+
+        filter_._page = page
+        filter_.recurse = 0
+        filter_.instance_forms = 1
+        filter_.sanitize = 1
+        filter_.ascii = 1
+
+        ctm = mupdf.FzMatrix()
+        mupdf.pdf_page_transform( page, mupdf.FzRect(0, 0, 0, 0), ctm)
+        struct_parents_obj = mupdf.pdf_dict_get( page.obj(), PDF_NAME('StructParents'))
+        struct_parents = -1
+        if mupdf.pdf_is_number( struct_parents_obj):
+            struct_parents = mupdf.pdf_to_int( struct_parents_obj)
+
+        contents = mupdf.pdf_page_contents( page)
+        old_res = mupdf.pdf_page_resources( page)
+        global g_img_info
+        g_img_info = []
+        buffer_, new_res = JM_filter_content_stream( doc, contents, old_res, ctm, filter_, struct_parents)
+        rc = tuple( g_img_info)
+        return rc
 
 
 def JM_insert_contents(pdf, pageref, newcont, overlay):
@@ -17693,7 +17753,7 @@ def planish_line(p1: point_like, p2: point_like) -> Matrix:
     p2 = Point(p2)
     return Matrix(util_hor_matrix(p1, p2))
 
-#g_timings.mid()
+
 class JM_image_reporter_Filter(mupdf.PdfFilterOptions2):
     def __init__(self):
         super().__init__()

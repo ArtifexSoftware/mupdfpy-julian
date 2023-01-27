@@ -671,7 +671,7 @@ def build_windows_mupdf():
         windows_build_dir = f'{mupdf_local}\\{windows_build_tail}'
         #log( f'Building mupdf.')
         log( f'{mupdf_branch=}')
-        if mupdf_branch == 'master':
+        if 0 and mupdf_branch == 'master':
             log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
         else:
             shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
@@ -704,7 +704,7 @@ def build_unix_mupdf():
     if mupdf_local:
         #log( f'Building mupdf.')
         log( f'{mupdf_branch=}')
-        if mupdf_branch == 'master':
+        if 0 and mupdf_branch == 'master':
             log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
         else:
             shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
@@ -738,6 +738,8 @@ def build_unix_mupdf():
         # to coexist, e.g. on github.
         #
         build_prefix = f'mupdfpy-{platform.machine()}-'
+        if mupdf_branch == 'master':
+            build_prefix += 'master-'
         build_prefix_extra = os.environ.get( '_PYTHON_HOST_PLATFORM')
         if build_prefix_extra:
             build_prefix += f'{build_prefix_extra}-'
@@ -792,8 +794,8 @@ with open( f'{g_root}/README.md', encoding="utf-8") as f:
     readme = f.read()
 
 p = pipcl.Package(
-        'fitz',
-        '1.21.0',
+        'mupdfpy',
+        '1.21.1',
         summary="Rebased PyMuPDF bindings for the PDF toolkit and renderer MuPDF",
         description=readme,
         description_content_type="text/markdown",

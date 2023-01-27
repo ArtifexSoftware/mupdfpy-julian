@@ -30,11 +30,11 @@ class Package:
     passed to `distutils.core.setup()` or `setuptools.setup()` - name, version,
     summary etc, plus callbacks for build, clean and sdist filenames.
 
-    We then provide methods that can be used to implement a Python package's
-    PEP-517 backend, plus basic command line handling for use with a legacy
-    (pre-PEP-517) pip.
+    We provide methods that can be used to implement a Python package's
+    `setup.py` supporting PEP-517, plus basic command line handling for use
+    with a legacy (pre-PEP-517) pip.
 
-    A PEP-517 backend can be implemented with::
+    A setup.py can be implemented with::
 
         import pipcl
         import subprocess
@@ -60,6 +60,23 @@ class Package:
     This supports some of the command-line usage expected by older versions of
     `pip`, implemented by legacy distutils/setuptools, and also described in:
     https://pip.pypa.io/en/stable/reference/build-system/setup-py/
+    
+    Wheels:
+        We generate wheels according to:
+        https://packaging.python.org/specifications/binary-distribution-format/
+        * `<name>-<version>.dist-info/RECORD` uses sha256 hashes.
+          * We do not generate other `RECORD*` files such as `RECORD.jws` and
+              `RECORD.p7s`.
+        * `<name>-<version>.dist-info/WHEEL` has:
+          * `Wheel-Version: 1.0`
+          * `Root-Is-Purelib: false`
+        * No support for signed wheels.
+        * See documentation for `fn_build()` for more information about
+          generated wheels.
+    
+    Sdists:
+        We generate sdist's according to:
+        https://packaging.python.org/specifications/source-distribution-format/
     '''
     def __init__(self,
             name,
@@ -163,6 +180,11 @@ class Package:
             `<name>-<version>.dist-info/`; this is useful for license files
             etc.
 
+            Initial `$data/` in `_to` is replaced by
+            `<name>-<version>.data/`. We do not enforce particular
+            subdirectories, instead it is up to `fn_build()` to use specific
+            subdirectories such as 'purelib', 'headers', 'scripts', 'data' etc.
+
             If we are building a wheel (e.g. 'bdist_wheel' in the argv passed
             to `self.handle_argv()` or PEP-517 pip calls `self.build_wheel()`),
             we copy file `from_` to `to_` inside the wheel archive.
@@ -184,7 +206,8 @@ class Package:
             A function taking no args that returns a list of paths, e.g. using
             `pipcl.git_items()`, for files that should be copied into the
             sdist. Relative paths are interpreted as relative to `root`. It is
-            an error if a path does not exist or is not a file.
+            an error if a path does not exist or is not a file. The list must
+            contain `pyproject.toml`.
         tag_python:
             First element of wheel tag defined in PEP-425. If None we use
             'cp<version>'.
@@ -235,6 +258,14 @@ class Package:
         
         # PEP-440.
         assert re.match(r'^([1-9][0-9]*!)?(0|[1-9][0-9]*)(\.(0|[1-9][0-9]*))*((a|b|rc)(0|[1-9][0-9]*))?(\.post(0|[1-9][0-9]*))?(\.dev(0|[1-9][0-9]*))?$', version)
+        
+        # https://packaging.python.org/en/latest/specifications/binary-distribution-format/
+        if tag_python:
+            assert '-' not in tag_python
+        if tag_abi:
+            assert '-' not in tag_abi
+        if tag_platform:
+            assert '-' not in tag_platform
         
         self.name = name
         self.version = version
@@ -345,7 +376,7 @@ class Package:
             #
             add_str(
                     f'Wheel-Version: 1.0\n'
-                    f'Generator: bdist_wheel\n'
+                    f'Generator: pipcl\n'
                     f'Root-Is-Purelib: false\n'
                     f'Tag: {tag}\n'
                     ,
@@ -354,6 +385,10 @@ class Package:
             # Add <name>-<version>.dist-info/METADATA.
             #
             add_str(self._metainfo(), f'{dist_info_dir}/METADATA')
+            
+            # Add <name>-<version>.dist-info/COPYING.
+            if self.license:
+                add_str(self.license, f'{dist_info_dir}/COPYING')
             
             # Update <name>-<version>.dist-info/RECORD. This must be last.
             #
@@ -366,9 +401,6 @@ class Package:
     def build_sdist(self, sdist_directory, formats, config_settings=None):
         '''
         A PEP-517 `build_sdist()` function.
-
-        [As of 2021-03-24 pip doesn't actually seem to ever call the backend's
-        `build_sdist()` function?]
 
         Also called by `handle_argv()` to handle the 'sdist' command.
 
@@ -398,6 +430,7 @@ class Package:
         tarpath = f'{sdist_directory}/{self.name}-{self.version}.tar.gz'
         _log(f'build_sdist(): Writing sdist {tarpath} ...')
         with tarfile.open(tarpath, 'w:gz') as tar:
+            found_pyproject_toml = False
             for path in paths:
                 path_abs, path_rel = self._path_relative_to_root( path)
                 if path_abs.startswith(f'{os.path.abspath(sdist_directory)}/'):
@@ -407,38 +440,18 @@ class Package:
                     assert 0, f'Path does not exist: {path_abs!r}'
                 if not os.path.isfile(path_abs):
                     assert 0, f'Path is not a file: {path_abs!r}'
+                if path_rel == 'pyproject.toml':
+                    found_pyproject_toml = True
                 #log(f'path={path}')
                 tar.add( path_abs, f'{self.name}-{self.version}/{path_rel}', recursive=False)
                 manifest.append(path_rel)
+            assert found_pyproject_toml, f'No pyproject.toml specified.'
+            # Always add a PKG-INFO file.
             add(tar, f'{self.name}-{self.version}/PKG-INFO', self._metainfo())
 
-            # It doesn't look like MANIFEST or setup.cfg are required?
-            #
-            if 0:
-                # Add manifest:
-                add(tar, f'{self.name}-{self.version}/MANIFEST', '\n'.join(manifest))
-
-            if 0:
-                # add setup.cfg
-                setup_cfg = ''
-                setup_cfg += '[bdist_wheel]\n'
-                setup_cfg += 'universal = 1\n'
-                setup_cfg += '\n'
-                setup_cfg += '[flake8]\n'
-                setup_cfg += 'max-line-length = 100\n'
-                setup_cfg += 'ignore = F821\n'
-                setup_cfg += '\n'
-                setup_cfg += '[metadata]\n'
-                setup_cfg += 'license_file = LICENSE\n'
-                setup_cfg += '\n'
-                setup_cfg += '[tool:pytest]\n'
-                setup_cfg += 'minversion = 2.2.0\n'
-                setup_cfg += '\n'
-                setup_cfg += '[egg_info]\n'
-                setup_cfg += 'tag_build = \n'
-                setup_cfg += 'tag_date = 0\n'
-                add(tar, f'{self.name}-{self.version}/setup.cfg', setup_cfg)
-
+            if self.license:
+                add(tar, f'{self.name}-{self.version}/COPYING', self.license)
+            
         _log( f'build_sdist(): Have created sdist: {tarpath}')
         return os.path.basename(tarpath)
 
@@ -521,13 +534,18 @@ class Package:
             _log(f'argv_install(): Finished.')
 
 
-    def argv_dist_info(self, egg_base):
+    def argv_dist_info(self, root):
         '''
         Called by `handle_argv()`. There doesn't seem to be any documentation
         for 'setup.py dist_info', but it appears to be like 'egg_info' except it
         writes to a slightly different directory.
         '''
-        self._write_info(f'{egg_base}/{self.name}.dist-info')
+        if root is None:
+            root = f'{self.name}-{self.version}.dist-info'
+        self._write_info(f'{root}/METADATA')
+        if self.license:
+            with open( f'{root}/COPYING', 'w') as f:
+                f.write( self.license)
 
 
     def argv_egg_info(self, egg_base):
@@ -874,6 +892,9 @@ class Package:
         If `to_` starts with `$dist-info/`, we replace this with
         `self._dist_info_dir()`.
 
+        If `to_` starts with `$data/`, we replace this with
+        `self._dist_info_dir()`.
+
         `from_abs` and `to_abs` are absolute paths. We assert that `to_abs` is
         `within self.root`.
 
@@ -892,6 +913,9 @@ class Package:
         prefix = '$dist-info/'
         if to_.startswith( prefix):
             to_ = f'{self._dist_info_dir()}/{to_[ len(prefix):]}'
+        prefix = '$data/'
+        if to_.startswith( prefix):
+            to_ = f'{self.name}-{self.version}.data/{to_[ len(prefix):]}'
         from_ = self._path_relative_to_root( from_, assert_within_root=False)
         to_ = self._path_relative_to_root(to_)
         return from_, to_
@@ -902,14 +926,14 @@ class Package:
 
 def git_items( directory, submodules=False):
     '''
-    Helper for `pipcl.Package`'s `fn_sdist()` callback.
-
     Returns list of paths for all files known to git within `directory`. Each
     path is relative to `directory`.
 
     `directory` must be somewhere within a git checkout.
 
     We run a 'git ls-files' command internally.
+    
+    This function can be useful for the `fn_sdist()  callback.
     '''
     command = 'cd ' + directory + ' && git ls-files'
     if submodules:
