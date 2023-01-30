@@ -16082,11 +16082,11 @@ def JM_search_stext_page(page, needle):
                 if not mupdf.fz_is_infinite_rect(rect):
                     r = JM_char_bbox(line, ch)
                     if not mupdf.fz_contains_rect(rect, r):
+                        #goto next_char;
                         continue
                 while 1:
                     #try_new_match:
                     if not inside:
-                        hs = haystack_string[haystack:]
                         if haystack >= begin:
                             inside = 1
                     if inside:
@@ -16105,11 +16105,8 @@ def JM_search_stext_page(page, needle):
                                 end += haystack
                                 continue
                     break
+                haystack += 1
                 #next_char:;
-                rune, _ = mupdf.fz_chartorune(haystack_string[haystack:])
-                haystack += rune
-                hs = haystack_string[haystack:]
-                #break
             assert haystack_string[haystack] == '\n', f'{haystack=} {haystack_string[haystack]=}'
             haystack += 1
         assert haystack_string[haystack] == '\n', f'{haystack=} {haystack_string[haystack]=}'
