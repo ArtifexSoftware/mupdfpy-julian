@@ -1115,12 +1115,10 @@ static PyObject* JM_get_annot_xref_list(const mupdf::PdfObj& page_obj)
         return names;
     }*/
     int n = mupdf::pdf_array_len(annots);
-    printf("JM_get_annot_xref_list(): n=%i\n", n);
     for (int i = 0; i < n; i++)
     {
         mupdf::PdfObj annot_obj = mupdf::pdf_array_get(annots, i);
         int xref = mupdf::pdf_to_num(annot_obj);
-        printf( "JM_get_annot_xref_list(): xref=%i\n", xref);
         mupdf::PdfObj subtype = mupdf::pdf_dict_get(annot_obj, PDF_NAME(Subtype));
         if (!subtype.m_internal)
         {
