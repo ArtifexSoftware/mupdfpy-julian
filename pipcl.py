@@ -1,5 +1,8 @@
 '''
-Support for Python packaging operations.
+Python packaging operations, including PEP-517 support, for use by a `setup.py`
+script.
+
+Run doctests with: `python -m doctest pipcl.py`
 '''
 
 import base64
@@ -23,60 +26,168 @@ import zipfile
 
 class Package:
     '''
-    Python packaging operations, including PEP-517 support, for use by a
-    `setup.py` script.
-
     Our constructor takes a definition of a Python package similar to that
-    passed to `distutils.core.setup()` or `setuptools.setup()` - name, version,
-    summary etc, plus callbacks for build, clean and sdist filenames.
+    passed to `distutils.core.setup()` or `setuptools.setup()` - name,
+    version, summary etc, plus callbacks for building, getting a list of sdist
+    filenames, and cleaning.
 
     We provide methods that can be used to implement a Python package's
-    `setup.py` supporting PEP-517, plus basic command line handling for use
-    with a legacy (pre-PEP-517) pip.
+    `setup.py` supporting PEP-517.
 
-    A setup.py can be implemented with::
-
-        import pipcl
-        import subprocess
-
-        def build():
-            subprocess.check_call('cc -shared -fPIC -o foo.so foo.c')
-            return ['foo.py', 'foo.so']
-
-        def sdist():
-            return ['foo.py', 'foo.c', 'pyproject.toml', ...]
-
-        p = pipcl.Package('foo', '1.2.3', fn_build=build, fn_sdist=sdist, ...)
-
-        build_wheel = p.build_wheel
-        build_sdist = p.build_sdist
-
-    Handle old-style setup.py command-line usage by appending::
-
-        import sys
-        if __name__ == '__main__':
-            p.handle_argv(sys.argv)
-    
-    This supports some of the command-line usage expected by older versions of
-    `pip`, implemented by legacy distutils/setuptools, and also described in:
+    We also support basic command line handling for use
+    with a legacy (pre-PEP-517) pip, implemented by
+    legacy distutils/setuptools, and also described in:
     https://pip.pypa.io/en/stable/reference/build-system/setup-py/
+
+    Here is a `doctest` example of using pipcl to create a SWIG extension
+    module.
+
+    Create an empty test directory:
+
+        >>> import os
+        >>> import shutil
+        >>> shutil.rmtree('pipcl_test', ignore_errors=1)
+        >>> os.mkdir('pipcl_test')
+
+    Create a `setup.py` which uses `pipcl` to define an extension module.
+
+        >>> import textwrap
+        >>> with open('pipcl_test/setup.py', 'w') as f:
+        ...     _ = f.write(textwrap.dedent("""
+        ...             import sys
+        ...             import pipcl
+        ...
+        ...             def build():
+        ...                 so_leaf = pipcl.build_extension(
+        ...                         name = 'foo',
+        ...                         path_i = 'foo.i',
+        ...                         outdir = 'build',
+        ...                         )
+        ...                 return [
+        ...                         ('build/foo.py', 'foo/__init__.py'),
+        ...                         (f'build/{so_leaf}', f'foo/{so_leaf}'),
+        ...                         ('README', '$dist-info/README'),
+        ...                         ]
+        ...
+        ...             def sdist():
+        ...                 return [
+        ...                         'foo.i',
+        ...                         'setup.py',
+        ...                         'pipcl.py',
+        ...                         'README',
+        ...                         ]
+        ...
+        ...             p = pipcl.Package(
+        ...                     name = 'foo',
+        ...                     version = '1.2.3',
+        ...                     fn_build = build,
+        ...                     fn_sdist = sdist,
+        ...                     )
+        ...
+        ...             build_wheel = p.build_wheel
+        ...             build_sdist = p.build_sdist
+        ... 
+        ...             # Handle old-style setup.py command-line usage:
+        ...             if __name__ == '__main__':
+        ...                 p.handle_argv(sys.argv)
+        ...             """))
+
+    Create the files required by the above `setup.py` - the SWIG `.i` input
+    file, the README file, and a copy of `pipcl.py`.
+
+        >>> with open('pipcl_test/foo.i', 'w') as f:
+        ...     _ = f.write(textwrap.dedent("""
+        ...             %{
+        ...             #include <stdio.h>
+        ...             #include <string.h>
+        ...             int bar(const char* text)
+        ...             {
+        ...                 printf("int bar(const char* text): text: %s\\\\n", text);
+        ...                 int len = strlen(text);
+        ...                 printf("int bar(const char* text): len=%i\\\\n", len);
+        ...                 fflush(stdout);
+        ...                 return len;
+        ...             }
+        ...             %}
+        ...             int bar(const char* text);
+        ...             """))
+
+        >>> with open('pipcl_test/README', 'w') as f:
+        ...     _ = f.write(textwrap.dedent("""
+        ...             This is Foo.
+        ...             """))
+
+        >>> _ = shutil.copy2('pipcl.py', 'pipcl_test/pipcl.py')
+
+    Use `setup.py`'s command-line interface to build and install the extension
+    module into `pipcl_test/install/`.
+
+        >>> _ = subprocess.run(
+        ...         f'cd pipcl_test && {sys.executable} setup.py --verbose --root install install',
+        ...         shell=1, check=1)
+
+    Create a test script which asserts that Python function call `foo.bar(s)`
+    returns the length of `s`.
+
+        >>> with open('pipcl_test/test.py', 'w') as f:
+        ...     _ = f.write(textwrap.dedent("""
+        ...             import sys
+        ...             sys.path.append('install')
+        ...             import foo
+        ...             text = 'hello'
+        ...             print(f'test.py: calling foo.bar() with text={text!r}')
+        ...             sys.stdout.flush()
+        ...             l = foo.bar(text)
+        ...             print(f'test.py: foo.bar() returned: {l}')
+        ...             assert l == len(text)
+        ...             """))
+
+    Run the test script.
+
+        >>> r = subprocess.run(
+        ...         f'cd pipcl_test && {sys.executable} test.py',
+        ...         shell=1, check=1, text=1,
+        ...         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        ...         )
+        >>> print(r.stdout)
+        test.py: calling foo.bar() with text='hello'
+        int bar(const char* text): text: hello
+        int bar(const char* text): len=5
+        test.py: foo.bar() returned: 5
+        <BLANKLINE>
+
+    Check that building sdist and wheel succeeds. For now we don't attempt to
+    check that the sdist and wheel actually work.
+
+        >>> _ = subprocess.run(
+        ...         f'cd pipcl_test && {sys.executable} setup.py --verbose sdist',
+        ...         shell=1, check=1)
+
+        >>> _ = subprocess.run(
+        ...         f'cd pipcl_test && {sys.executable} setup.py --verbose bdist_wheel',
+        ...         shell=1, check=1)
     
-    Wheels:
-        We generate wheels according to:
-        https://packaging.python.org/specifications/binary-distribution-format/
-        * `<name>-<version>.dist-info/RECORD` uses sha256 hashes.
-          * We do not generate other `RECORD*` files such as `RECORD.jws` and
-              `RECORD.p7s`.
-        * `<name>-<version>.dist-info/WHEEL` has:
-          * `Wheel-Version: 1.0`
-          * `Root-Is-Purelib: false`
-        * No support for signed wheels.
-        * See documentation for `fn_build()` for more information about
-          generated wheels.
     
-    Sdists:
-        We generate sdist's according to:
-        https://packaging.python.org/specifications/source-distribution-format/
+    Wheels and sdists
+    
+        Wheels:
+            We generate wheels according to:
+            https://packaging.python.org/specifications/binary-distribution-format/
+            
+            * `{name}-{version}.dist-info/RECORD` uses sha256 hashes.
+            * We do not generate other `RECORD*` files such as
+              `RECORD.jws` or `RECORD.p7s`.
+            * `{name}-{version}.dist-info/WHEEL` has:
+            
+              * `Wheel-Version: 1.0`
+              * `Root-Is-Purelib: false`
+            * No support for signed wheels.
+            * See documentation for `fn_build()` for more information about
+              generated wheels.
+
+        Sdists:
+            We generate sdist's according to:
+            https://packaging.python.org/specifications/source-distribution-format/
     '''
     def __init__(self,
             name,
@@ -110,116 +221,125 @@ class Package:
             tag_platform = None,
             ):
         '''
-        Specification of package.
-        
         The initial args before `root` define the package
         metadata and closely follow the definitions in:
         https://packaging.python.org/specifications/core-metadata/
         
-        name:
-            A string, the name of the Python package.
-        version:
-            A string, the version of the Python package. Also see PEP-440
-            "Version Identification and Dependency Specification".
-        platform:
-            A string or list of strings.
-        supported_platform:
-            A string or list of strings.
-        summary:
-            A string.
-        description:
-            A string.
-        description_content_type:
-            A string describing markup of `description` arg. For example:
-                    text/markdown; variant=GFM
-        keywords:
-            A string containing comma-separated keywords.
-        home_page:
-            .
-        download_url:
-            Where this version can be downloaded from.
-        author:
-            .
-        author_email:
-            .
-        maintainer:
-            .
-        maintainer_email:
-            .
-        license:
-            A string containing the license text.
-        classifier:
-            A string or list of strings. Also see:
-                https://pypi.org/pypi?%3Aaction=list_classifiers
-                https://pypi.org/classifiers/
-        requires_dist:
-            A string or list of strings. Also see PEP-508.
-        requires_python:
-            A string or list of strings.
-        requires_external:
-            A string or list of strings.
-        project_url:
-            A string or list of strings, each of the form: `<name>, <url>`.
-        provides_extra:
-            A string or list of strings.
+        Args:
         
-        root:
-            Root of package, defaults to current directory.
-        fn_build:
-            A function taking no args that builds the package.
+            name:
+                A string, the name of the Python package.
+            version:
+                A string, the version of the Python package. Also see PEP-440
+                `Version Identification and Dependency Specification`.
+            platform:
+                A string or list of strings.
+            supported_platform:
+                A string or list of strings.
+            summary:
+                A string, short description of the package.
+            description:
+                A string, a detailed description of the package.
+            description_content_type:
+                A string describing markup of `description` arg. For example
+                `text/markdown; variant=GFM`.
+            keywords:
+                A string containing comma-separated keywords.
+            home_page:
+                URL of home page.
+            download_url:
+                Where this version can be downloaded from.
+            author:
+                Author.
+            author_email:
+                Author email.
+            maintainer:
+                Maintainer.
+            maintainer_email:
+                Maintainer email.
+            license:
+                A string containing the license text.
+            classifier:
+                A string or list of strings. Also see:
 
-            Should return a list of items; each item should be a tuple of two
-            strings `(from_, to_)`, or a single string `path` which is treated
-            as the tuple `(path, path)`.
+                * https://pypi.org/pypi?%3Aaction=list_classifiers
+                * https://pypi.org/classifiers/
 
-            `from_` should be the path to a file; if a relative path it is
-            assumed to be relative to `root`. `to_` identifies what the file
-            should be called within a wheel or when installing.
+            requires_dist:
+                A string or list of strings. Also see PEP-508.
+            requires_python:
+                A string or list of strings.
+            requires_external:
+                A string or list of strings.
+            project_url:
+                A string or list of strings, each of the form: `{name}, {url}`.
+            provides_extra:
+                A string or list of strings.
+
+            root:
+                Root of package, defaults to current directory.
             
-            Initial `$dist-info/` in `_to` is replaced by
-            `<name>-<version>.dist-info/`; this is useful for license files
-            etc.
+            fn_build:
+                A function taking no args that builds the package.
 
-            Initial `$data/` in `_to` is replaced by
-            `<name>-<version>.data/`. We do not enforce particular
-            subdirectories, instead it is up to `fn_build()` to use specific
-            subdirectories such as 'purelib', 'headers', 'scripts', 'data' etc.
+                Should return a list of items; each item should be a tuple of
+                two strings `(from_, to_)`, or a single string `path` which is
+                treated as the tuple `(path, path)`.
 
-            If we are building a wheel (e.g. 'bdist_wheel' in the argv passed
-            to `self.handle_argv()` or PEP-517 pip calls `self.build_wheel()`),
-            we copy file `from_` to `to_` inside the wheel archive.
+                `from_` should be the path to a file; if a relative path it is
+                assumed to be relative to `root`. `to_` identifies what the
+                file should be called within a wheel or when installing.
 
-            If we are installing (e.g. 'install' command in the argv
-            passed to `self.handle_argv()`), then we copy `from_` to
-            `sitepackages`/`to_`, where `sitepackages` is the installation
-            directory, the default being `sysconfig.get_path('platlib')` e.g.
-            `myvenv/lib/python3.9/site-packages/`.
-        fn_clean:
-            A function taking a single arg `all_` that cleans generated files.
-            `all_` is true iff '--all' is in argv.
+                Initial `$dist-info/` in `_to` is replaced by
+                `{name}-{version}.dist-info/`; this is useful for license files
+                etc.
 
-            For safety and convenience, can also returns a list of
-            files/directory paths to be deleted. Relative paths are interpreted
-            as relative to `root` and other paths are asserted to be within
-            `root`.
-        fn_sdist:
-            A function taking no args that returns a list of paths, e.g. using
-            `pipcl.git_items()`, for files that should be copied into the
-            sdist. Relative paths are interpreted as relative to `root`. It is
-            an error if a path does not exist or is not a file. The list must
-            contain `pyproject.toml`.
-        tag_python:
-            First element of wheel tag defined in PEP-425. If None we use
-            'cp<version>'.
-        tag_abi:
-            Second element of wheel tag defined in PEP-425. If None we use
-            'none'.
-        tag_platform:
-            Third element of wheel tag defined in PEP-425. Default is derived
-            from `distutils.util.get_platform()` as specified in the PEP, e.g.
-            'openbsd_7_0_amd64'.
+                Initial `$data/` in `_to` is replaced by
+                `{name}-{version}.data/`. We do not enforce particular
+                subdirectories, instead it is up to `fn_build()` to use
+                specific subdirectories such as `purelib`, `headers`,
+                `scripts`, `data` etc.
+
+                If we are building a wheel (e.g. `bdist_wheel` in the
+                argv passed to `self.handle_argv()` or PEP-517 pip calls
+                `self.build_wheel()`), we copy file `from_` to `to_` inside the
+                wheel archive.
+
+                If we are installing (e.g. `install` command in
+                the argv passed to `self.handle_argv()`), then
+                we copy `from_` to `{sitepackages}/{to_}`, where
+                `sitepackages` is the installation directory, the
+                default being `sysconfig.get_path('platlib')` e.g.
+                `myvenv/lib/python3.9/site-packages/`.
             
-            For pure python packages use: `tag_platform='any'`
+            fn_clean:
+                A function taking a single arg `all_` that cleans generated
+                files. `all_` is true iff `--all` is in argv.
+
+                For safety and convenience, can also returns a list of
+                files/directory paths to be deleted. Relative paths are
+                interpreted as relative to `root` and other paths are asserted
+                to be within `root`.
+            
+            fn_sdist:
+                A function taking no args that returns a list of paths, e.g.
+                using `pipcl.git_items()`, for files that should be copied
+                into the sdist. Relative paths are interpreted as relative to
+                `root`. It is an error if a path does not exist or is not a
+                file. The list must contain `pyproject.toml`.
+            
+            tag_python:
+                First element of wheel tag defined in PEP-425. If None we use
+                `cp{version}`.
+            tag_abi:
+                Second element of wheel tag defined in PEP-425. If None we use
+                `none`.
+            tag_platform:
+                Third element of wheel tag defined in PEP-425. Default is
+                derived from `distutils.util.get_platform()` as specified in
+                the PEP, e.g. `openbsd_7_0_amd64`.
+
+                For pure python packages use: `tag_platform=any`
         '''        
         assert name
         assert version
@@ -298,11 +418,16 @@ class Package:
         self.tag_platform = tag_platform
 
 
-    def build_wheel(self, wheel_directory, config_settings=None, metadata_directory=None):
+    def build_wheel(self,
+            wheel_directory,
+            config_settings=None,
+            metadata_directory=None,
+            verbose=False,
+            ):
         '''
-        A PEP-517 `build_wheel()` function.
+        A PEP-517 `build_wheel()` function, with extra optional `verbose` arg.
 
-        Also called by `handle_argv()` to handle the 'bdist_wheel' command.
+        Also called by `handle_argv()` to handle the `bdist_wheel` command.
 
         Returns leafname of generated wheel within `wheel_directory`.
         '''
@@ -351,18 +476,18 @@ class Package:
             _log(f'calling self.fn_build={self.fn_build}')
             items = self.fn_build()
 
-        _log(f'build_wheel(): Writing wheel {path} ...')
+        _log(f'build_wheel(): Creating wheel: {path}')
         os.makedirs(wheel_directory, exist_ok=True)
         record = _Record()
         with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
 
             def add_file(from_, to_):
                 z.write(from_, to_)
-                record.add_file(from_, to_)
+                record.add_file(from_, to_, verbose=verbose)
 
             def add_str(content, to_):
                 z.writestr(to_, content)
-                record.add_content(content, to_)
+                record.add_content(content, to_, verbose=verbose)
 
             dist_info_dir = self._dist_info_dir()
             
@@ -398,15 +523,21 @@ class Package:
         return os.path.basename(path)
 
 
-    def build_sdist(self, sdist_directory, formats, config_settings=None):
+    def build_sdist(self,
+            sdist_directory,
+            formats,
+            config_settings=None,
+            verbose=False,
+            ):
         '''
-        A PEP-517 `build_sdist()` function.
+        A PEP-517 `build_sdist()` function, with extra optional `verbose` arg.
 
-        Also called by `handle_argv()` to handle the 'sdist' command.
+        Also called by `handle_argv()` to handle the `sdist` command.
 
         Returns leafname of generated archive within `sdist_directory`.
         '''
-        _log( f'build_sdist(): formats={formats}')
+        if verbose:
+            _log( f'build_sdist(): formats={formats}')
         if formats and formats != 'gztar':
             raise Exception( f'Unsupported: formats={formats}')
         paths = []
@@ -414,21 +545,30 @@ class Package:
             paths = self.fn_sdist()
 
         manifest = []
-        def add(tar, name, contents):
+        
+        def add_content(tar, name, contents):
             '''
             Adds item called `name` to `tarfile.TarInfo` `tar`, containing
             `contents`. If contents is a string, it is encoded using utf8.
             '''
+            if verbose:
+                _log( f'build_sdist(): Adding: {name}')
             if isinstance(contents, str):
                 contents = contents.encode('utf8')
             ti = tarfile.TarInfo(name)
             ti.size = len(contents)
             ti.mtime = time.time()
             tar.addfile(ti, io.BytesIO(contents))
+        
+        def add_file(tar, path_abs, name):
+            if verbose:
+                _log( f'build_sdist(): Adding file: {os.path.relpath(path_abs)} => {name}')
+            tar.add( path_abs, name, recursive=False)
 
         os.makedirs(sdist_directory, exist_ok=True)
         tarpath = f'{sdist_directory}/{self.name}-{self.version}.tar.gz'
-        _log(f'build_sdist(): Writing sdist {tarpath} ...')
+        if verbose:
+            _log(f'build_sdist(): Creating sdist: {tarpath}')
         with tarfile.open(tarpath, 'w:gz') as tar:
             found_pyproject_toml = False
             for path in paths:
@@ -442,12 +582,12 @@ class Package:
                     assert 0, f'Path is not a file: {path_abs!r}'
                 if path_rel == 'pyproject.toml':
                     found_pyproject_toml = True
-                #log(f'path={path}')
-                tar.add( path_abs, f'{self.name}-{self.version}/{path_rel}', recursive=False)
+                add_file( tar, path_abs, f'{self.name}-{self.version}/{path_rel}')
                 manifest.append(path_rel)
-            assert found_pyproject_toml, f'No pyproject.toml specified.'
+            if not found_pyproject_toml:
+                _log(f'build_sdist(): Warning: no pyproject.toml specified.')
             # Always add a PKG-INFO file.
-            add(tar, f'{self.name}-{self.version}/PKG-INFO', self._metainfo())
+            add_content(tar, f'{self.name}-{self.version}/PKG-INFO', self._metainfo())
 
             if self.license:
                 add(tar, f'{self.name}-{self.version}/COPYING', self.license)
@@ -456,7 +596,7 @@ class Package:
         return os.path.basename(tarpath)
 
 
-    def argv_clean(self, all_):
+    def _argv_clean(self, all_):
         '''
         Called by `handle_argv()`.
         '''
@@ -476,12 +616,12 @@ class Package:
                 shutil.rmtree(path, ignore_errors=True)
 
 
-    def argv_install(self, record_path, root, verbose=False):
+    def _argv_install(self, record_path, root, verbose=False):
         '''
-        Called by `handle_argv()` to handle 'install' command..
+        Called by `handle_argv()` to handle `install` command..
         '''
         if verbose:
-            _log( f'argv_install(): {record_path=} {root=}')
+            _log( f'_argv_install(): {record_path=} {root=}')
         
         # Do a build and get list of files to install.
         #
@@ -492,10 +632,10 @@ class Package:
         if root is None:
             root = sysconfig.get_path('platlib')
             if verbose:
-                _log( f'argv_install(): Using sysconfig.get_path("platlib")={root!r}.')
+                _log( f'_argv_install(): Using sysconfig.get_path("platlib")={root!r}.')
             # todo: for pure-python we should use sysconfig.get_path('purelib') ?
         
-        _log( f'argv_install(): Installing into {root=}')
+        _log( f'_argv_install(): Installing into {root=}')
         dist_info_dir = self._dist_info_dir()
         
         if not record_path:
@@ -504,16 +644,14 @@ class Package:
         
         def add_file(from_abs, from_rel, to_abs, to_rel):
             if verbose:
-                _log(f'argv_install(): copying from {from_abs} to {to_abs}')
+                _log(f'_argv_install(): Copying from {from_rel} to {to_abs}')
             os.makedirs( os.path.dirname( to_abs), exist_ok=True)
             shutil.copy2( from_abs, to_abs)
-            if verbose:
-                _log(f'argv_install(): adding to record: {from_rel=} {to_rel=}')
             record.add_file(from_rel, to_rel)
 
         def add_str(content, to_abs, to_rel):
             if verbose:
-                _log( f'argv_install(): Writing to: {to_abs}')
+                _log( f'_argv_install(): Writing to: {to_abs}')
             with open( to_abs, 'w') as f:
                 f.write( content)
             record.add_content(content, to_rel)
@@ -526,19 +664,19 @@ class Package:
         add_str( self._metainfo(), f'{root}/{dist_info_dir}/METADATA', f'{dist_info_dir}/METADATA')
 
         if verbose:
-            _log( f'argv_install(): Writing to: {record_path}')
+            _log( f'_argv_install(): Writing to: {record_path}')
         with open(record_path, 'w') as f:
             f.write(record.get())
 
         if verbose:
-            _log(f'argv_install(): Finished.')
+            _log(f'_argv_install(): Finished.')
 
 
-    def argv_dist_info(self, root):
+    def _argv_dist_info(self, root):
         '''
         Called by `handle_argv()`. There doesn't seem to be any documentation
-        for 'setup.py dist_info', but it appears to be like 'egg_info' except it
-        writes to a slightly different directory.
+        for `setup.py dist_info`, but it appears to be like `egg_info` except
+        it writes to a slightly different directory.
         '''
         if root is None:
             root = f'{self.name}-{self.version}.dist-info'
@@ -548,7 +686,7 @@ class Package:
                 f.write( self.license)
 
 
-    def argv_egg_info(self, egg_base):
+    def _argv_egg_info(self, egg_base):
         '''
         Called by `handle_argv()`.
         '''
@@ -620,6 +758,7 @@ class Package:
         opt_install_headers = None
         opt_record = None
         opt_root = None
+        opt_verbose = False
         
         args = Args(argv[1:])
 
@@ -677,6 +816,8 @@ class Package:
                                 Used by "install".
                             --single-version-externally-managed
                                 Ignored.
+                            --verbose -v
+                                Extra diagnostics.
                         Other:
                             windows-vs [-y <year>] [-v <version>] [-g <grade] [--verbose]
                                 Windows only; looks for matching Visual Studio.
@@ -699,6 +840,7 @@ class Package:
             elif arg == '--record':                             opt_record = args.next()
             elif arg == '--root':                               opt_root = args.next()
             elif arg == '--single-version-externally-managed':  pass
+            elif arg == '--verbose' or arg == '-v':             opt_verbose = True
             
             elif arg == 'windows-vs':
                 command = arg
@@ -713,12 +855,12 @@ class Package:
 
         _log(f'handle_argv(): Handling command={command}')
         if 0:   pass
-        elif command == 'bdist_wheel':  self.build_wheel(opt_dist_dir)
-        elif command == 'clean':        self.argv_clean(opt_all)
-        elif command == 'dist_info':    self.argv_dist_info(opt_egg_base)
-        elif command == 'egg_info':     self.argv_egg_info(opt_egg_base)
-        elif command == 'install':      self.argv_install(opt_record, opt_root)
-        elif command == 'sdist':        self.build_sdist(opt_dist_dir, opt_formats)
+        elif command == 'bdist_wheel':  self.build_wheel(opt_dist_dir, verbose=opt_verbose)
+        elif command == 'clean':        self._argv_clean(opt_all)
+        elif command == 'dist_info':    self._argv_dist_info(opt_egg_base)
+        elif command == 'egg_info':     self._argv_egg_info(opt_egg_base)
+        elif command == 'install':      self._argv_install(opt_record, opt_root, opt_verbose)
+        elif command == 'sdist':        self.build_sdist(opt_dist_dir, opt_formats, verbose=opt_verbose)
         
         elif command == 'windows-python':
             verbose = False
@@ -761,7 +903,7 @@ class Package:
         else:
             assert 0, f'Unrecognised command: {command}'
 
-        _log(f'handle_argv(): Finished handling command={command}')
+        _log(f'handle_argv(): Finished handling command: {command}')
 
 
     def __str__(self):
@@ -868,7 +1010,7 @@ class Package:
 
         We use `os.path.realpath()` to resolve any links.
 
-        if assert_within_root is true, assert-fails if `path` is not within
+        if `assert_within_root` is true, assert-fails if `path` is not within
         `self.root`.
         '''
         if os.path.isabs(path):
@@ -888,7 +1030,7 @@ class Package:
         If `p` is a string we convert to `(p, p)`. Otherwise we assert that
         `p` is a tuple of two strings. Non-absolute paths are assumed to be
         relative to `self.root`.
-        
+
         If `to_` starts with `$dist-info/`, we replace this with
         `self._dist_info_dir()`.
 
@@ -921,8 +1063,253 @@ class Package:
         return from_, to_
 
 
+def build_extension(
+        name,
+        path_i,
+        outdir,
+        includes=None,
+        defines=None,
+        libpaths=None,
+        libs=None,
+        force=True,
+        optimise=True,
+        debug=False,
+        compiler_extra='',
+        linker_extra='',
+        swig='swig',
+        ):
+    '''
+    Builds a C++ Python extension module using SWIG.
+    
+    Works on Unix and Windows.
+    
+    Args:
+        name:
+            Name of generated extension module.
+        path_i:
+            Path of input SWIG .i file.
+        outdir:
+            Output directory. Will contain files `{name}.py` and `_{name}.so`
+            (or `_{name}.*.pyd` on Windows).
+        includes:
+            A string, or a sequence of extra include directories to be prefixed
+            with `-I`.
+        defines:
+            A string, or a sequence of extra preprocessor defines to be
+            prefixed with `-D`.
+        libpaths
+            A string, or a sequence of library paths to be prefixed with
+            `/LIBPATH:` on Windows or `-L` on Unix.
+        libs
+            A string, or a sequence of library names to be prefixed with `-l`.
+        force:
+            Empty string or None:
+                Run commands if files seem to be out of date; this might
+                erroneously not rebuild.
+            False, 0 or '0':
+                Do not run any commands.
+            True, 1 or '1':
+                Always run commands.
+        optimise:
+            Whether to use compiler optimisations.
+        debug:
+            Whether to build with debug symbols.
+        compiler_extra:
+            Extra compiler flags.
+        linker_extra:
+            Extra linker flags.
+        swig:
+            Base swig command.
+    
+    Returns `path_so_leaf`, the leafname of the generated library within
+    `outdir`.
+    '''
+    includes_text = _flags( includes, '-I')
+    defines_text = _flags( defines, '-D')
+    libpaths_text = _flags( libpaths, '/LIBPATH:', '"') if windows() else _flags( libpaths, '-L')
+    libs_text = _flags( libs, '-l')
+    path_cpp = f'{path_i}.cpp'
+    if not os.path.exists( outdir):
+        os.mkdir( outdir)
+    # Run SWIG.
+    if _doit(force, _fs_mtime(path_i) >= _fs_mtime(path_cpp)):
+        run( f'''
+                {swig}
+                    -Wall
+                    -c++
+                    -python
+                    -module {name}
+                    -outdir {outdir}
+                    -o {path_cpp}
+                    {includes_text}
+                    {path_i}
+                '''
+                )
+    
+    if windows():
+        python_version = ''.join(platform.python_version_tuple()[:2])
+        base            = f'_{name}.cp{python_version}-win_amd64'
+        path_so_leaf    = f'{base}.pyd'
+        path_so         = f'{outdir}/{path_so_leaf}'
+        path_obj        = f'{path_so}.obj'
+        
+        command, flags = base_compiler(cpp=True)
+        command = f'''
+                {command}
+                    # General:
+                    /c                          # Compiles without linking.
+                    /EHsc                       # Enable "Standard C++ exception handling".
+                    /MD                         # Creates a multithreaded DLL using MSVCRT.lib.
+
+                    # Input/output files:
+                    /Tp{path_cpp}               # /Tp specifies C++ source file.
+                    /Fo{path_obj}               # Output file.
+
+                    # Include paths:
+                    {includes_text}
+                    {flags.includes}            # Include path for Python headers.
+
+                    # Code generation:
+                    {'/O2' if optimise else ''} # Optimisation.
+                    /permissive-                # Set standard-conformance mode.
+
+                    # Diagnostics:
+                    #/FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
+                    /W3                         # Sets which warning level to output. /W3 is IDE default.
+                    /diagnostics:caret          # Controls the format of diagnostic messages.
+                    /nologo                     #
+
+                    {defines_text}
+                    {compiler_extra}
+                '''
+        if _doit( force, _fs_mtime(path_cpp) >= _fs_mtime(path_obj)):
+            run(command)
+
+        command, flags = base_linker()
+        command = f'''
+                {command}
+                    /DLL                    # Builds a DLL.
+                    /EXPORT:PyInit__{name}  # Exports a function.
+                    /IMPLIB:{base}.lib      # Overrides the default import library name.
+                    {libpaths_text}
+                    {flags.libs}
+                    /OUT:{path_so}          # Specifies the output file name.
+                    /nologo
+                    {libs_text}
+                    {path_obj}
+                    {linker_extra}
+                '''
+        if _doit( force, _fs_mtime(path_obj) >= _fs_mtime(path_so)):
+            run(command)
+    
+    else:
+    
+        # Not Windows.
+        #
+        path_so_leaf = f'_{name}.so'
+        path_so = f'{outdir}/{path_so_leaf}'
+        cpp_flags = ''
+        if debug:
+            cpp_flags += ' -g'
+        if optimise:
+            cpp_flags += ' -O2 -DNDEBUG'
+        cpp_flags = cpp_flags.strip()
+        # Fun fact - on Linux, if the -L and -l options are before '{path_cpp}
+        # -o {path_so}' they seem to be ignored...
+        #
+        # We use compiler to compile and link in one command.
+        #
+        command, flags = base_compiler(cpp=True)
+        command = f'''
+                {command}
+                    -fPIC
+                    -shared
+                    {flags.includes}
+                    {includes_text}
+                    {defines_text}
+                    {cpp_flags}
+                    {path_cpp}
+                    -o {path_so}
+                    {compiler_extra}
+                    {libpaths_text}
+                    {libs_text}
+                    -Wl,-rpath='$ORIGIN',-z,origin
+                    {linker_extra}
+                '''
+        if _doit( force, lambda: _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0)):
+            run(command)
+    
+    return path_so_leaf
+
+
 # Functions that might be useful.
 #
+
+def base_compiler(vs=None, flags=None, cpp=False):
+    '''
+    Returns basic compiler command.
+    
+    Args:
+        vs:
+            Windows only. A `pipcl.WindowsVS` instance or None to use default
+            `pipcl.WindowsVS` instance.
+        flags:
+            A `pipcl.PythonFlags` instance or None to use default
+            `pipcl.PythonFlags` instance.
+        cpp:
+            If true we return C++ compiler command instead of C. On Windows
+            this has no effect - we always return cl.exe.
+    
+    Returns (cc, flags):
+        cc:
+            C or C++ command. On Windows this is of the form
+            `{vs.vcvars}&&{vs.cl}`; otherwise it is `cc` or `c++`.
+        flags:
+            The `flags` arg or a new `pipcl.PythonFlags` instance.
+    '''
+    if not flags:
+        flags = PythonFlags()
+    if windows():
+        if not vs:
+            vs = WindowsVS()
+        cc = f'"{vs.vcvars}"&&"{vs.cl}"'
+    else:
+        cc = 'c++' if cpp else 'cc'
+    return cc, flags
+
+
+def base_linker(vs=None, flags=None, cpp=False):
+    '''
+    Returns basic linker command.
+    
+    Args:
+        vs:
+            Windows only. A `pipcl.WindowsVS` instance or None to use default
+            `pipcl.WindowsVS` instance.
+        flags:
+            A `pipcl.PythonFlags` instance or None to use default
+            `pipcl.PythonFlags` instance.
+        cpp:
+            If true we return C++ linker command instead of C. On Windows this
+            has no effect - we always return link.exe.
+    
+    Returns (linker, flags):
+        linker:
+            Linker command. On Windows this is of the form
+            `{vs.vcvars}&&{vs.link}`; otherwise it is `cc` or `c++`.
+        flags:
+            The `flags` arg or a new `pipcl.PythonFlags` instance.
+    '''
+    if not flags:
+        flags = PythonFlags()
+    if windows():
+        if not vs:
+            vs = WindowsVS()
+        linker = f'"{vs.vcvars}"&&"{vs.link}"'
+    else:
+        linker = 'c++' if cpp else 'cc'
+    return linker, flags
+    
 
 def git_items( directory, submodules=False):
     '''
@@ -931,9 +1318,9 @@ def git_items( directory, submodules=False):
 
     `directory` must be somewhere within a git checkout.
 
-    We run a 'git ls-files' command internally.
-    
-    This function can be useful for the `fn_sdist()  callback.
+    We run a `git ls-files` command internally.
+
+    This function can be useful for the `fn_sdist() callback.
     '''
     command = 'cd ' + directory + ' && git ls-files'
     if submodules:
@@ -954,64 +1341,76 @@ def git_items( directory, submodules=False):
     return ret
 
 
-def parse_pkg_info(path):
+def run( command, verbose=1):
     '''
-    Parses a `PKJG-INFO` file, each line is `<key>: <value>\n`. Returns a dict.
+    Outputs diagnostic describing `command` than runs using `subprocess.run()`.
+    
+    Args:
+        command:
+            A string, the command to run.
+
+            `command` can be multi-line and we use `textwrap.dedent()` to
+            improve formatting.
+
+            Lines in `command` can contain comments:
+            
+            * If a line starts with `#` it is discarded.
+            * If a line contains ` #` the trailing text is discarded.
+
+            When running the command, on Windows newlines are replaced by
+            spaces; otherwise each line is terminated by a backslash character.
+    Returns:
+        None on success, otherwise raises an exception.
     '''
-    ret = dict()
-    with open(path) as f:
-        for line in f:
-            s = line.find(': ')
-            if s >= 0 and line.endswith('\n'):
-                k = line[:s]
-                v = line[s+2:-1]
-                ret[k] = v
-    return ret
+    lines = _command_lines( command)
+    if verbose:
+        nl = '\n'
+        _log( f'Running: {nl.join(lines)}')
+    sep = ' ' if windows() else '\\\n'
+    command2 = sep.join( lines) 
+    subprocess.run( command2, shell=True, check=True)
 
 
-# Implementation helpers.
-#
-
-def _log(text=''):
-    '''
-    Logs lines with prefix.
-    '''
-    for line in text.split('\n'):
-        print(f'pipcl.py: {line}')
-    sys.stdout.flush()
+def windows():
+    return platform.system() == 'Windows'
 
 
-class _Record:
+class PythonFlags:
     '''
-    Internal - builds up text suitable for writing to a RECORD item, e.g.
-    within a wheel.
+    Compile/link flags for the current python, for example the include path
+    needed to get `Python.h`.
+    
+    Members:
+        .includes:
+            String containing compiler flags for include paths.
+        .libs:
+            String containing linker flags for library paths.
     '''
     def __init__(self):
-        self.text = ''
-
-    def add_content(self, content, to_):
-        if isinstance(content, str):
-            content = content.encode('utf8')
-        h = hashlib.sha256(content)
-        digest = h.digest()
-        digest = base64.urlsafe_b64encode(digest)
-        self.text += f'{to_},sha256={digest},{len(content)}\n'
-
-    def add_file(self, from_, to_):
-        with open(from_, 'rb') as f:
-            content = f.read()
-        self.add_content(content, to_)
-
-    def get(self):
-        return self.text
-
-
-def cpu_name():
-    '''
-    Returns 'x32' or 'x64' depending on Python build.
-    '''
-    #log(f'sys.maxsize={hex(sys.maxsize)}')
-    return f'x{32 if sys.maxsize == 2**31 else 64}'
+        if windows():
+            wp = WindowsPython()
+            self.includes = f'/I{wp.root}\\include'
+            self.libs = f'/LIBPATH:"{wp.root}\\libs"'
+        else:
+            # We use python-config which appears to work better than pkg-config
+            # because it copes with multiple installed python's, e.g.
+            # manylinux_2014's /opt/python/cp*-cp*/bin/python*.
+            #
+            # But... it seems that we should not attempt to specify libpython
+            # on the link command. The manylinkux docker containers don't
+            # actually contain libpython.so, and it seems that this
+            # deliberate. And the link command runs ok.
+            #
+            python_exe = os.path.realpath( sys.executable)
+            python_config = f'{python_exe}-config'
+            self.includes = subprocess.run(
+                    f'{python_config} --includes',
+                    shell=True,
+                    capture_output=True,
+                    check=True,
+                    encoding='utf8',
+                    ).stdout.strip()
+            self.libs = ''
 
 
 class WindowsCpu:
@@ -1022,17 +1421,17 @@ class WindowsCpu:
         .bits
             32 or 64.
         .windows_subdir
-            '' or 'x64/'.
+            Empty string or `x64/`.
         .windows_name
-            'x86' or 'x64'.
+            `x86` or `x64`.
         .windows_config
-            'x64' or 'Win32', e.g. /Build Release|x64
+            `x64` or `Win32`, e.g. for use in `/Build Release|x64`.
         .windows_suffix
-            '64' or ''.
+            `64` or empty string.
     '''
     def __init__(self, name=None):
         if not name:
-            name = cpu_name()
+            name = _cpu_name()
         self.name = name
         if name == 'x32':
             self.bits = 32
@@ -1056,42 +1455,41 @@ class WindowsCpu:
 class WindowsPython:
     '''
     Experimental. Windows only. Information about installed Python with
-    specific word size and version.
+    specific word size and version. Defaults to the currently-running Python.
 
     Members:
 
         .path:
             Path of python binary.
         .version:
-            `<major>.<minor>`, e.g. '3.9' or '3.11'. Same as `version` passed
+            `{major}.{minor}`, e.g. `3.9` or `3.11`. Same as `version` passed
             to `__init__()` if not None, otherwise the inferred version.
         .root:
-            The parent directory of `.path`; allows
-            Python headers to be found, for example
-            `<root>/include/Python.h`.
+            The parent directory of `.path`; allows Python headers to be found,
+            for example `{root}/include/Python.h`.
         .cpu:
             A `WindowsCpu` instance, same as `cpu` passed to `__init__()` if
             not None, otherwise the inferred cpu.
 
-    We parse the output from 'py -0p' to find all available python
+    We parse the output from `py -0p` to find all available python
     installations.
     '''
     
     def __init__( self, cpu=None, version=None, verbose=False):
         '''
-        cpu:
-            A WindowsCpu instance. If None, we use whatever we are running on.
-        version:
-            Two-digit Python version as a string such as '3.8'. If None we use
-            current Python's version.
-        verbose:
-            If true we show diagnostics.
-
-        We parse the output from 'py -0p' to find all available python
-        installations.
+        Args:
+        
+            cpu:
+                A WindowsCpu instance. If None, we use whatever we are running
+                on.
+            version:
+                Two-digit Python version as a string such as `3.8`. If None we
+                use current Python's version.
+            verbose:
+                If true we show diagnostics.
         '''
         if cpu is None:
-            cpu = WindowsCpu(cpu_name())
+            cpu = WindowsCpu(_cpu_name())
         if version is None:
             version = '.'.join(platform.python_version().split('.')[:2])
         command = 'py -0p'
@@ -1145,10 +1543,10 @@ class WindowsPython:
 
 class WindowsVS:
     '''
-    Experimental. Windows only. Finds locations of Visual Studio command-line
-    tools. Assumes VS2019-style paths.
-    
-    Members and example values:
+    Windows only. Finds locations of Visual Studio command-line tools. Assumes
+    VS2019-style paths.
+
+    Members and example values::
     
         .year:      2019
         .grade:     Community
@@ -1163,14 +1561,16 @@ class WindowsVS:
         '''
         Args:
             year:
-                None or, for example, '2019'.
+                None or, for example, `2019`.
             grade:
                 None or, for example, one of:
-                    'Community'
-                    'Professional'
-                    'Enterprise'
+                
+                * `Community`
+                * `Professional`
+                * `Enterprise`
+                
             version:
-                None or, for example: '14.28.29910'
+                None or, for example: `14.28.29910`
             cpu:
                 None or a `WindowsCpu` instance.
         '''
@@ -1254,6 +1654,9 @@ class WindowsVS:
         self.year = year
 
     def description_ml( self, indent=''):
+        '''
+        Return multiline description of `self`.
+        '''
         ret = textwrap.dedent(f'''
                 year:         {self.year}
                 grade:        {self.grade}
@@ -1269,3 +1672,113 @@ class WindowsVS:
     def __str__( self):
         return ' '.join( self._description())
     
+
+# Internal helpers.
+#
+
+def _command_lines( command):
+    '''
+    Process multiline command by running through `textwrap.dedent()`, removes
+    comments (lines starting with `#` or ` #` until end of line), removes
+    entirely blank lines.
+
+    Returns list of lines.
+    '''
+    command = textwrap.dedent( command)
+    lines = []
+    for line in command.split( '\n'):
+        if line.startswith( '#'):
+            h = 0
+        else:
+            h = line.find( ' #')
+        if h >= 0:
+            line = line[:h]
+        if line.strip():
+            lines.append(line.rstrip())
+    return lines
+
+
+def _cpu_name():
+    '''
+    Returns `x32` or `x64` depending on Python build.
+    '''
+    #log(f'sys.maxsize={hex(sys.maxsize)}')
+    return f'x{32 if sys.maxsize == 2**31 else 64}'
+
+
+
+def _doit( force, default):
+    '''
+    Returns true/false for wether to run a command.
+    '''
+    if force in (None, ''):
+        return default() if callable(default) else default
+    elif force in (True, 1, '1'):
+        return True
+    elif force in (False, 0, '0'):
+        return False
+    else:
+        assert 0, f'Unrecognised {force=}'
+    
+
+def _flags( items, prefix='', quote=''):
+    '''
+    Turns sequence into string, prefixing/quoting each item.
+    '''
+    if not items:
+        return ''
+    if isinstance( items, str):
+        return items
+    ret = ''
+    for item in items:
+        if ret:
+            ret += ' '
+        ret += f'{prefix}{quote}{item}{quote}'
+    return ret.strip()
+
+
+def _fs_mtime( filename, default=0):
+    '''
+    Returns mtime of file, or `default` if error - e.g. doesn't exist.
+    '''
+    try:
+        return os.path.getmtime( filename)
+    except OSError:
+        return default
+
+def _log(text=''):
+    '''
+    Logs lines with prefix.
+    '''
+    for line in text.split('\n'):
+        print(f'pipcl.py: {line}')
+    sys.stdout.flush()
+
+
+class _Record:
+    '''
+    Internal - builds up text suitable for writing to a RECORD item, e.g.
+    within a wheel.
+    '''
+    def __init__(self):
+        self.text = ''
+
+    def add_content(self, content, to_, verbose=False):
+        if isinstance(content, str):
+            content = content.encode('utf8')
+        h = hashlib.sha256(content)
+        digest = h.digest()
+        digest = base64.urlsafe_b64encode(digest)
+        self.text += f'{to_},sha256={digest},{len(content)}\n'
+        if verbose:
+            _log(f'_Record: Adding {to_}')
+
+    def add_file(self, from_, to_, verbose=False):
+        with open(from_, 'rb') as f:
+            content = f.read()
+        self.add_content(content, to_, verbose=False)
+        if verbose:
+            _log(f'_Record: Adding file: {os.path.relpath(from_)} => {to_}')
+
+    def get(self):
+        return self.text
