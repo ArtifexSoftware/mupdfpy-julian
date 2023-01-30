@@ -33,7 +33,7 @@ if not jlib:
     import sys
     
     def log( text):
-        print( text, file=sys.stderr)
+        print( f'mupdfpy: {text}', file=sys.stderr)
     
     def exception_info():
         import traceback
@@ -467,13 +467,9 @@ class Annot:
         #return _fitz.Annot_clean_contents(self, sanitize)
         annot = self.this
         pdf = mupdf.pdf_get_bound_document(mupdf.pdf_annot_obj(annot))
-        filter = mupdf.PdfFilterOptions()
-        filter.recurse = 1
-        filter.instance_forms = 1
-        filter.sanitize = sanitize
-        filter.ascii = 0
-        mupdf.pdf_filter_annot_contents(pdf, annot, filter)
-        mupdf.pdf_dirty_annot(annot)
+        filter_ = _make_PdfFilterOptions(recurse=1, instance_forms = 1, ascii=0, sanitize=sanitize)
+        mupdf.pdf_filter_annot_contents(pdf, annot, filter_)
+        #mupdf.pdf_dirty_annot(annot)
 
     @property
     def colors(self):
@@ -6838,6 +6834,62 @@ class Outline:
         return self.this.y();
 
 
+def _make_PdfFilterOptions(recurse, instance_forms, ascii, sanitize, sopts=None):
+    '''
+    Returns a mupdf.PdfFilterOptions instance.
+    '''
+    filter_ = mupdf.PdfFilterOptions()
+    filter_.recurse = recurse
+    filter_.instance_forms = instance_forms
+    filter_.ascii = ascii
+    
+    if mupdf_version_tuple >= (1, 22):
+        filter_.no_update = 1
+        if sanitize:
+            # We want to use a PdfFilterFactory whose `.filter` fn pointer is
+            # set to MuPDF's `pdf_new_sanitize_filter()`. But not sure how to
+            # get access to this raw fn in Python; and on Windows raw MuPDF
+            # functions are not even available to C++.
+            #
+            # So we use SWIG Director to implement our own
+            # PdfFilterFactory whose `filter()` method calls
+            # `mupdf.ll_pdf_new_sanitize_filter()`.
+            if sopts:
+                assert isinstance(sopts, mupdf.PdfSanitizeFilterOptions)
+            else:
+                sopts = mupdf.PdfSanitizeFilterOptions()
+            class Factory(mupdf.PdfFilterFactory2):
+                def __init__(self):
+                    super().__init__()
+                    self.use_virtual_filter()
+                    self.sopts = sopts
+                def filter(self, ctx, doc, chain, struct_parents, transform, options):
+                    if 0:
+                        log(f'sanitize filter.filter():')
+                        log(f'    {self=}')
+                        log(f'    {ctx=}')
+                        log(f'    {doc=}')
+                        log(f'    {chain=}')
+                        log(f'    {struct_parents=}')
+                        log(f'    {transform=}')
+                        log(f'    {options=}')
+                        log(f'    {self.sopts.internal()=}')
+                    return mupdf.ll_pdf_new_sanitize_filter(
+                            doc,
+                            chain,
+                            struct_parents,
+                            transform,
+                            options,
+                            self.sopts.internal(),
+                            )
+
+            factory = Factory()
+            filter_.add_factory(factory.internal())
+            filter_._factory = factory
+    else:
+        filter_.sanitize = sanitize
+    return filter_
+
 class Page:
 
     def __init__(self, page, document):
@@ -7929,11 +7981,9 @@ class Page:
             ret = extra.JM_get_annot_xref_list2( self.this)
             return ret
         page = self._pdf_page()
-        log( f'annot_xrefs(): {page.m_internal=}')
         if not page.m_internal:
             return []
         ret = JM_get_annot_xref_list(page.obj())
-        log( '{ret=}')
         return ret
 
     def annots(self, types=None):
@@ -7971,12 +8021,8 @@ class Page:
         page = mupdf.pdf_page_from_fz_page( self.this)
         if not page.m_internal:
             return
-        filter_ = mupdf.PdfFilterOptions()
-        filter_.recurse = 1
-        filter_.instance_forms = 1
-        filter_.sanitize = sanitize
+        filter_ = _make_PdfFilterOptions(recurse=1, instance_forms=1, ascii=0, sanitize=sanitize)
         mupdf.pdf_filter_page_contents( page.doc(), page, filter_)
-    
     
     @property
     def cropbox(self):
@@ -14440,18 +14486,14 @@ def JM_get_annot_xref_list( page_obj):
     '''
     if g_use_extra:
         names = extra.JM_get_annot_xref_list( page_obj)
-        log('{names=}')
         return names
     
     names = []
     annots = mupdf.pdf_dict_get( page_obj, PDF_NAME('Annots'))
-    log(f'{annots.m_internal=}')
     n = mupdf.pdf_array_len( annots)
-    log(f'{n=}')
     for i in range( n):
         annot_obj = mupdf.pdf_array_get( annots, i)
         xref = mupdf.pdf_to_num( annot_obj)
-        log('{xref=}')
         subtype = mupdf.pdf_dict_get( annot_obj, PDF_NAME('Subtype'))
         if not subtype.m_internal:
             continue    # subtype is required
@@ -14460,7 +14502,6 @@ def JM_get_annot_xref_list( page_obj):
             continue    # only accept valid annot types
         id_ = mupdf.pdf_dict_gets( annot_obj, "NM")
         names.append( (xref, type_, mupdf.pdf_to_text_string( id_)))
-    log(f'{names=}')
     return names
 
 
@@ -14990,34 +15031,27 @@ if mupdf_version_tuple >= (1, 22):
 
     def JM_image_reporter(page):
         doc = page.doc()
-
+        global g_img_info_matrix
         g_img_info_matrix = mupdf.FzMatrix()
-        mupdf.pdf_page_transform(page, None, g_img_info_matrix)
+        mediabox = mupdf.FzRect()
+        mupdf.pdf_page_transform(page, mediabox, g_img_info_matrix)
         
-        #class FilterOptions(mupdf.PdfFilterOptions2):
-        #    def __init__(self):
-        #        super().__init__(self)
-        #        self.recurse = 0
-        #        self.instance_forms = 1
-        #        self.ascii = 1
-        #        self.no_update = 1
-        #    def image_filter(self, 
-        
-        sanitize_filter_options = mupdf.PdfFilterOptions()
-        sanitize_filter_options.opaque = page
-        sanitize_filter_options.image_filter = JM_image_filter
-
-        class FilterFactory(mupdf.PdfFilterFactory2):
+        class SanitizeFilterOptions(mupdf.PdfSanitizeFilterOptions2):
             def __init__(self):
                 super().__init__()
-                self.use_virtual_filter()
-            def filter(self, ctx, doc, chain, struct_parents, transform, options, sopts):
-                return mupdf.ll_pdf_new_sanitize_filter(doc, chain, struct_parents, transform, options, sopts)
-        filter_factory = FilterFactory()
-        filter_factory.filter = mupdf.pdf_new_sanitize_filter
-        filter_factory.options = sanitize_filter_options
+                self.use_virtual_image_filter()
+            def image_filter(self, ctx, ctm, name, image):
+                JM_image_filter(None, mupdf.FzMatrix(ctm), name, image)
 
-        filter_options.add_factory(filter_factory)
+        sanitize_filter_options = SanitizeFilterOptions()
+        
+        filter_options = _make_PdfFilterOptions(
+                recurse=0,
+                instance_forms=1,
+                ascii=1,
+                sanitize=1,
+                sopts=sanitize_filter_options,
+                )
 
         global g_img_info
         g_img_info = []
@@ -15649,19 +15683,16 @@ def JM_mupdf_warning( message):
     '''
     redirect MuPDF warnings
     '''
-    #sys.stderr.write( '*** JM_mupdf_warning() called\n')
     sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_warnings:
-        sys.stderr.write(f'mupdf: {message}\n')
+        sys.stderr.write(f'mupdfpy warning: {message}\n')
 
 
 def JM_mupdf_error( message):
-    #sys.stderr.write( '*** JM_mupdf_error() called\n')
-    sys.stderr.flush()
     JM_mupdf_warnings_store.append(message)
     if JM_mupdf_show_errors:
-        sys.stderr.write(f'mupdf: {message}\n')
+        sys.stderr.write(f'mupdfpy error: {message}\n')
 
 
 def JM_new_bbox_device(result):
@@ -20187,8 +20218,10 @@ if not mupdf_cppyy:
 # no pending warnings and will not attempt to call JM_mupdf_warning().
 #
 def _atexit():
-    #log( '_atexit() called')
+    #log( 'mupdfpy/fitz/__init__.py:_atexit() called')
     mupdf.fz_flush_warnings()
+    mupdf.fz_set_warning_callback(None)
+    mupdf.fz_set_error_callback(None)
     #log( '_atexit() returning')
 atexit.register( _atexit)
 
@@ -20572,17 +20605,6 @@ def test_py():
 def test_py_c():
     return test_c()
 
-#if 0:
-#    def test_c():
-#        return extra.test_c
-#    def test1():
-#        return mupdf.fz_test1()
-#    def test2():
-#        return mupdf.fz_test2()
-#else:
-#    test_c = extra.test_c
-#    test1 = mupdf.fz_test1
-#    test2 = mupdf.fz_test2
 
 #g_timings.end()
 #log( '{g_timings.text(g_timings.root_item, precision=3)}')
