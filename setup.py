@@ -63,6 +63,10 @@ Environmental variables:
                 The path of local mupdf git checkout. We put all files in this
                 checkout known to git into a local tar archive.
 
+    PYMUPDF_SETUP_REBUILD
+        If 0 we do not rebuild mupdfpy. If 1 we always rebuild mupdfpy. If
+        unset we rebuild if necessary.
+
 Building MuPDF:
     When building MuPDF, we overwrite the mupdf's include/mupdf/fitz/config.h
     with fitz/_config.h and do a PyMuPDF-specific build.
@@ -105,7 +109,7 @@ def _fs_find_in_paths( name, paths=None):
         if os.path.isfile( p):
             return p
 
-def remove(path):
+def _fs_remove(path):
     '''
     Removes file or directory, without raising exception if it doesn't exist.
 
@@ -174,26 +178,6 @@ def _command_lines( command):
             lines.append(line.rstrip())
     return lines
 
-def _run( command):
-    '''
-    Output diagnostic describing `command` than cleans it up and runs using
-    `subprocess`. Raises exception if command fails.
-    
-    `command` can be multi-line (we use textwrap.dedent() to improve formatting).
-    
-    Lines in `command` can contain comments starting with ' #'; these are
-    removed before use.
-    
-    On Windows newlines are replaced by spaces. Otherwise each line is
-    terminated by a '\' character.
-    '''
-    lines = _command_lines( command)
-    nl = '\n'
-    log( f'Running: {nl.join(lines)}')
-    sep = ' ' if windows else '\\\n'
-    command2 = sep.join( lines) 
-    subprocess.run( command2, shell=True, check=True)
-
 def _fs_mtime( filename, default=0):
     '''
     Returns mtime of file, or `default` if error - e.g. doesn't exist.
@@ -240,7 +224,7 @@ def get_mupdf_tgz():
     if mupdf_url_or_local == '':
         # No mupdf in sdist.
         log( 'mupdf_url_or_local is empty string so removing any mupdf_tgz={mupdf_tgz}')
-        remove( mupdf_tgz)
+        _fs_remove( mupdf_tgz)
         return
     
     if '://' in mupdf_url_or_local:
@@ -252,12 +236,12 @@ def get_mupdf_tgz():
         mupdf_local = mupdf_url_leaf[ : -len(leaf)] + '/'
         assert mupdf_local.startswith( 'mupdf-')
         log(f'Downloading from: {mupdf_url}')
-        remove( mupdf_url_leaf)
+        _fs_remove( mupdf_url_leaf)
         urllib.request.urlretrieve( mupdf_url, mupdf_url_leaf)
         assert os.path.exists( mupdf_url_leaf)
         tar_check( mupdf_url_leaf, 'r:gz', mupdf_local)
         if mupdf_url_leaf != mupdf_tgz:
-            remove( mupdf_tgz)
+            _fs_remove( mupdf_tgz)
             os.rename( mupdf_url_leaf, mupdf_tgz)
         return mupdf_local
     
@@ -269,7 +253,7 @@ def get_mupdf_tgz():
             mupdf_local += '/'
         assert os.path.isdir( mupdf_local), f'Not a directory: {mupdf_local!r}'
         log( f'Creating .tgz from git files in: {mupdf_local}')
-        remove( mupdf_tgz)
+        _fs_remove( mupdf_tgz)
         with tarfile.open( mupdf_tgz, 'w:gz') as f:
             for name in get_gitfiles( mupdf_local, submodules=True):
                 path = os.path.join( mupdf_local, name)
@@ -278,7 +262,7 @@ def get_mupdf_tgz():
         return mupdf_local
 
 
-def _get_mupdf_internal():
+def get_mupdf():
     '''
     Downloads and/or extracts mupdf and returns location of mupdf directory.
 
@@ -293,68 +277,61 @@ def _get_mupdf_internal():
             log( f'mupdf_tgz already exists: {mupdf_tgz}')
         else:
             get_mupdf_tgz()
-        return tar_extract( mupdf_tgz, exists='return')
+        path = tar_extract( mupdf_tgz, exists='return')
     
     elif path == '':
         # Use system mupdf.
         log( f'PYMUPDF_SETUP_MUPDF_BUILD="", using system mupdf')
-        return None
+        path = None
     
-    git_prefix = 'git:'
-    if path.startswith( git_prefix):
-        # Get git clone of mupdf.
-        #
-        # `mupdf_url_or_local` is taken to be portion of a `git clone` command,
-        # for example:
-        #
-        #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master git://git.ghostscript.com/mupdf.git"
-        #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch 1.20.x https://github.com/ArtifexSoftware/mupdf.git"
-        #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master https://github.com/ArtifexSoftware/mupdf.git"
-        #
-        # One would usually also set PYMUPDF_SETUP_MUPDF_TGZ= (empty string) to
-        # avoid the need to download a .tgz into an sdist.
-        #
-        command_suffix = path[ len(git_prefix):]
-        path = 'mupdf'
-        assert not os.path.exists( path), \
-                f'Cannot use git clone because local directory already exists: {path}'
-        command = (''
-                + f'git clone'
-                + f' --recursive'
-                #+ f' --single-branch'
-                #+ f' --recurse-submodules'
-                + f' --depth 1'
-                + f' --shallow-submodules'
-                #+ f' --branch {branch}'
-                #+ f' git://git.ghostscript.com/mupdf.git'
-                + f' {command_suffix}'
-                + f' {path}'
-                )
-        log( f'Running: {command}')
-        subprocess.run( command, shell=True, check=True)
+    else:
+        git_prefix = 'git:'
+        if path.startswith( git_prefix):
+            # Get git clone of mupdf.
+            #
+            # `mupdf_url_or_local` is taken to be portion of a `git clone` command,
+            # for example:
+            #
+            #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master git://git.ghostscript.com/mupdf.git"
+            #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch 1.20.x https://github.com/ArtifexSoftware/mupdf.git"
+            #   PYMUPDF_SETUP_MUPDF_BUILD="git:--branch master https://github.com/ArtifexSoftware/mupdf.git"
+            #
+            # One would usually also set PYMUPDF_SETUP_MUPDF_TGZ= (empty string) to
+            # avoid the need to download a .tgz into an sdist.
+            #
+            command_suffix = path[ len(git_prefix):]
+            path = 'mupdf'
+            assert not os.path.exists( path), \
+                    f'Cannot use git clone because local directory already exists: {path}'
+            command = (''
+                    + f'git clone'
+                    + f' --recursive'
+                    #+ f' --single-branch'
+                    #+ f' --recurse-submodules'
+                    + f' --depth 1'
+                    + f' --shallow-submodules'
+                    #+ f' --branch {branch}'
+                    #+ f' git://git.ghostscript.com/mupdf.git'
+                    + f' {command_suffix}'
+                    + f' {path}'
+                    )
+            log( f'Running: {command}')
+            subprocess.run( command, shell=True, check=True)
 
-        # Show sha of checkout.
-        command = f'cd {path} && git show --pretty=oneline|head -n 1'
-        log( f'Running: {command}')
-        subprocess.run( command, shell=True, check=False)
+            # Show sha of checkout.
+            command = f'cd {path} && git show --pretty=oneline|head -n 1'
+            log( f'Running: {command}')
+            subprocess.run( command, shell=True, check=False)
+
+        # Use custom mupdf directory.
+        log( f'Using custom mupdf directory from $PYMUPDF_SETUP_MUPDF_BUILD: {path}')
+        assert os.path.isdir( path), f'$PYMUPDF_SETUP_MUPDF_BUILD is not a directory: {path}'
     
-    # Use custom mupdf directory.
-    log( f'Using custom mupdf directory from $PYMUPDF_SETUP_MUPDF_BUILD: {path}')
-    assert os.path.isdir( path), f'$PYMUPDF_SETUP_MUPDF_BUILD is not a directory: {path}'
-    path = os.path.abspath( path)
+    if path:
+        path = os.path.abspath( path)
+        if path.endswith( '/'):
+            path = path[:-1]
     return path
-
-
-def get_mupdf():
-    mupdf_local = _get_mupdf_internal()
-    if isinstance( mupdf_local, str) and mupdf_local.endswith( '/'):
-        del mupdf_local[-1]
-    mupdf_branch = None
-    if mupdf_local and os.path.exists( f'{mupdf_local}/.git'):
-        mupdf_branch = _git_get_branch( mupdf_local)
-        if mupdf_branch:
-            log( f'Have found MuPDF git branch: mupdf_branch={mupdf_branch!r}')
-    return mupdf_local, mupdf_branch
 
 
 linux = sys.platform.startswith( 'linux') or 'gnu' in sys.platform
@@ -363,255 +340,25 @@ freebsd = sys.platform.startswith( 'freebsd')
 darwin = sys.platform.startswith( 'darwin')
 windows = platform.system() == 'Windows' or platform.system().startswith('CYGWIN')
 
-    
-
-def build_windows( include1, include2, path_cpp, path_so, build_dir):
-    '''
-    Builds by calling cl.exe and link.exe.
-    '''
-    vs = pipcl.WindowsVS()
-    python = pipcl.WindowsPython()
-    mupdf_local, mupdf_branch = get_mupdf()
-    
-    # cl.exe flags:
-    #
-    #   https://learn.microsoft.com/en-us/cpp/build/reference/compiler-options-listed-alphabetically?view=msvc-170
-    #
-    _run( f'''
-            "{vs.vcvars}"&&"{vs.cl}"
-                # General:
-                /c                          # Compiles without linking.
-                /EHsc                       # Enable "Standard C++ exception handling".
-                /MD                         # Creates a multithreaded DLL using MSVCRT.lib.
-                
-                # Input/output files:
-                /Tp{path_cpp}               # /Tp specifies C++ source file.
-                /Fo{path_so}.obj            # Output file.
-                
-                # Include paths:
-                {include1}
-                {include2}
-                /I {python.root}\\include   # Include path for Python headers.
-                
-                # Code generation:
-                /O2                         # Optimisation.
-                /WX                         # Treats all warnings as errors.
-                /permissive-                # Set standard-conformance mode.
-                
-                # Diagnostics:
-                /FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
-                /W3                         # Sets which warning level to output. /W3 is IDE default.
-                /diagnostics:caret          # Controls the format of diagnostic messages.
-                /nologo                     #
-                
-                # Defines:
-                /D FZ_DLL_CLIENT            # Activates __declspec() in MuPDF C++ API headers.
-                /D NDEBUG
-                /D UNICODE 
-                /D _UNICODE 
-                ''')
-    
-    # link.exe flags:
-    #
-    #   https://learn.microsoft.com/en-us/cpp/build/reference/linker-options?view=msvc-170
-    #
-    _run( f'''
-            "{vs.vcvars}"&&"{vs.link}"
-                /DLL                   # Builds a DLL.
-                /EXPORT:PyInit__extra  # Exports a function.
-                /IMPLIB:{path_so.replace( ".pyd", ".lib")}     # Overrides the default import library name.
-                /INCREMENTAL:NO        # Controls incremental linking.
-                /LIBPATH:"{mupdf_local}\\platform\\win32\\x64\\Release"
-                /LIBPATH:"{mupdf_local}\\platform\\win32\\x64\\ReleaseTesseract"
-                /LIBPATH:"{python.root}\\libs"
-                /LTCG                  # Specifies link-time code generation.
-                /MANIFEST:EMBED,ID=2   # Creates a side-by-side manifest file and optionally embeds it in the binary.
-                /MANIFESTUAC:NO        # Specifies whether User Account Control (UAC) information is embedded in the program manifest.
-                /OUT:{path_so}         # Specifies the output file name.
-                /nologo                #
-                mupdfcpp64.lib         #
-                {path_so}.obj          #
-            ''')
-
-
-    # Other possible cl.exe flags:
-    #
-    '''
-        /D WIN64}
-        /FaFOO_LIST             # Sets the listing file name.
-        /FdPDB                  # Specifies a file name for the program database (PDB) file
-        /Fp"Release/_mupdf.pch" # Specifies a precompiled header file name.
-        /GL                     # Enables whole program optimization.
-        /GS                     # Buffers security check.
-        /Gd                     # Uses the __cdecl calling convention (x86 only).
-        /Gm-                    # Deprecated. Enables minimal rebuild.
-        /Gy                     # Enables function-level linking.
-        /O2                     # Optimisation.
-        /Oi                     # Generates intrinsic functions
-        /Oy-                    # Omits frame pointer (x86 only).
-        /Zc:inline              # Remove unreferenced functions or data if they're COMDAT or have internal linkage only (off by default).
-        /Zc:wchar_t             # wchar_t is a native type, not a typedef (on by default).
-        /Zi                     # Generates complete debugging information.
-        /analyze-               # Enable code analysis.
-        /errorReport:prompt     # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
-        /fp:precise             # Specify floating-point behavior.
-        /permissive-            # Set standard-conformance mode.
-        /sdl                    # Enables additional security features and warnings.
-    '''
-    # Other possible link flags:
-    '''
-        /DYNAMICBASE            # Specifies whether to generate an executable image that's rebased at load time by using the address space layout randomizationLR) feature.
-        /ERRORREPORT:PROMPT     # Deprecated. Error reporting is controlled by Windows Error Reporting (WER) settings.
-        /IMPLIB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.lib"'
-        /LTCGOUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.iobj"'
-        /MACHINE:{build_dirs.cpu.windows_name.upper()}'   # Specifies the target platform.
-        /MANIFEST               # Creates a side-by-side manifest file and optionally embeds it in the binary.
-        /ManifestFile:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll.intermediate.manifest"'
-        /NODEFAULTLIB:MSVCRT
-        /NXCOMPAT               # Marks an executable as verified to be compatible with the Windows Data Execution Prevention feature.
-        /OPT:ICF
-        /OPT:REF
-        /OUT:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.dll"
-        /PDB:"platform/win32/{build_dirs.cpu.windows_subdir}Release/_mupdf.pdb"
-        /SUBSYSTEM:WINDOWS      # Tells the operating system how to run the .exe file.
-        /TLBID:1                # A user-specified value for a linker-created type library. It overrides the default resource ID of 1.
-        advapi32.lib
-        comdlg32.lib
-        gdi32.lib
-        kernel32.lib
-        libmupdf.lib
-        libmupdf.lib
-        odbc32.lib
-        odbccp32.lib
-        ole32.lib
-        oleaut32.lib
-        python3.lib             # not needed because on Windows Python.h has info about library.
-        shell32.lib
-        user32.lib
-        uuid.lib
-        winspool.lib
-        {"/SAFESEH" if build_dirs.cpu.bits==32 else ""}     # Not supported on x64.
-        {path_so}.obj
-    '''
-
 
 def build():
     '''
+    pipcl.py `build_fn()` callback.
+    
     We use $PYMUPDF_SETUP_MUPDF_BUILD and $PYMUPDF_SETUP_MUPDF_BUILD_TYPE in a
     similar way as a normal PyMuPDF build.
     '''
     # Build MuPDF
     #
     if windows:
-        mupdf_local, build_dir = build_windows_mupdf()
+        mupdf_local, build_dir = build_mupdf_windows()
     else:
-        mupdf_local, build_dir = build_unix_mupdf()
+        mupdf_local, build_dir = build_mupdf_unix()
     log( f'build(): {build_dir=}')
     
-    # Build fitz.extra module.
+    # Build `extra` module.
     #
-    path_i = f'{g_root}/extra.i'
-    path_cpp = f'{g_root}/fitz/extra.cpp'
-    if windows:
-        path_i.replace( '/', '\\')
-        path_cpp.replace( '/', '\\')
-        wp = pipcl.WindowsPython()
-        python_version = ''.join( wp.version.split( '.')[:2])
-        path_so_tail = f'fitz/_extra.cp{python_version}-win_amd64.pyd'
-    else:
-        path_so_tail = 'fitz/_extra.so'
-    path_so = f'{g_root}/{path_so_tail}'
-
-    cpp_flags = '-Wall'
-    
-    build_dir_flags = os.path.basename( build_dir).split( '-')
-    if windows:
-        cpp_flags += ' /g /O2 /DNDEBUG'
-    else:
-        if 'release' in build_dir_flags:
-            cpp_flags += ' -g -O2 -DNDEBUG'
-        elif 'debug' in build_dir_flags:
-            cpp_flags += ' -g'
-        elif 'memento' in build_dir_flags:
-            cpp_flags += ' -g -DMEMENTO'
-        else:
-            assert 0, f'Unrecognised {build_dir=}'
-    
-    mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
-    if windows:
-        # SWIG needs `-I` not `/I`.
-        include1 = f'-I{mupdf_dir}\\platform\\c++\\include'
-        include2 = f'-I{mupdf_dir}\\include'
-        linkdir = f'/L {build_dir}'
-    elif mupdf_dir:
-        include1 = f'-I{mupdf_dir}/platform/c++/include'
-        include2 = f'-I{mupdf_dir}/include'
-        linkdir = f'-L {build_dir}'
-    else:
-        # Use system mupdf.
-        include1 = ''
-        include2 = ''
-        linkdir = ''
-    outdir = f'{g_root}\\fitz' if windows else f'{g_root}/fitz'
-    # Run swig.
-    if _fs_mtime( path_i, 0) >= _fs_mtime( path_cpp, 0):
-        _run( f'''
-                swig
-                    -Wall
-                    -c++
-                    -python
-                    -module extra
-                    -outdir {outdir}
-                    -o {path_cpp}
-                    {include1}
-                    {include2}
-                    {path_i}
-                '''
-                )
-    else:
-        log( f'build(): Not running swig because mtime:{path_i} < mtime:{path_cpp}')
-    
-    # Compile and link swig-generated code.
-    #
-    # Fun fact - on Linux, if the -L and -l options are before '{path_cpp} -o
-    # {path_so}' they seem to be ignored...
-    #
-    if _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0):
-        if windows:
-            build_windows(
-                    include1,
-                    include2,
-                    path_cpp,
-                    path_so,
-                    build_dir,
-                    )
-        else:
-            python_flags = _python_compile_flags()
-            libs = list()
-            libs.append( 'mupdfcpp')
-            if 'shared' in os.path.basename( build_dir).split( '-'):
-                libs.append( 'mupdf')
-            libs_text = ''
-            for lib in libs:
-                libs_text += f' -l {lib}'
-            _run( f'''
-                    c++
-                        -fPIC
-                        -shared
-                        {cpp_flags}
-                        {python_flags}
-                        {include1}
-                        {include2}
-                        -Wno-deprecated-declarations
-                        -Wno-unused-const-variable
-                        {path_cpp}
-                        -o {path_so}
-                        -L {build_dir}
-                        {libs_text}
-                        -Wl,-rpath='$ORIGIN',-z,origin
-                    ''')
-    else:
-        log( f'build(): Not running c++ because mtime:{path_cpp} < mtime:{path_so}')
+    mupdf_dir, path_so, path_so_tail = _build_fitz_extra( build_dir, mupdf_local)
     
     # Generate list of (to, from) items to return to pipcl.
     #
@@ -657,24 +404,19 @@ def build():
     return ret
 
 
-def build_windows_mupdf():
-    mupdf_local, mupdf_branch = get_mupdf()
+def build_mupdf_windows():
+    mupdf_local = get_mupdf()
     
     assert mupdf_local
     if mupdf_local:
         build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
         assert build_type in ('debug', 'memento', 'release'), f'{unix_build_type=}'
 
-        wp = pipcl.WindowsPython()
-        wpv = '.'.join( wp.version.split( '.')[:2])
-        windows_build_tail = f'build\\shared-{build_type}-x64-py{wpv}'
+        python_version = '.'.join(platform.python_version_tuple()[:2])
+        windows_build_tail = f'build\\shared-{build_type}-x64-py{python_version}'
         windows_build_dir = f'{mupdf_local}\\{windows_build_tail}'
         #log( f'Building mupdf.')
-        log( f'{mupdf_branch=}')
-        if 0 and mupdf_branch == 'master':
-            log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
-        else:
-            shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
+        shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
         vs = pipcl.WindowsVS()
         command = f'cd {mupdf_local}'
         command += F' && {sys.executable} ./scripts/mupdfwrap.py -d {windows_build_tail} -b --refcheck-if "#if 1" --devenv "{vs.devenv}" all'
@@ -688,7 +430,7 @@ def build_windows_mupdf():
     return mupdf_local, windows_build_dir
 
 
-def build_unix_mupdf():
+def build_mupdf_unix():
     '''
     Builds MuPDF and returns `(mupdf_local, unix_build_dir)`:
         mupdf_local:
@@ -699,15 +441,11 @@ def build_unix_mupdf():
     
     If we are using the system MuPDF, returns `(None, None)`.
     '''
-    mupdf_local, mupdf_branch = get_mupdf()
+    mupdf_local = get_mupdf()
     
     if mupdf_local:
         #log( f'Building mupdf.')
-        log( f'{mupdf_branch=}')
-        if 0 and mupdf_branch == 'master':
-            log( f'Not overwriting MuPDF config because {mupdf_branch=}.')
-        else:
-            shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
+        shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
     
         flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
         flags += ' verbose=yes'
@@ -738,8 +476,6 @@ def build_unix_mupdf():
         # to coexist, e.g. on github.
         #
         build_prefix = f'mupdfpy-{platform.machine()}-'
-        if mupdf_branch == 'master':
-            build_prefix += 'master-'
         build_prefix_extra = os.environ.get( '_PYTHON_HOST_PLATFORM')
         if build_prefix_extra:
             build_prefix += f'{build_prefix_extra}-'
@@ -765,6 +501,58 @@ def build_unix_mupdf():
         unix_build_dir = None
     
     return mupdf_local, unix_build_dir
+
+
+def _build_fitz_extra( build_dir, mupdf_local):
+    '''
+    Builds Python extension module `extra`.
+    '''
+    mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
+    if mupdf_dir:
+        includes = (f'{mupdf_dir}/platform/c++/include', f'{mupdf_dir}/include')
+    else:
+        includes = None
+    if windows:
+        defines = ('FZ_DLL_CLIENT',)
+        python_version = ''.join(platform.python_version_tuple()[:2])
+        libpaths = (
+                f'{mupdf_local}\\platform\\win32\\x64\\Release',
+                f'{mupdf_local}\\platform\\win32\\x64\\ReleaseTesseract',
+                )
+        libs = 'mupdfcpp64.lib'
+        compiler_extra = ''
+        linker_extra = ''
+        optimise = True
+        debug = False
+    else:
+        build_dir_flags = os.path.basename( build_dir).split( '-')
+        defines = None,
+        libpaths = (build_dir,)
+        libs = ('mupdfcpp', 'mupdf')
+        compiler_extra = '-Wall -Wno-deprecated-declarations -Wno-unused-const-variable'
+        linker_extra = ''
+        optimise = 'release' in build_dir_flags
+        debug = 'debug' in build_dir_flags
+    force = os.environ.get('PYMUPDF_SETUP_REBUILD')
+    
+    path_so_leaf = pipcl.build_extension(
+            'extra',
+            f'{g_root}/extra.i',
+            f'{g_root}/fitz',
+            includes = includes,
+            defines = defines,
+            libpaths = libpaths,
+            libs = libs,
+            compiler_extra = compiler_extra,
+            linker_extra = linker_extra,
+            force = force,
+            optimise = optimise,
+            debug = debug,
+            )
+    path_so_tail = f'fitz/{path_so_leaf}'
+    path_so = f'{g_root}/{path_so_tail}'
+
+    return mupdf_dir, path_so, path_so_tail
     
 
 def sdist():
