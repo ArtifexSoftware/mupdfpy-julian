@@ -1045,13 +1045,11 @@ def get_toc(
         raise ValueError("document closed")
     doc.init_doc()
     olItem = doc.outline
-    print( f'get_toc(): {olItem=}')
     if not olItem:
         return []
     lvl = 1
     liste = []
     toc = recurse(olItem, liste, lvl)
-    print( f'get_toc(): {toc=}')
     if doc.is_pdf and simple is False:
         doc._extend_toc_items(toc)
     return toc
