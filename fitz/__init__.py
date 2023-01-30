@@ -142,7 +142,7 @@ else:
     from . import mupdf
     mupdf.reinit_singlethreaded()
 
-mupdf_version = (mupdf.FZ_VERSION_MAJOR, mupdf.FZ_VERSION_MINOR, mupdf.FZ_VERSION_PATCH)
+mupdf_version_tuple = (mupdf.FZ_VERSION_MAJOR, mupdf.FZ_VERSION_MINOR, mupdf.FZ_VERSION_PATCH)
 
 #g_timings.mid()
 
@@ -14922,7 +14922,7 @@ def JM_image_filter(opaque, ctm, name, image):
     assert isinstance(ctm, mupdf.FzMatrix)
     r = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
     q = mupdf.fz_transform_quad( mupdf.fz_quad_from_rect(r), ctm)
-    if mupdf_version >= (1, 22):
+    if mupdf_version_tuple >= (1, 22):
         q = mupdf.fz_transform_quad( q, g_img_info_matrix)
     temp = name, JM_py_from_quad(q)
     g_img_info.append(temp)
@@ -14980,7 +14980,7 @@ def JM_image_profile( imagedata, keep_image):
         result[ dictkey_image] = image
     return result
 
-if mupdf_version >= (1, 22):
+if mupdf_version_tuple >= (1, 22):
 
     def JM_image_reporter(page):
         doc = page.doc()
