@@ -485,7 +485,7 @@ def build_mupdf_unix():
         # Unlike PyMuPDF we need MuPDF's Python bindings, so we build MuPDF
         # with `mupdf/scripts/mupdfwrap.py` instead of running `make`.
         #
-        command = f'cd {mupdf_local} && {env} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
+        command = f'cd {mupdf_local} && {env} {sys.executable} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
         command += f' && echo {unix_build_dir}:'
         command += f' && ls -l {unix_build_dir}'
         
