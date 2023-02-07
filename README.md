@@ -50,7 +50,8 @@ to `0`.
 
 ## Status
 
-* Passes all PyMuPDF tests on Unix and Windows.
+* Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch 1.21.x and
+  branch master.
 * On Windows:
     * We get lots of runtime warnings like:
       `swig/python detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
@@ -63,6 +64,16 @@ to `0`.
  
 
 ## Changelog
+
+**Latest**:
+
+* Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch 1.21.x and
+  branch master.
+* Also works with MuPDF branch master.
+* Updated with recent PyMuPDF code changes.
+* Uses pipcl.py's new support for building extension modules.
+* Added doctest to pipcl.py.
+* Added support for building extension modules to pipcl.py.
 
 **2023-01-20**:
 
