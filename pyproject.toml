@@ -3,5 +3,4 @@ requires = ["libclang", "swig"]
 
 # See pep-517.
 #
-build-backend = "setup"
-backend-path = ["."]
+build-backend = "setuptools.build_meta"
