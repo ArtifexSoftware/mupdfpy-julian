@@ -358,7 +358,7 @@ def build():
     
     # Build `extra` module.
     #
-    mupdf_dir, path_so, path_so_tail = _build_fitz_extra( build_dir, mupdf_local)
+    path_so, path_so_tail = _build_fitz_extra( mupdf_local, build_dir)
     
     # Generate list of (to, from) items to return to pipcl.
     #
@@ -376,7 +376,7 @@ def build():
     ret.append( ( path_so, path_so_tail))
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
 
-    if mupdf_dir:
+    if mupdf_local:
         # Add MuPDF runtime files.
         log( f'{build_dir=}')
         if windows:
@@ -503,13 +503,12 @@ def build_mupdf_unix():
     return mupdf_local, unix_build_dir
 
 
-def _build_fitz_extra( build_dir, mupdf_local):
+def _build_fitz_extra( mupdf_local, build_dir):
     '''
     Builds Python extension module `extra`.
     '''
-    mupdf_dir = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD')
-    if mupdf_dir:
-        includes = (f'{mupdf_dir}/platform/c++/include', f'{mupdf_dir}/include')
+    if mupdf_local:
+        includes = (f'{mupdf_local}/platform/c++/include', f'{mupdf_local}/include')
     else:
         includes = None
     if windows:
@@ -552,7 +551,7 @@ def _build_fitz_extra( build_dir, mupdf_local):
     path_so_tail = f'fitz/{path_so_leaf}'
     path_so = f'{g_root}/{path_so_tail}'
 
-    return mupdf_dir, path_so, path_so_tail
+    return path_so, path_so_tail
     
 
 def sdist():
