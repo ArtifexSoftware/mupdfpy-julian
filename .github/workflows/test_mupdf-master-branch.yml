@@ -37,10 +37,7 @@ jobs:
             # PYMUPDF_SETUP_MUPDF_BUILD="git:...": build with mupdf from a `git
             # clone` command, selecting the current master branch.
             #
-            #CIBW_ENVIRONMENT: PYMUPDF_SETUP_MUPDF_TGZ="" PYMUPDF_SETUP_MUPDF_BUILD="git:--recursive --depth 1 --shallow-submodules --branch master https://github.com/ArtifexSoftware/mupdf.git"
-            
-            # Use ArtifexSoftware/mupdf-julian.git
-            CIBW_ENVIRONMENT: PYMUPDF_SETUP_MUPDF_TGZ="" PYMUPDF_SETUP_MUPDF_BUILD="git:--recursive --depth 1 --shallow-submodules --branch master https://github.com/ArtifexSoftware/mupdf-julian.git"
+            CIBW_ENVIRONMENT: PYMUPDF_SETUP_MUPDF_TGZ="" PYMUPDF_SETUP_MUPDF_BUILD="git:--recursive --depth 1 --shallow-submodules --branch master https://github.com/ArtifexSoftware/mupdf.git"
 
             # Build on single cpu.
             CIBW_ARCHS_LINUX: x86_64
