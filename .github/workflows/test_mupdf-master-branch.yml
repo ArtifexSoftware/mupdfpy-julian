@@ -1,8 +1,8 @@
 name: Test mupdf master branch
 
 on:
-  #schedule:
-  #  - cron: '13 5 * * *'
+  schedule:
+    - cron: '13 5 * * *'
   workflow_dispatch:
 
 jobs:
