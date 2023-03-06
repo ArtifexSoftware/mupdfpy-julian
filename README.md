@@ -47,6 +47,11 @@ to `0`.
 
 * Access to the underlying MuPDF Python API in the `fitz.mupdf` module.
 
+* Tracing of all calls of MuPDF C functions, by setting environment
+  variables. As of 2023-02-24 this is only enabled in debug builds of the C++
+  bindings. See:
+  https://mupdf.readthedocs.io/en/latest/language-bindings.html#environmental-variables
+
 
 ## Status
 
