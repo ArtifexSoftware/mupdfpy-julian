@@ -6,7 +6,6 @@ Run doctests with: `python -m doctest pipcl.py`
 '''
 
 import base64
-import distutils.util
 import glob
 import hashlib
 import io
@@ -15,6 +14,7 @@ import platform
 import re
 import shutil
 import site
+import setuptools
 import subprocess
 import sys
 import sysconfig
@@ -336,8 +336,9 @@ class Package:
                 `none`.
             tag_platform:
                 Third element of wheel tag defined in PEP-425. Default is
-                derived from `distutils.util.get_platform()` as specified in
-                the PEP, e.g. `openbsd_7_0_amd64`.
+                derived from `setuptools.distutils.util.get_platform()` (was
+                `distutils.util.get_platform()` as specified in the PEP), e.g.
+                `openbsd_7_0_amd64`.
 
                 For pure python packages use: `tag_platform=any`
         '''        
@@ -460,7 +461,7 @@ class Package:
         if self.tag_platform:
             tag_platform = self.tag_platform
         else:
-            tag_platform = distutils.util.get_platform().replace('-', '_').replace('.', '_')
+            tag_platform = setuptools.distutils.util.get_platform().replace('-', '_').replace('.', '_')
 
         # Final tag is, for example, 'cp39-none-win32', 'cp39-none-win_amd64'
         # or 'cp38-none-openbsd_6_8_amd64'.
