@@ -18985,6 +18985,36 @@ def make_table(rect: rect_like =(0, 0, 1, 1), cols: int =1, rows: int =1) -> lis
     return rects
 
 
+def util_ensure_widget_calc(annot):
+    '''
+    Ensure that widgets with /AA/C JavaScript are in array AcroForm/CO
+    '''
+   pdf_obj *PDFNAME_CO=NULL;
+   fz_try(gctx) {
+       annot_obj = mupdf.pdf_annot_obj(annot.this)
+       pdf = mupdf.pdf_get_bound_document(annot_obj)
+       PDFNAME_CO = mupdf.pdf_new_name("CO")    # = PDF_NAME(CO)
+       acro = mupdf.pdf_dict_getl(  # get AcroForm dict
+               mupdf.pdf_trailer(pdf),
+               PDF_NAME('Root'),
+               PDF_NAME('AcroForm'),
+               )
+
+       CO = mupdf.pdf_dict_get(acro, PDFNAME_CO)    # = AcroForm/CO
+       if not CO.this:
+           CO = mupdf.pdf_dict_put_array(acro, PDFNAME_CO, 2)
+       n = mupdf.pdf_array_len(CO)
+       found = 0
+       xref = mupdf.pdf_to_num(annot_obj)
+       for i in range(n):
+           nxref = mupdf.pdf_to_num(mupdf.pdf_array_get(CO, i))
+           if xref == nxref:
+               found = 1
+               break
+       if not found:
+           mupdf.pdf_array_push(CO, mupdf.pdf_new_indirect(pdf, xref, 0))
+
+
 def util_make_rect( *args):
     '''
     Helper for initialising rectangle classes.
@@ -19200,8 +19230,8 @@ def util_sine_between(C, P, Q):
 
 def util_hor_matrix(C, P):
     '''
-    Return matrix that maps point C to (0,0) and point P to the
-    x-axis such that abs(x) equals abs(P - C).
+    Return the matrix that maps two points C, P to the x-axis such that
+    C -> (0,0) and the image of P have the same distance.
     '''
     c = JM_point_from_py(C)
     p = JM_point_from_py(P)
@@ -19936,34 +19966,6 @@ class TOOLS:
                 RAISEPY( "MuPDF built w/o ICC support",PyExc_ValueError);
         elif FZ_ENABLE_ICC:
             fz_disable_icc()
-
-    def _ensure_widget_calc(annot):
-        '''
-        Ensure that widgets with a /AA/C JavaScript are in AcroForm/CO
-        '''
-        annot_obj = mupdf.pdf_annot_obj(annot.this)
-        pdf = mupdf.pdf_get_bound_document(annot_obj)
-        PDFNAME_CO = mupdf.pdf_new_name("CO")   # = PDF_NAME(CO)
-        acro = mupdf.pdf_dict_getl( # get AcroForm dict
-                mupdf.pdf_trailer(pdf),
-                PDF_NAME('Root'),
-                PDF_NAME('AcroForm'),
-                )
-
-        CO = mupdf.pdf_dict_get(acro, PDFNAME_CO)   # = AcroForm/CO
-        if not CO.this:
-            CO = mupdf.pdf_dict_put_array(acro, PDFNAME_CO, 2)
-        n = mupdf.pdf_array_len(CO)
-        found = 0;
-        xref = mupdf.pdf_to_num(annot_obj)
-        for i in range(n):
-            nxref = mupdf.pdf_to_num(mupdf.pdf_array_get(CO, i))
-            if xref == nxref:
-                found = 1
-                break
-        if not found:
-            mupdf.pdf_array_push(CO, mupdf.pdf_new_indirect(pdf, xref, 0))
-
  
     @staticmethod
     def _fill_widget(annot, widget):
