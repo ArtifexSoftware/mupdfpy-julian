@@ -3578,7 +3578,11 @@ class Document:
             tp = srcCount - 1
         if tp > srcCount - 1:
             tp = srcCount - 1
+        len0 = len(JM_mupdf_warnings_store)
         doc = JM_convert_to_pdf(fz_doc, fp, tp, rotate)
+        len1 = len(JM_mupdf_warnings_store)
+        for i in range(len0, len1):
+            sys.stderr.write(f'{JM_mupdf_warnings_storep[i]}\n')
         return doc
 
     def copy_page(self, pno: int, to: int =-1):
@@ -4310,6 +4314,49 @@ class Document:
 
     outline = property(lambda self: self._outline)
 
+    def insert_file(self,
+            infile,
+            from_page=-1,
+            to_page=-1,
+            start_at=-1,
+            rotate=-1,
+            links=True,
+            annots=True,
+            show_progress=0,
+            final=1,
+            ):
+        '''
+        Insert an arbitrary supported document to an existing PDF.
+
+        The infile may be given as a filename, a Document or a Pixmap.
+        Other paramters - where applicable - equal those of insert_pdf().
+        '''
+        src = None
+        if isinstance(infile, Pixmap):
+            if infile.colorspace.n > 3:
+                infile = Pixmap(csRGB, infile)
+            src = Document("png", infile.tobytes())
+        elif isinstance(infile, Document):
+            src = infile
+        else:
+            src = Document(infile)
+        if not src:
+            raise ValueError("bad infile parameter")
+        if not src.is_pdf:
+            pdfbytes = src.convert_to_pdf()
+            src = Document("pdf", pdfbytes)
+        return self.insert_pdf(
+                src,
+                from_page=from_page,
+                to_page=to_page,
+                start_at=start_at,
+                rotate=rotate,
+                links=links,
+                annots=annots,
+                show_progress=show_progress,
+                final=final,
+                )
+
     def insert_pdf(
             self,
             docsrc,
@@ -4737,6 +4784,35 @@ class Document:
         mark = mupdf.ll_fz_make_bookmark2( self.this.m_internal, loc.internal())
         return mark
 
+    @property
+    def markinfo(self) -> dict:
+        """Return the PDF MarkInfo value."""
+        xref = self.pdf_catalog()
+        if xref == 0:
+            return None
+        rc = self.xref_get_key(xref, "MarkInfo")
+        if rc[0] == "null":
+            return {}
+        if rc[0] == "xref":
+            xref = int(rc[1].split()[0])
+            val = self.xref_object(xref, compressed=True)
+        elif rc[0] == "dict":
+            val = rc[1]
+        else:
+            val = None
+        if val == None or not (val[:2] == "<<" and val[-2:] == ">>"):
+            return {}
+        valid = {"Marked": False, "UserProperties": False, "Suspects": False}
+        val = val[2:-2].split("/")
+        for v in val[1:]:
+            try:
+                key, value = v.split()
+            except:
+                return valid
+            if value == "true":
+                valid[key] = True
+        return valid
+
     def move_page(self, pno: int, to: int =-1):
         """Move a page within a PDF document.
 
@@ -4918,6 +4994,34 @@ class Document:
         ASSERT_PDF(pdf)
         xref = mupdf.pdf_to_num(mupdf.pdf_lookup_page_obj(pdf, n))
         return xref
+
+    @property
+    def pagelayout(self) -> str:
+        """Return the PDF PageLayout value.
+        """
+        xref = self.pdf_catalog()
+        if xref == 0:
+            return None
+        rc = self.xref_get_key(xref, "PageLayout")
+        if rc[0] == "null":
+            return "SinglePage"
+        if rc[0] == "name":
+            return rc[1][1:]
+        return "SinglePage"
+
+    @property
+    def pagemode(self) -> str:
+        """Return the PDF PageMode value.
+        """
+        xref = self.pdf_catalog()
+        if xref == 0:
+            return None
+        rc = self.xref_get_key(xref, "PageMode")
+        if rc[0] == "null":
+            return "UseNone"
+        if rc[0] == "name":
+            return rc[1][1:]
+        return "UseNone"
 
     def pages(self, start: OptInt =None, stop: OptInt =None, step: OptInt =None) -> "struct Page *":
         """Return a generator iterator over a page range.
@@ -5270,6 +5374,61 @@ class Document:
             raise ValueError("document closed")
         # fixme: not translated to python yet.
         return _fitz.Document_set_layer_ui_config(self, number, action)
+
+    def set_markinfo(self, markinfo: dict) -> bool:
+        """Set the PDF MarkInfo values."""
+        xref = self.pdf_catalog()
+        if xref == 0:
+            raise ValueError("not a PDF")
+        if not markinfo or not isinstance(markinfo, dict):
+            return False
+        valid = {"Marked": False, "UserProperties": False, "Suspects": False}
+
+        if not set(valid.keys()).issuperset(markinfo.keys()):
+            badkeys = f"bad MarkInfo key(s): {set(markinfo.keys()).difference(valid.keys())}"
+            raise ValueError(badkeys)
+        pdfdict = "<<"
+        valid.update(markinfo)
+        for key, value in valid.items():
+            value=str(value).lower()
+            if not value in ("true", "false"):
+                raise ValueError(f"bad key value '{key}': '{value}'")
+            pdfdict += f"/{key} {value}"
+        pdfdict += ">>"
+        self.xref_set_key(xref, "MarkInfo", pdfdict)
+        return True
+
+    def set_pagelayout(self, pagelayout: str):
+        """Set the PDF PageLayout value."""
+        valid = ("SinglePage", "OneColumn", "TwoColumnLeft", "TwoColumnRight", "TwoPageLeft", "TwoPageRight")
+        xref = self.pdf_catalog()
+        if xref == 0:
+            raise ValueError("not a PDF")
+        if not pagelayout:
+            raise ValueError("bad PageLayout value")
+        if pagelayout[0] == "/":
+            pagelayout = pagelayout[1:]
+        for v in valid:
+            if pagelayout.lower() == v.lower():
+                self.xref_set_key(xref, "PageLayout", f"/{v}")
+                return True
+        raise ValueError("bad PageLayout value")
+
+    def set_pagemode(self, pagemode: str):
+        """Set the PDF PageMode value."""
+        valid = ("UseNone", "UseOutlines", "UseThumbs", "FullScreen", "UseOC", "UseAttachments")
+        xref = self.pdf_catalog()
+        if xref == 0:
+            raise ValueError("not a PDF")
+        if not pagemode:
+            raise ValueError("bad PageMode value")
+        if pagemode[0] == "/":
+            pagemode = pagemode[1:]
+        for v in valid:
+            if pagemode.lower() == v.lower():
+                self.xref_set_key(xref, "PageMode", f"/{v}")
+                return True
+        raise ValueError("bad PageMode value")
 
     def set_xml_metadata(self, metadata):
         """Store XML document level metadata."""
@@ -5719,36 +5878,33 @@ class Font:
         if fontbuffer:
             if hasattr(fontbuffer, "getvalue"):
                 fontbuffer = fontbuffer.getvalue()
-            elif type(fontbuffer) is bytearray:
+            elif isinstance(fontbuffer, bytearray):
                 fontbuffer = bytes(fontbuffer)
-            if type(fontbuffer) is not bytes:
+            if not isinstance(fontbuffer, bytes):
                 raise ValueError("bad type: 'fontbuffer'")
         
-        if fontname:
-            if "/" in fontname or "\\" in fontname or "." in fontname:
+        if isinstance(fontname, str):
+            fname_lower = fontname.lower()
+            if "/" in fname_lower or "\\" in fname_lower or "." in fname_lower:
                 print("Warning: did you mean a fontfile?")
 
-            if fontname.lower() in (
-                    "china-t",
-                    "china-s",
-                    "japan",
-                    "korea",
-                    "china-ts",
-                    "china-ss",
-                    "japan-s",
-                    "korea-s",
-                    "cjk",
-                    ):
+            if fname_lower in ("cjk", "china-t", "china-ts"):
                 ordering = 0
 
-            elif fontname.lower() in fitz_fontdescriptors.keys():
+            elif fname_lower.startswith("china-s"):
+                ordering = 1
+            elif fname_lower.startswith("korea"):
+                ordering = 3
+            elif fname_lower.startswith("japan"):
+                ordering = 2
+            elif fname_lower in fitz_fontdescriptors.keys():
                 import pymupdf_fonts  # optional fonts
-                fontbuffer = pymupdf_fonts.myfont(fontname)  # make a copy
+                fontbuffer = pymupdf_fonts.myfont(fname_lower)  # make a copy
                 fontname = None  # ensure using fontbuffer only
                 del pymupdf_fonts  # remove package again
 
             elif ordering < 0:
-                fontname = Base14_fontdict.get(fontname.lower(), fontname)
+                fontname = Base14_fontdict.get(fontname, fontname)
 
         lang = mupdf.fz_text_language_from_string(language)
         font = JM_get_font(fontname, fontfile,
@@ -8276,7 +8432,7 @@ class Page:
         return val
 
     def get_cdrawings(self):
-        """Extract drawing paths from the page."""
+        """Extract vector graphics ("line art") from the page."""
         #print(f'get_cdrawings()', file=sys.stderr)
         CheckParent(self)
         old_rotation = self.rotation
@@ -19781,6 +19937,34 @@ class TOOLS:
         elif FZ_ENABLE_ICC:
             fz_disable_icc()
 
+    def _ensure_widget_calc(annot):
+        '''
+        Ensure that widgets with a /AA/C JavaScript are in AcroForm/CO
+        '''
+        annot_obj = mupdf.pdf_annot_obj(annot.this)
+        pdf = mupdf.pdf_get_bound_document(annot_obj)
+        PDFNAME_CO = mupdf.pdf_new_name("CO")   # = PDF_NAME(CO)
+        acro = mupdf.pdf_dict_getl( # get AcroForm dict
+                mupdf.pdf_trailer(pdf),
+                PDF_NAME('Root'),
+                PDF_NAME('AcroForm'),
+                )
+
+        CO = mupdf.pdf_dict_get(acro, PDFNAME_CO)   # = AcroForm/CO
+        if not CO.this:
+            CO = mupdf.pdf_dict_put_array(acro, PDFNAME_CO, 2)
+        n = mupdf.pdf_array_len(CO)
+        found = 0;
+        xref = mupdf.pdf_to_num(annot_obj)
+        for i in range(n):
+            nxref = mupdf.pdf_to_num(mupdf.pdf_array_get(CO, i))
+            if xref == nxref:
+                found = 1
+                break
+        if not found:
+            mupdf.pdf_array_push(CO, mupdf.pdf_new_indirect(pdf, xref, 0))
+
+ 
     @staticmethod
     def _fill_widget(annot, widget):
         #val = _fitz.Tools__fill_widget(self, annot, widget)
