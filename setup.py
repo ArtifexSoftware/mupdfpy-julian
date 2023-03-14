@@ -77,6 +77,7 @@ import textwrap
 import pipcl
 import platform
 import shutil
+import stat
 import subprocess
 import sys
 
@@ -109,20 +110,31 @@ def _fs_find_in_paths( name, paths=None):
         if os.path.isfile( p):
             return p
 
-def _fs_remove(path):
+def remove(path):
     '''
     Removes file or directory, without raising exception if it doesn't exist.
 
     We assert-fail if the path still exists when we return, in case of
     permission problems etc.
     '''
+    # First try deleting `path` as a file.
     try:
         os.remove( path)
-    except Exception:
+    except Exception as e:
         pass
-    shutil.rmtree( path, ignore_errors=1)
+    
+    if os.path.exists(path):
+        # Try deleting `path` as a directory. Need to use
+        # shutil.rmtree() callback to handle permission problems; see:
+        # https://docs.python.org/3/library/shutil.html#rmtree-example
+        #
+        def error_fn(fn, path, excinfo):
+            # Clear the readonly bit and reattempt the removal.
+            os.chmod(path, stat.S_IWRITE)
+            fn(path)
+        shutil.rmtree( path, onerror=error_fn)
+    
     assert not os.path.exists( path)
-
 
 
 def _python_compile_flags():
@@ -372,8 +384,13 @@ def get_mupdf():
             #
             command_suffix = path[ len(git_prefix):]
             path = 'mupdf'
-            assert not os.path.exists( path), \
-                    f'Cannot use git clone because local directory already exists: {path}'
+            
+            # Remove any existing directory to avoid the clone failing. (We
+            # could assume any existing directory is a git checkout, and do
+            # `git pull` or similar, but that's complicated and fragile.)
+            #
+            remove(path)
+            
             command = (''
                     + f'git clone'
                     + f' --recursive'
