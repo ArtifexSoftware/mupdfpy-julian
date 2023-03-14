@@ -6896,6 +6896,13 @@ class Widget:
                                     s=self.text_fontsize)
         # finally update the widget
 
+        # if widget has a '/AA/C' script, make sure it is in the '/CO'
+        # array of the '/AcroForm' dictionary.
+        if self.script_calc:  # there is a "calculation" script:
+            # make sure we are in the /CO array
+            util_ensure_widget_calc(self._annot)
+
+        # finally update the widget
         TOOLS._save_widget(self._annot, self)
         self._text_da = ""
 
@@ -16655,7 +16662,7 @@ def JM_set_widget_properties(annot, Widget):
         field_flags = value
         Ff = mupdf.pdf_field_flags(annot_obj)
         Ff |= field_flags
-    mupdf.pdf_dict_put_int(annot_obj, PDF_NAME('Ff'), Ff)
+        mupdf.pdf_dict_put_int(annot_obj, PDF_NAME('Ff'), Ff)
 
     # button caption ---------------------------------------------------------
     value = GETATTR("button_caption")
@@ -16691,6 +16698,7 @@ def JM_set_widget_properties(annot, Widget):
             onstate = mupdf.pdf_button_field_on_state(annot_obj)
             on = mupdf.pdf_to_name(onstate)
             result = mupdf.pdf_set_field_value(pdf, annot_obj, on, 1)
+            mupdf.pdf_dict_put_name(annot_obj, PDF_NAME('AS'), 'Yes')
         else:
             result = mupdf.pdf_set_field_value(pdf, annot_obj, "Off", 1)
     else:
