@@ -9,6 +9,10 @@ License:
 # Try to detect if we are being used with current directory set to a mupdfpy/ checkout.
 import glob
 import os
+import pathlib
+import tarfile
+import zipfile
+
 
 if os.path.exists( 'fitz/__init__.py'):
     if not glob.glob( 'fitz/_extra*') or not glob.glob( 'fitz/_mupdf*'):
@@ -1574,7 +1578,7 @@ class Archive:
     
     def _add_dir( self, folder, path=None):
         sub = mupdf.fz_open_directory( folder)
-        mupdf.fz_mount_multi_archive( arch, sub, path)
+        mupdf.fz_mount_multi_archive( self.this, sub, path)
     
     def _add_arch( subarch, path=None):
         mupdf.fz_mount_multi_archive( self.this, sub, path)
