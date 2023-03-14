@@ -204,6 +204,77 @@ def _git_get_branch( directory):
     return ret
 
 
+def tar_check(path, mode='r:gz', prefix=None, remove=False):
+    '''
+    Checks items in tar file have same <top-directory>, or <prefix> if not None.
+
+    We fail if items in tar file have different top-level directory names.
+
+    path:
+        The tar file.
+    mode:
+        As tarfile.open().
+    prefix:
+        If not None, we fail if tar file's <top-directory> is not <prefix>.
+    
+    Returns the directory name (which will be <prefix> if not None).
+    '''
+    with tarfile.open( path, mode) as t:
+        items = t.getnames()
+        assert items
+        item = items[0]
+        assert not item.startswith('./') and not item.startswith('../')
+        s = item.find('/')
+        if s == -1:
+            prefix_actual = item + '/'
+        else:
+            prefix_actual = item[:s+1]
+        if prefix:
+            assert prefix == prefix_actual, f'prefix={prefix} prefix_actual={prefix_actual}'
+        for item in items[1:]:
+            assert item.startswith( prefix_actual), f'prefix_actual={prefix_actual!r} != item={item!r}'
+    return prefix_actual
+
+
+def tar_extract(path, mode='r:gz', prefix=None, exists='raise'):
+    '''
+    Extracts tar file.
+    
+    We fail if items in tar file have different <top-directory>.
+
+    path:
+        The tar file.
+    mode:
+        As tarfile.open().
+    prefix:
+        If not None, we fail if tar file's <top-directory> is not <prefix>.
+    exists:
+        What to do if <top-directory> already exists:
+            'raise': raise exception.
+            'remove': remove existing file/directory before extracting.
+            'return': return without extracting.
+    
+    Returns the directory name (which will be <prefix> if not None, with '/'
+    appended if not already present).
+    '''
+    prefix_actual = tar_check( path, mode, prefix)
+    if os.path.exists( prefix_actual):
+        if exists == 'raise':
+            raise Exception( f'Path already exists: {prefix_actual!r}')
+        elif exists == 'remove':
+            remove( prefix_actual)
+        elif exists == 'return':
+            log( f'Not extracting {path} because already exists: {prefix_actual}')
+            return prefix_actual
+        else:
+            assert 0, f'Unrecognised exists={exists!r}'
+    assert not os.path.exists( prefix_actual), f'Path already exists: {prefix_actual}'
+    log( f'Extracting {path}')
+    with tarfile.open( path, mode) as t:
+        t.extractall()
+    return prefix_actual
+
+
 
 mupdf_tgz = os.path.abspath( f'{__file__}/../mupdf.tgz')
 
@@ -239,7 +310,7 @@ def get_mupdf_tgz():
         _fs_remove( mupdf_url_leaf)
         urllib.request.urlretrieve( mupdf_url, mupdf_url_leaf)
         assert os.path.exists( mupdf_url_leaf)
-        tar_check( mupdf_url_leaf, 'r:gz', mupdf_local)
+        tar_check( mupdf_url_leaf, 'r:gz', f'{mupdf_local}/')
         if mupdf_url_leaf != mupdf_tgz:
             _fs_remove( mupdf_tgz)
             os.rename( mupdf_url_leaf, mupdf_tgz)
@@ -250,7 +321,7 @@ def get_mupdf_tgz():
         # files.
         mupdf_local = mupdf_url_or_local
         if mupdf_local.endswith( '/'):
-            del mupdf_local[-1]
+            mupdf_local = mupdf_local[:-1]
         assert os.path.isdir( mupdf_local), f'Not a directory: {mupdf_local!r}'
         log( f'Creating .tgz from git files in: {mupdf_local}')
         _fs_remove( mupdf_tgz)
