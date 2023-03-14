@@ -4259,31 +4259,32 @@ class Document:
             rc = ''
         return rc
 
-    @property
-    def has_old_style_xrefs(self):
-        '''
-        Check if xref table is old style.
-        '''
-        if self.is_closed:
-            raise ValueError("document closed")
-        #return _fitz.Document_has_old_style_xrefs(self)
-        pdf = self._this_as_pdf_document()
-        if pdf.m_internal and pdf.m_internal.has_old_style_xrefs:
-            return True
-        return False
+    if mupdf_version_tuple < (1, 22):
+        @property
+        def has_old_style_xrefs(self):
+            '''
+            Check if xref table is old style.
+            '''
+            if self.is_closed:
+                raise ValueError("document closed")
+            #return _fitz.Document_has_old_style_xrefs(self)
+            pdf = self._this_as_pdf_document()
+            if pdf.m_internal and pdf.m_internal.has_old_style_xrefs:
+                return True
+            return False
 
-    @property
-    def has_xref_streams(self):
-        '''
-        Check if xref table is a stream.
-        '''
-        if self.is_closed:
-            raise ValueError("document closed")
-        #return _fitz.Document_has_xref_streams(self)
-        pdf = self._this_as_pdf_document()
-        if pdf.m_internal and pdf.m_internal.has_xref_streams:
-            return True
-        return False
+        @property
+        def has_xref_streams(self):
+            '''
+            Check if xref table is a stream.
+            '''
+            if self.is_closed:
+                raise ValueError("document closed")
+            #return _fitz.Document_has_xref_streams(self)
+            pdf = self._this_as_pdf_document()
+            if pdf.m_internal and pdf.m_internal.has_xref_streams:
+                return True
+            return False
 
     def init_doc(self):
         if self.is_encrypted:
