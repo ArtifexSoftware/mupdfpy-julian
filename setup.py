@@ -233,7 +233,7 @@ def get_mupdf_tgz():
         mupdf_url_leaf = os.path.basename( mupdf_url)
         leaf = '.tar.gz'
         assert mupdf_url_leaf.endswith(leaf), f'Unrecognised suffix in mupdf_url={mupdf_url!r}'
-        mupdf_local = mupdf_url_leaf[ : -len(leaf)] + '/'
+        mupdf_local = mupdf_url_leaf[ : -len(leaf)]
         assert mupdf_local.startswith( 'mupdf-')
         log(f'Downloading from: {mupdf_url}')
         _fs_remove( mupdf_url_leaf)
@@ -249,8 +249,8 @@ def get_mupdf_tgz():
         # Create archive <mupdf_tgz> contining local mupdf directory's git
         # files.
         mupdf_local = mupdf_url_or_local
-        if not mupdf_local.endswith( '/'):
-            mupdf_local += '/'
+        if mupdf_local.endswith( '/'):
+            del mupdf_local[-1]
         assert os.path.isdir( mupdf_local), f'Not a directory: {mupdf_local!r}'
         log( f'Creating .tgz from git files in: {mupdf_local}')
         _fs_remove( mupdf_tgz)
