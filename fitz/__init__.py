@@ -6029,8 +6029,8 @@ class Font:
                 "fake-italic":  fake_italic if mupdf_cppyy else f.fake_italic,
                 "opentype":     has_opentype if mupdf_cppyy else f.has_opentype,
                 "invalid-bbox": invalid_bbox if mupdf_cppyy else f.invalid_bbox,
-                'embed':        embed if mupdf_cppyy else f.embed
-                'never-embed':  never_embed if mupdf_cppyy else f.never_embed
+                'embed':        embed if mupdf_cppyy else f.embed,
+                'never-embed':  never_embed if mupdf_cppyy else f.never_embed,
                 }
 
     def glyph_advance(self, chr_, language=None, script=0, wmode=0, small_caps=0):
@@ -17476,7 +17476,6 @@ def jm_append_merge(dev, method):
     len_ = len(dev.out)
     if callable(method) or method:  # function or method
         # callback.
-        PyObject *resp = NULL;
         if method == Py_None:
             # fixme, this surely cannot happen?
             assert 0
@@ -18106,7 +18105,7 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
             dev.pathdict[ 'dashes'] = '[] 0'
         dev.pathdict[ dictkey_rect] = JM_py_from_rect(dev.pathrect)
         dev.pathdict[ 'seqno'] = dev.seqno
-        if def.clips:
+        if dev.clips:
             pathdict[ 'level'] = dev.depth
         jm_append_merge(dev)
         dev.seqno += 1
@@ -18127,14 +18126,14 @@ def jm_lineart_clip_path(dev, path, even_odd, ctm, scissor):
    dev_pathdict[ 'even_odd'] = bool(even_odd)
    if 'closePath' not in dev_pathdict:
        dev_pathdict['closePath'] = False
-   }
-   dev_pathdict['scissor' = JM_py_from_rect(compute_scissor())
-   dev_pathdict['level' = dev->depth
-   dev_pathdict['"layer' = layer_name
+   
+   dev_pathdict['scissor'] = JM_py_from_rect(compute_scissor())
+   dev_pathdict['level'] = dev.depth
+   dev_pathdict['"layer'] = layer_name
    jm_append_merge(out, dev.method)
    dev.depth += 1
 
-dev jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
+def jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
    if not dev.clips:
        return
    out = dev.out
@@ -18142,9 +18141,9 @@ dev jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
    dev.path_type = trace_device_CLIP_STROKE_PATH
    jm_lineart_path(dev, path)
    dev_pathdict['dictkey_type'] = 'clip'
-   dev_pathdict['even_odd' = None
+   dev_pathdict['even_odd'] = None
    if 'closePath' not in dev_pathdict:
-       dev_pathdict['closePath' = False
+       dev_pathdict['closePath'] = False
    dev_pathdict['scissor'] = JM_py_from_rect(compute_scissor())
    dev_pathdict['level'] = dev.depth
    dev_pathdict['layer'] = layer_name
@@ -18253,6 +18252,9 @@ class JM_new_bbox_device_Device(mupdf.FzDevice2):
         self.use_virtual_begin_layer()
         self.use_virtual_end_layer()
 
+        self.begin_layer = jm_lineart_begin_layer
+        self.end_layer = jm_lineart_end_layer
+    
     fill_path = jm_bbox_fill_path
     stroke_path = jm_bbox_stroke_path
     fill_text = jm_bbox_fill_text
@@ -18262,8 +18264,6 @@ class JM_new_bbox_device_Device(mupdf.FzDevice2):
     fill_image = jm_bbox_fill_image
     fill_image_mask = jm_bbox_fill_image_mask
     
-    self.begin_layer = jm_lineart_begin_layer
-    self.end_layer = jm_lineart_end_layer
 
 class JM_new_output_fileptr_Output(mupdf.FzOutput2):
     def __init__(self, bio):
@@ -18288,14 +18288,11 @@ class JM_new_output_fileptr_Output(mupdf.FzOutput2):
         data = mupdf.raw_to_python_bytes(data_raw, data_length)
         return self.bio.write(data)
 
-def fz_rect compute_scissor(dev):
+def compute_scissor(dev):
     '''
     Every scissor of a clip is a sub rectangle of the preceeding clip scissor
     if the clip level is larger.
     '''
-    
-    PyObject *last_scissor = NULL;
-    fz_rect scissor;
     if dev.scissors is None:
         dev.scissors = list()
     num_scissors = len(dev.scissors)
@@ -18368,13 +18365,13 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
     clip_path           = jm_lineart_clip_path
     clip_stroke_path    = jm_lineart_clip_stroke_path
     
-    fill_text           = jm_lineart_fill_text
-    stroke_text         = jm_lineart_stroke_text
-    ignore_text         = jm_lineart_ignore_text
+    fill_text           = jm_increase_seqno
+    stroke_text         = jm_increase_seqno
+    ignore_text         = jm_increase_seqno
     
-    fill_shade          = jm_lineart_fill_shade
-    fill_image          = jm_lineart_fill_image
-    fill_image_mask     = jm_lineart_fill_image_mask
+    fill_shade          = jm_increase_seqno
+    fill_image          = jm_increase_seqno
+    fill_image_mask     = jm_increase_seqno
     
     pop_clip            = jm_lineart_pop_clip
     

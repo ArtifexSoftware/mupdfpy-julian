@@ -2008,8 +2008,7 @@ def draw_rect(
         fill_opacity: float = 1,
         oc: int = 0,
         radius=None,
-        )
-        -> fitz.Point:
+        ) -> fitz.Point:
     '''
     Draw a rectangle. See Shape class method for details.
     '''
@@ -3310,7 +3309,7 @@ class Shape:
         self.lastPoint = Q
         return self.lastPoint
 
-    def draw_rect(self, rect: rect_like, *, radius=None) -> Point:
+    def draw_rect(self, rect: rect_like, *, radius=None) -> fitz.Point:
         """Draw a rectangle.
 
         Args:
