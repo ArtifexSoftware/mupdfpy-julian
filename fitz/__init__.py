@@ -5873,6 +5873,7 @@ class Font:
             is_bold=0,
             is_italic=0,
             is_serif=0,
+            embed=1,
             ):
         
         if fontbuffer:
@@ -5909,7 +5910,7 @@ class Font:
         lang = mupdf.fz_text_language_from_string(language)
         font = JM_get_font(fontname, fontfile,
                    fontbuffer, script, lang, ordering,
-                   is_bold, is_italic, is_serif)
+                   is_bold, is_italic, is_serif, embed)
         if 0:
             flags = mupdf.fz_font_flags(font)
             if mupdf_cppyy:
@@ -6015,6 +6016,8 @@ class Font:
             fake_italic = b(1)
             has_opentype = b(1)
             invalid_bbox = b(1)
+            embed = b(1)
+            never_embed = b(1)
         return {
                 "mono":         is_mono if mupdf_cppyy else f.is_mono,
                 "serif":        is_serif if mupdf_cppyy else f.is_serif,
@@ -6026,6 +6029,8 @@ class Font:
                 "fake-italic":  fake_italic if mupdf_cppyy else f.fake_italic,
                 "opentype":     has_opentype if mupdf_cppyy else f.has_opentype,
                 "invalid-bbox": invalid_bbox if mupdf_cppyy else f.invalid_bbox,
+                'embed':        embed if mupdf_cppyy else f.embed
+                'never-embed':  never_embed if mupdf_cppyy else f.never_embed
                 }
 
     def glyph_advance(self, chr_, language=None, script=0, wmode=0, small_caps=0):
@@ -6090,6 +6095,7 @@ class Font:
 
     @property
     def is_writable(self):
+        return True # see pymupdf commit ef4056ee4da2
         #return _fitz.Font_is_writable(self)
         font = self.this
         flags = mupdf.ll_fz_font_flags(font.m_internal)
@@ -8421,7 +8427,7 @@ class Page:
         val = widget
         return val
 
-    def get_bboxlog(self):
+    def get_bboxlog(self, layers=None):
         CheckParent(self)
         old_rotation = self.rotation
         if old_rotation != 0:
@@ -8429,16 +8435,16 @@ class Page:
         #val = _fitz.Page_get_bboxlog(self)
         page = self.this
         rc = []
-        dev = JM_new_bbox_device( rc)
+        inc_layers = True if layers else False
+        dev = JM_new_bbox_device( rc, inc_layers)
         mupdf.fz_run_page( page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device( dev)
-        val = rc
 
         if old_rotation != 0:
             self.set_rotation(old_rotation)
-        return val
+        return rc
 
-    def get_cdrawings(self):
+    def get_cdrawings(self, extended=None, callback=None, method=None):
         """Extract vector graphics ("line art") from the page."""
         #print(f'get_cdrawings()', file=sys.stderr)
         CheckParent(self)
@@ -8452,15 +8458,20 @@ class Page:
             page = mupdf.FzPage(page)
         assert isinstance(page, mupdf.FzPage), f'self.this={self.this}'
         rc = []
+        clips = True if extended else False
         prect = mupdf.fz_bound_page(page)
-        dev = JM_new_tracedraw_device_Device(rc, ptm = mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1))
+        trace_device_ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
+        if callable(callback) or method is not None:
+            dev = JM_new_lineart_device(callback, clips, method)
+        else:
+            dev = JM_new_lineart_device(rc, clips, method)
         mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device(dev)
-        val = rc
 
         if old_rotation != 0:
             self.set_rotation(old_rotation)
-        #print(f'~get_cdrawings()', file=sys.stderr)
+        if callable(callback) or method is not None:
+            return
         return val
 
     def get_contents(self):
@@ -8495,8 +8506,8 @@ class Page:
             dl = mupdf.fz_new_display_list_from_page_contents(self.this)
         return DisplayList(dl)
 
-    def get_drawings(self):
-        """Get page drawings paths.
+    def get_drawings(self, extended: bool=False) -> list:
+        """Retrieve vector graphics. The extended version includes clips.
 
         Note:
         For greater comfort, this method converts point-likes, rect-likes, quad-likes
@@ -8509,29 +8520,175 @@ class Page:
                 ("lineJoin", 0), ("dashes", "[] 0"), ("stroke_opacity", 1),
                 ("fill_opacity", 1), ("even_odd", True),
             )
-        val = self.get_cdrawings()
-        paths = []
-        for path in val:
-            npath = path.copy()
-            npath["rect"] = Rect(path["rect"])
-            items = path["items"]
-            newitems = []
-            for item in items:
-                cmd = item[0]
-                rest = item[1:]
-                if  cmd == "re":
-                    item = ("re", Rect(rest[0]), rest[1])
-                elif cmd == "qu":
-                    item = ("qu", Quad(rest[0]))
+        val = self.get_cdrawings(extended=extended)
+        for i in range(len(val)):
+            npath = val[i]
+            if not npath["type"].startswith("clip"):
+                npath["rect"] = Rect(npath["rect"])
+            else:
+                npath["scissor"] = Rect(npath["scissor"])
+            if npath["type"]!="group":
+                items = npath["items"]
+                newitems = []
+                for item in items:
+                    cmd = item[0]
+                    rest = item[1:]
+                    if  cmd == "re":
+                        item = ("re", Rect(rest[0]), rest[1])
+                    elif cmd == "qu":
+                        item = ("qu", Quad(rest[0]))
+                    else:
+                        item = tuple([cmd] + [Point(i) for i in rest])
+                    newitems.append(item)
+                npath["items"] = newitems
+            if npath["type"] in ("f", "s", "fs"):
+                for k, v in allkeys:
+                    npath[k] = npath.get(k, v)
+            val[i] = npath
+        return val
+
+        class Drawpath(object):
+            """Reflects a path dictionary from get_cdrawings()."""
+            def __init__(self, **args):
+                self.__dict__.update(args)
+        
+        class Drawpathlist(object):
+            """List of Path objects representing get_cdrawings() output."""
+            def __init__(self):
+                self.paths = []
+                self.path_count = 0
+                self.group_count = 0
+                self.clip_count = 0
+                self.fill_count = 0
+                self.stroke_count = 0
+                self.fillstroke_count = 0
+
+            def append(self, path):
+                self.paths.append(path)
+                self.path_count += 1
+                if path.type == "clip":
+                    self.clip_count += 1
+                elif path.type == "group":
+                    self.group_count += 1
+                elif path.type == "f":
+                    self.fill_count += 1
+                elif path.type == "s":
+                    self.stroke_count += 1
+                elif path.type == "fs":
+                    self.fillstroke_count += 1
+
+            def clip_parents(self, i):
+                """Return list of parent clip paths.
+
+                Args:
+                    i: (int) return parents of this path.
+                Returns:
+                    List of the clip parents."""
+                if i >= self.path_count:
+                    raise IndexError("bad path index")
+                while i < 0:
+                    i += self.path_count
+                lvl = self.paths[i].level
+                clips = list(  # clip paths before identified one
+                    reversed(
+                        [
+                            p
+                            for p in self.paths[:i]
+                            if p.type == "clip" and p.level < lvl
+                        ]
+                    )
+                )
+                if clips == []:  # none found: empty list
+                    return []
+                nclips = [clips[0]]  # init return list
+                for p in clips[1:]:
+                    if p.level >= nclips[-1].level:
+                        continue  # only accept smaller clip levels
+                    nclips.append(p)
+                return nclips
+
+            def group_parents(self, i):
+                """Return list of parent group paths.
+
+                Args:
+                    i: (int) return parents of this path.
+                Returns:
+                    List of the group parents."""
+                if i >= self.path_count:
+                    raise IndexError("bad path index")
+                while i < 0:
+                    i += self.path_count
+                lvl = self.paths[i].level
+                groups = list(  # group paths before identified one
+                    reversed(
+                        [
+                            p
+                            for p in self.paths[:i]
+                            if p.type == "group" and p.level < lvl
+                        ]
+                    )
+                )
+                if groups == []:  # none found: empty list
+                    return []
+                ngroups = [groups[0]]  # init return list
+                for p in groups[1:]:
+                    if p.level >= ngroups[-1].level:
+                        continue  # only accept smaller group levels
+                    ngroups.append(p)
+                return ngroups
+
+            def __getitem__(self, item):
+                return self.paths.__getitem__(item)
+
+            def __len__(self):
+                return self.paths.__len__()
+
+
+        def get_lineart(self) -> object:
+            """Get page drawings paths.
+
+            Note:
+            For greater comfort, this method converts point-like, rect-like, quad-like
+            tuples of the C version to respective Point / Rect / Quad objects.
+            Also adds default items that are missing in original path types.
+            In contrast to get_drawings(), this output is an object.
+            """
+
+            val = self.get_cdrawings(extended=True)
+            paths = self.Drawpathlist()
+            for path in val:
+                npath = self.Drawpath(**path)
+                if npath.type != "clip":
+                    npath.rect = Rect(path["rect"])
                 else:
-                    item = tuple([cmd] + [Point(i) for i in rest])
-                newitems.append(item)
-            npath["items"] = newitems
-            for k, v in allkeys:
-                npath[k] = npath.get(k, v)
-            paths.append(npath)
-        val = None
-        return paths
+                    npath.scissor = Rect(path["scissor"])
+                if npath.type != "group":
+                    items = path["items"]
+                    newitems = []
+                    for item in items:
+                        cmd = item[0]
+                        rest = item[1:]
+                        if  cmd == "re":
+                            item = ("re", Rect(rest[0]), rest[1])
+                        elif cmd == "qu":
+                            item = ("qu", Quad(rest[0]))
+                        else:
+                            item = tuple([cmd] + [Point(i) for i in rest])
+                        newitems.append(item)
+                    npath.items = newitems
+                
+                if npath.type == "f":
+                    npath.stroke_opacity = None
+                    npath.dashes = None
+                    npath.lineJoin = None
+                    npath.lineCap = None
+                    npath.color = None
+                    npath.width = None
+
+                paths.append(npath)
+
+            val = None
+            return paths
 
     def get_fonts(self, full=False):
         """List of fonts defined in the page object."""
@@ -8691,19 +8848,19 @@ class Page:
         #val = _fitz.Page_get_texttrace(self)
         page = self.this
         rc = []
-        prect = mupdf.fz_bound_page(page)
         if g_use_extra:
             dev = extra.JM_new_tracetext_device(
                     rc,
-                    rot=mupdf.FzMatrix().internal(),
-                    ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1).internal(),
+                    #rot=mupdf.FzMatrix().internal(),
+                    #ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1).internal(),
                     )
         else:
             dev = JM_new_tracetext_device_Device(
                     rc,
-                    rot=mupdf.FzMatrix(),
-                    ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1),
+                    #rot=mupdf.FzMatrix(),
+                    #ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1),
                     )
+        prect = mupdf.fz_bound_page(page)
         mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device(dev)
 
@@ -9368,7 +9525,10 @@ class Pixmap:
         #return _fitz.Pixmap__samples_ptr(self)
         return self.this.fz_pixmap_samples_int()
 
-    def _tobytes(self, format_):
+    def _tobytes(self, format_, quality):
+        '''
+        Pixmap._tobytes
+        '''
         #return _fitz.Pixmap__tobytes(self, format)
         pm = self.this
         size = mupdf.fz_pixmap_stride(pm) * pm.h();
@@ -9379,12 +9539,13 @@ class Pixmap:
         elif format_ == 3:  mupdf.fz_write_pixmap_as_pam(out, pm)
         elif format_ == 5:  mupdf.fz_write_pixmap_as_psd(out, pm)
         elif format_ == 6:  mupdf.fz_write_pixmap_as_ps(out, pm)
+        elif format_ == 7:  mupdf.fz_write_pixmap_as_jpeg(out, pm, quality)
         else:               mupdf.fz_write_pixmap_as_png(out, pm)
 
         barray = JM_BinFromBuffer(res)
         return barray
 
-    def _writeIMG(self, filename, format_):
+    def _writeIMG(self, filename, format_, quality):
         #return _fitz.Pixmap__writeIMG(self, filename, format)
         pm = self.this
         if   format_ == 1:  mupdf.fz_save_pixmap_as_png(pm, filename)
@@ -9392,6 +9553,7 @@ class Pixmap:
         elif format_ == 3:  mupdf.fz_save_pixmap_as_pam(pm, filename)
         elif format_ == 5:  mupdf.fz_save_pixmap_as_psd(pm, filename)
         elif format_ == 6:  mupdf.fz_save_pixmap_as_ps(pm, filename)
+        elif format_ == 7:  mupdf.fz_save_pixmap_as_jpeg(pm, filename, quality)
         else:               mupdf.fz_save_pixmap_as_png(pm, filename)
 
     @property
@@ -9467,17 +9629,10 @@ class Pixmap:
             return
         mupdf.fz_gamma_pixmap( self.this, gamma)
 
-    def tobytes(self, output="png"):
-        """Convert to binary image stream of desired type.
-
-        Can be used as input to GUI packages like tkinter.
-
-        Args:
-            output: (str) image type, default is PNG. Others are PNM, PGM, PPM,
-                    PBM, PAM, PSD, PS.
-        Returns:
-            Bytes object.
-        """
+    def tobytes(self, output="png", quality=95):
+        '''
+        Convert to binary image stream of desired type.
+        '''
         valid_formats = {
                 "png": 1,
                 "pnm": 2,
@@ -9489,13 +9644,19 @@ class Pixmap:
                 "tpic": 4,
                 "psd": 5,
                 "ps": 6,
+                'jpg': 7,
+                'jpeg': 7,
                 }
-        idx = valid_formats.get(output.lower(), 1)
-        if self.alpha and idx in (2, 6):
-            raise ValueError("'%s' cannot have alpha" % output)
+        idx = valid_formats.get(output.lower(), None)
+        if idx==None:
+            raise ValueError(f"Image format {output} not in {tuple(valid_formats.keys())}")
+        if self.alpha and idx in (2, 6, 7):
+            raise ValueError("'{output}' cannot have alpha")
         if self.colorspace and self.colorspace.n > 3 and idx in (1, 2, 4):
-            raise ValueError("unsupported colorspace for '%s'" % output)
-        barray = self._tobytes(idx)
+            raise ValueError("unsupported colorspace for '{output}'")
+        if idx == 7:
+            self.set_dpi(self.xres, self.yres)
+        barray = self._tobytes(idx, quality)
         return barray
 
     @property
@@ -9640,16 +9801,26 @@ class Pixmap:
         mv = self.samples_mv
         return bytes( mv)
 
-    def save(self, filename, output=None):
+    def save(self, filename, output=None, quality=95):
         """Output as image in format determined by filename extension.
 
         Args:
             output: (str) only use to overrule filename extension. Default is PNG.
-                    Others are PNM, PGM, PPM, PBM, PAM, PSD, PS.
+                    Others are JPEG, JPG, PNM, PGM, PPM, PBM, PAM, PSD, PS.
         """
-        valid_formats = {"png": 1, "pnm": 2, "pgm": 2, "ppm": 2, "pbm": 2,
-                         "pam": 3, "tga": 4, "tpic": 4,
-                         "psd": 5, "ps": 6}
+        valid_formats = {
+                "png": 1,
+                "pnm": 2,
+                "pgm": 2,
+                "ppm": 2,
+                "pbm": 2,
+                "pam": 3,
+                "psd": 5,
+                "ps": 6,
+                "jpg": 7,
+                "jpeg": 7,
+                }
+        
         if type(filename) is str:
             pass
         elif hasattr(filename, "absolute"):
@@ -9660,14 +9831,16 @@ class Pixmap:
             _, ext = os.path.splitext(filename)
             output = ext[1:]
 
-        idx = valid_formats.get(output.lower(), 1)
-
-        if self.alpha and idx in (2, 6):
+        idx = valid_formats.get(output.lower(), None)
+        if idx == None:
+            raise ValueError(f"Image format {output} not in {tuple(valid_formats.keys())}")
+        if self.alpha and idx in (2, 6, 7):
             raise ValueError("'%s' cannot have alpha" % output)
-        if self.colorspace and self.colorspace.this.m_internal.n > 3 and idx in (1, 2, 4):
+        if self.colorspace and self.colorspace.n > 3 and idx in (1, 2, 4):
             raise ValueError("unsupported colorspace for '%s'" % output)
-
-        return self._writeIMG(filename, idx)
+        if idx == 7:
+            self.set_dpi(self.xres, self.yres)
+        return self._writeIMG(filename, idx, quality)
 
     def set_alpha(self, alphavalues=None, premultiply=1, opaque=None, matte=None):
         """Set alpha channel to values contained in a byte array.
@@ -17295,34 +17468,51 @@ def image_profile(img: typing.ByteString) -> dict:
     return TOOLS.image_profile(stream)
 
 
-def jm_append_merge(dev):
+def jm_append_merge(dev, method):
     '''
-    Append current path to list or merge into last path of list.
-    (1) Append if first path, different item list or not 'stroke' version of
-        previous
+    Append current path to list or merge into last path of the list.
+    (1) Append if first path, different item lists or not a 'stroke' version
+        of previous path
     (2) If new path has the same items, merge its content into previous path
-        and indicate this via path["type"] = "fs".
+        and change path["type"] to "fs".
+    (3) If "out" is callable, skip the previous and pass dictionary to it.
     '''
     #log('{dev.pathdict=}')
     assert isinstance(dev.out, list)
+    
     len_ = len(dev.out)
+    if callable(method) or method:  # function or method
+        # callback.
+        PyObject *resp = NULL;
+        if method == Py_None:
+            # fixme, this surely cannot happen?
+            assert 0
+            resp = PyObject_CallFunctionObjArgs(out, dev_pathdict, NULL)
+        else:
+            resp = getattr(out, method)(dev_pathdict)
+        if not resp:
+            print("calling cdrawings callback function/method failed!", file=sys.stderr)
+        dev.pathdict = None
+        return
+        
+    assert isinstance(dev.out, list)
     if len_ == 0:   # 1st path
         dev.out.append(dev.pathdict)
         dev.pathdict = dict()
         return
     thistype = dev.pathdict[ dictkey_type]
-    if thistype != "f" and thistype != "s":
+    if thistype != "f": # if not stroke, then append
         dev.out.append(dev.pathdict)
         dev.pathdict = dict()
         return
     prev = dev.out[ len_-1] # get prev path
     #log( '{prev=}')
     prevtype = prev[ dictkey_type]
-    if prevtype != "f" and prevtype != "s" or prevtype == thistype:
+    if prevtype != "f": # if previous not fill, append
         dev.out.append(dev.pathdict)
         dev.pathdict = dict()
         return
-    
+    # last check: there must be the same list of items for "f" and "s".
     previtems = prev[ dictkey_items]
     thisitems = dev.pathdict[ dictkey_items]
     if previtems != thisitems:
@@ -17346,13 +17536,17 @@ def jm_append_merge(dev):
         return
     else:
         print("could not merge stroke and fill path", file=sys.stderr)
-    #append:;
-    dev.out.append( dev.pathdict)
-    dev.pathdict = dict()
+        #append:;
+        dev.out.append( dev.pathdict)
+        dev.pathdict = dict()
+        return
 
 
 def jm_bbox_add_rect( dev, ctx, rect, code):
-    dev.result.append( (code, JM_py_from_rect(rect)) )
+    if not dev.layers:
+        dev.result.append( (code, JM_py_from_rect(rect)))
+    else:
+        dev.result.append( (code, JM_py_from_rect(rect), dev.layer_name))
 
 
 def jm_bbox_fill_image( dev, ctx, image, ctm, alpha, color_params):
@@ -17415,16 +17609,17 @@ def jm_bbox_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, 
 
 def jm_checkquad(dev):
     '''
-    Check whether the last 4 lines represent a rectangle or quad.
-    Because of how we count, the lines are a polyline already.
+    Check whether the last 4 lines represent a quad.
+    Because of how we count, the lines are a polyline already, i.e. last point
+    of a line equals 1st point of next line.
     So we check for a polygon (last line's end point equals start point).
-    If not true, we reduce dev_linecount by 1 and return.
-    If lines 1 / 3 resp 2 / 4 are parallel to the axes, we have a rect.
+    If not true we return 0.
     '''
     #log('{dev.pathdict=}')
     items = dev.pathdict[ dictkey_items]
     len_ = len(items)
-    f = [0] * 8
+    f = [0] * 8 # coordinates of the 4 corners
+    # fill the 8 floats in f, start from items[-4:]
     for i in range( 4): # store line start points
         line = items[ len_ - 4 + i]
         temp = JM_point_from_py( line[1])
@@ -17435,11 +17630,14 @@ def jm_checkquad(dev):
         # not a polygon!
         #dev.linecount -= 1
         return 0
+    
+    # we have detected a quad
     dev.linecount = 0   # reset this
+    # a quad item is ("qu", (ul, ur, ll, lr)), where the tuple items
+    # are pairs of floats representing a quad corner each.
     
     # relationship of float array to quad points:
     # (0, 1) = ul, (2, 3) = ll, (6, 7) = ur, (4, 5) = lr
-    
     q = mupdf.fz_make_quad(f[0], f[1], f[6], f[7], f[2], f[3], f[4], f[5])
     rect = ('qu', JM_py_from_quad(q))
     
@@ -17450,17 +17648,12 @@ def jm_checkquad(dev):
 
 def jm_checkrect(dev):
     '''
-    Check whether the last 3 path items represent a rectangle
-    The following conditions must be true. Note that the 3 lines already are
-    guaranteed to be a polyline, because of the way we are counting.
-    Line 1 and 3 must be horizontal, line 2 must be vertical.
-    If all is true, modify the path accordngly.
-    If the lines are not parallel to axes, generate a quad.
+    Check whether the last 3 path items represent a rectangle.
     Returns 1 if we have modified the path, otherwise 0.
     '''
     #log('{dev.pathdict=}')
     dev.linecount = 0   # reset line count
-    orientation = 0;
+    orientation = 0 # area orientation of rectangle
     items = dev.pathdict[ dictkey_items]
     len_ = len(items)
 
@@ -17473,11 +17666,12 @@ def jm_checkrect(dev):
     ur = JM_point_from_py( line2[ 1])
     ul = JM_point_from_py( line2[ 2])
 
-    #Assumption:
-    #For decomposing rects, MuPDF always starts with a horizontal line,
-    #followed by a vertical line, followed by a horizontal line.
-    #We will also check orientation of the enclosed area and add this info
-    #as '+1' for anti-clockwise, '-1' for clockwise orientation.
+    # Assumption:
+    # When decomposing rects, MuPDF always starts with a horizontal line,
+    # followed by a vertical line, followed by a horizontal line.
+    # First line: (ll, lr), third line: (ul, ur).
+    # If 1st line is below 3rd line, we record anti-clockwise (+1), else
+    # clockwise (-1) orientation.
     
     if (0
             or ll.y != lr.y
@@ -17644,11 +17838,12 @@ def jm_trace_text_span(dev, span, type_, ctm, colorspace, color, alpha, seqno):
     span_dict[ 'type'] = type_
     span_dict[ 'chars'] = chars
     span_dict[ 'bbox'] = JM_py_from_rect(span_bbox)
+    span_dict[ 'layer'] = dev.layer_name
     span_dict[ "seqno"] = seqno
     dev.out.append( span_dict)
 
 
-def jm_tracedraw_color(colorspace, color):
+def jm_lineart_color(colorspace, color):
     #log('{dev.pathdict=}')
     if colorspace:
         try:
@@ -17696,18 +17891,20 @@ def timings( fn):
             jlib.log_interval( timings_.__str__, caller=2, interval=4)
     return fn2
 
-def jm_tracedraw_drop_device(dev, ctx):
-    dev.out = None
+def jm_lineart_drop_device(dev, ctx):
+    if isinstance(dev.out, list):
+        dev.out = []
+    dev.scissors = []
  
-def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
-    #log(f'jm_tracedraw_fill_path(): dev.pathdict={dev.pathdict=}', file=sys.stderr)
+def jm_lineart_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
+    #log(f'jm_lineart_fill_path(): dev.pathdict={dev.pathdict=}', file=sys.stderr)
     even_odd = True if even_odd else False
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
         dev.ctm = mupdf.FzMatrix( ctm)  # fz_concat(ctm, dev_ptm);
         dev.path_type = trace_device_FILL_PATH
-        jm_tracedraw_path( dev, ctx, path)
+        jm_lineart_path( dev, ctx, path)
         if dev.pathdict is None:
             return
         #item_count = len(dev.pathdict[ dictkey_items])
@@ -17717,10 +17914,14 @@ def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, al
         dev.pathdict[ "even_odd"] = even_odd
         dev.pathdict[ "fill_opacity"] = alpha
         dev.pathdict[ "closePath"] = False
-        dev.pathdict[ "fill"] = jm_tracedraw_color( colorspace, color)
+        dev.pathdict[ "fill"] = jm_lineart_color( colorspace, color)
         dev.pathdict[ dictkey_rect] = JM_py_from_rect(dev.pathrect)
         dev.pathdict[ "seqno"] = dev.seqno
         jm_append_merge(dev)
+        dev_pathdict[ 'layer'] = dev.layer_name
+        if dev.clips:
+            dev_pathdict[ 'level'] = dev.depth
+        jm_append_merge(out, dev.method)
         dev.seqno += 1
     except Exception as e:
         if g_exceptions_verbose:    exception_info()
@@ -17732,7 +17933,7 @@ def jm_tracedraw_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, al
 # 1 - stroke text (PDF Tr 1)
 # 3 - ignore text (PDF Tr 3)
 
-def jm_tracedraw_fill_text( dev, ctx, text, ctm, colorspace, color, alpha, color_params):
+def jm_lineart_fill_text( dev, ctx, text, ctm, colorspace, color, alpha, color_params):
     if 0:
         log(f'{type(ctx)=} {ctx=}')
         log(f'{type(dev)=} {dev=}')
@@ -17747,7 +17948,7 @@ def jm_tracedraw_fill_text( dev, ctx, text, ctm, colorspace, color, alpha, color
     dev.seqno += 1
 
 
-def jm_tracedraw_ignore_text(dev, text, ctm):
+def jm_lineart_ignore_text(dev, text, ctm):
     #log('{dev.pathdict=}')
     jm_trace_text(dev, text, 3, ctm, None, None, 1, dev.seqno)
     dev.seqno += 1
@@ -17839,9 +18040,16 @@ class Walker(mupdf.FzPathWalker2):
             if g_exceptions_verbose:    exception_info()
             raise
 
-def jm_tracedraw_path(dev, ctx, path):
+def jm_lineart_path(dev, ctx, path):
+    '''
+    Create the "items" list of the path dictionary
+    * either create or empty the path dictionary
+    * reset the end point of the path
+    * reset count of consecutive lines
+    * invoke fz_walk_path(), which create the single items
+    * if no items detected, empty path dict again
+    '''
     #log('{dev.pathdict=}')
-
     try:
         dev.pathrect = mupdf.FzRect( mupdf.FzRect.Fixed_INFINITE)
         dev.linecount = 0
@@ -17863,8 +18071,8 @@ def jm_tracedraw_path(dev, ctx, path):
         raise
 
 
-def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
-    #log(f'jm_tracedraw_stroke_path(): dev.pathdict={dev.pathdict}', file=sys.stderr)
+def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
+    #log(f'jm_lineart_stroke_path(): dev.pathdict={dev.pathdict}', file=sys.stderr)
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
@@ -17874,16 +18082,12 @@ def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, al
         dev.ctm = mupdf.FzMatrix( ctm)  # fz_concat(ctm, dev_ptm);
         dev.path_type = trace_device_STROKE_PATH;
 
-        if dev.pathdict is None:
-            dev.pathdict = dict()
-        if dev.pathdict is not None:
-            dev.pathdict['closePath'] = False
-        jm_tracedraw_path( dev, ctx, path)
+        jm_lineart_path( dev, ctx, path)
         if dev.pathdict is None:
             return
         dev.pathdict[ dictkey_type] = 's'
         dev.pathdict[ 'stroke_opacity'] = alpha
-        dev.pathdict[ 'color'] = jm_tracedraw_color( colorspace, color)
+        dev.pathdict[ 'color'] = jm_lineart_color( colorspace, color)
         dev.pathdict[ dictkey_width] = dev.pathfactor * stroke.linewidth
         dev.pathdict[ 'lineCap'] = (
                 stroke.start_cap,
@@ -17891,19 +18095,26 @@ def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, al
                 stroke.end_cap,
                 )
         dev.pathdict[ 'lineJoin'] = dev.pathfactor * stroke.linejoin
+        dev.pathdict[ 'fill'] = None
+        dev.pathdict[ 'fill_opacity'] = None
+        if 'closePath' not in dev.pathdict:
+            dev_pathdict['closePath'] = False
 
+        # output the "dashes" string
         if stroke.dash_len:
-            buff = mupdf.fz_new_buffer( 50)
-            mupdf.fz_append_string( buff, "[ ")
+            buff = mupdf.fz_new_buffer( 256)
+            mupdf.fz_append_string( buff, "[ ") # left bracket
             # fixme: this does not use fz_append_printf()'s special handling of %g etc.
             for i in range( stroke.dash_len):
-                mupdf.fz_append_string( buff, f'{dev.pathfactor * stroke.dash_list[i]:g}')
+                mupdf.fz_append_string( buff, f'{dev.pathfactor * stroke.dash_list[i]:g} ')
             mupdf.fz_append_string( buff, f'] {dev.pathfactor * stroke.dash_phase:g}')
             dev.pathdict[ 'dashes'] = buff
         else:
             dev.pathdict[ 'dashes'] = '[] 0'
         dev.pathdict[ dictkey_rect] = JM_py_from_rect(dev.pathrect)
         dev.pathdict[ 'seqno'] = dev.seqno
+        if def.clips:
+            pathdict[ 'level'] = dev.depth
         jm_append_merge(dev)
         dev.seqno += 1
     
@@ -17912,7 +18123,80 @@ def jm_tracedraw_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, al
         raise
 
 
-def jm_tracedraw_stroke_text(dev, ctx, text, stroke, ctm, colorspace, color, alpha, color_params):
+def jm_lineart_clip_path(dev, path, even_odd, ctm, scissor):
+   if not dev.clips:
+       return
+   out = dev.out
+   dev.ctm = ctm    # fz_concat(ctm, trace_device_ptm);
+   dev.path_type = trace_device_CLIP_PATH
+   jm_lineart_path(dev, path)
+   dev_pathdict[ dictkey_type] = 'clip'
+   dev_pathdict[ 'even_odd'] = bool(even_odd)
+   if 'closePath' not in dev_pathdict:
+       dev_pathdict['closePath'] = False
+   }
+   dev_pathdict['scissor' = JM_py_from_rect(compute_scissor())
+   dev_pathdict['level' = dev->depth
+   dev_pathdict['"layer' = layer_name
+   jm_append_merge(out, dev.method)
+   dev.depth += 1
+
+dev jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
+   if not dev.clips:
+       return
+   out = dev.out
+   dev.ctm = ctm    # fz_concat(ctm, trace_device_ptm);
+   dev.path_type = trace_device_CLIP_STROKE_PATH
+   jm_lineart_path(dev, path)
+   dev_pathdict['dictkey_type'] = 'clip'
+   dev_pathdict['even_odd' = None
+   if 'closePath' not in dev_pathdict:
+       dev_pathdict['closePath' = False
+   dev_pathdict['scissor'] = JM_py_from_rect(compute_scissor())
+   dev_pathdict['level'] = dev.depth
+   dev_pathdict['layer'] = layer_name
+   jm_append_merge(out, dev.method)
+   dev.depth += 1
+
+
+def jm_lineart_pop_clip(dev):
+    if not dev.clips:
+        return
+    len_ = len(scissors)
+    del scissors[-1]
+    dev.depth -= 1
+
+
+def jm_lineart_begin_layer(dev, name):
+   dev.layer_name = name
+
+def jm_lineart_end_layer(dev):
+   dev.layer_name = None
+
+def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
+    if not dev.clips:
+        return;
+    out = dev.out
+    dev_pathdict = { #Py_BuildValue("{s:s,s:N,s:N,s:N,s:s,s:f,s:i,s:s}",
+            "type": "group",
+            "rect": JM_py_from_rect(bbox),
+            "isolated": bool(isolated),
+            "knockout": bool(knockout),
+            "blendmode": mupdf.fz_blendmode_name(blendmode),
+            "opacity": alpha,
+            "level": dev.depth,
+            "layer": dev.layer_name,
+            }
+    jm_append_merge(out, dev.method)
+    dev.depth += 1
+
+def jm_lineart_end_group(dev):
+    if not dev.clips:
+        return
+    dev.depth -= 1
+
+
+def jm_lineart_stroke_text(dev, ctx, text, stroke, ctm, colorspace, color, alpha, color_params):
     jm_trace_text(dev, text, 1, ctm, colorspace, color, alpha, dev.seqno)
     dev.seqno += 1
 
@@ -17960,9 +18244,10 @@ class JM_image_reporter_Filter(mupdf.PdfFilterOptions2):
             return 0
 
 class JM_new_bbox_device_Device(mupdf.FzDevice2):
-    def __init__(self, result):
+    def __init__(self, result, layers):
         super().__init__()
         self.result = result
+        self.layers = layers
         self.use_virtual_fill_path()
         self.use_virtual_stroke_path()
         self.use_virtual_fill_text()
@@ -17971,6 +18256,9 @@ class JM_new_bbox_device_Device(mupdf.FzDevice2):
         self.use_virtual_fill_shade()
         self.use_virtual_fill_image()
         self.use_virtual_fill_image_mask()
+        
+        self.use_virtual_begin_layer()
+        self.use_virtual_end_layer()
 
     fill_path = jm_bbox_fill_path
     stroke_path = jm_bbox_stroke_path
@@ -17980,6 +18268,9 @@ class JM_new_bbox_device_Device(mupdf.FzDevice2):
     fill_shade = jm_bbox_fill_shade
     fill_image = jm_bbox_fill_image
     fill_image_mask = jm_bbox_fill_image_mask
+    
+    self.begin_layer = jm_lineart_begin_layer
+    self.end_layer = jm_lineart_end_layer
 
 class JM_new_output_fileptr_Output(mupdf.FzOutput2):
     def __init__(self, bio):
@@ -18004,35 +18295,109 @@ class JM_new_output_fileptr_Output(mupdf.FzOutput2):
         data = mupdf.raw_to_python_bytes(data_raw, data_length)
         return self.bio.write(data)
 
-class JM_new_tracedraw_device_Device(mupdf.FzDevice2):
-    def __init__(self, out, ptm):
+def fz_rect compute_scissor(dev):
+    '''
+    Every scissor of a clip is a sub rectangle of the preceeding clip scissor
+    if the clip level is larger.
+    '''
+    
+    PyObject *last_scissor = NULL;
+    fz_rect scissor;
+    if dev.scissors is None:
+        dev.scissors = list()
+    num_scissors = len(dev.scissors)
+    if num_scissors > 0:
+        last_scissor = scissors[num_scissors-1]
+        scissor = JM_rect_from_py(last_scissor)
+        scissor = mupdf.fz_intersect_rect(scissor, dev_pathrect)
+    else:
+        scissor = dev.pathrect
+    scissors.append(JM_py_from_rect(scissor))
+    return scissor
+
+class JM_new_lineart_device_Device(mupdf.FzDevice2):
+    '''
+    LINEART device for Python method Page.get_cdrawings()
+    '''
+    def __init__(self, out, clips, method):
         super().__init__()
         # fixme: this results in "Unexpected call of unimplemented virtual_fnptrs fn FzDevice2::drop_device().".
         #self.use_virtual_drop_device()
         self.use_virtual_fill_path()
         self.use_virtual_stroke_path()
-        self.use_virtual_fill_text()
-        self.use_virtual_stroke_text()
-        self.use_virtual_ignore_text()
+        self.use_virtual_clip_path()
+        self.use_virtual_clip_stroke_path()
+        
+        self.use_virtual_fill_text
+        self.use_virtual_stroke_text
+        self.use_virtual_ignore_text
+        
         self.use_virtual_fill_shade()
         self.use_virtual_fill_image()
         self.use_virtual_fill_image_mask()
+        
+        self.use_virtual_pop_clip()
+        
+        self.use_virtual_begin_group()
+        self.use_virtual_end_group()
+        
+        self.use_virtual_begin_layer()
+        self.use_virtual_end_layer()
+        
         self.out = out
-        self.ptm = ptm
-        self.pathdict = None
         self.seqno = 0
+        self.depth = 0
+        self.clips = clips
+        self.method = method
+        
+        self.scissors = None
+        self.layer_name = None  # optional content name
+        self.pathrect = None
+        
+        self.dev_linewidth = 0
+        self.trace_device_ptm = mupdf.Matrix()
+        self.trace_device_ctm = mupdf.Matrix()
+        self.trace_device_rot = mupdf.Matrix()
+        self.lastpoint.x = 0
+        self.lastpoint.y = 0
+        self.pathrect.x0 = 0
+        self.pathrect.y0 = 0
+        self.pathrect.x1 = 0
+        self.pathrect.y1 = 0
+        self.pathfactor = 0
+        self.linecount = 0
+        self.path_type = 0
+    
+    #drop_device = jm_lineart_drop_device
+    
+    fill_path           = jm_lineart_fill_path
+    stroke_path         = jm_lineart_stroke_path
+    clip_path           = jm_lineart_clip_path
+    clip_stroke_path    = jm_lineart_clip_stroke_path
+    
+    fill_text           = jm_lineart_fill_text
+    stroke_text         = jm_lineart_stroke_text
+    ignore_text         = jm_lineart_ignore_text
+    
+    fill_shade          = jm_lineart_fill_shade
+    fill_image          = jm_lineart_fill_image
+    fill_image_mask     = jm_lineart_fill_image_mask
+    
+    pop_clip            = jm_lineart_pop_clip
+    
+    begin_group         = jm_lineart_begin_group
+    end_group           = jm_lineart_end_group
+    
+    begin_layer         = jm_lineart_begin_layer
+    end_layer           = jm_lineart_end_layer
+    
 
-    #drop_device = jm_tracedraw_drop_device
-    fill_path = jm_tracedraw_fill_path
-    stroke_path = jm_tracedraw_stroke_path
-    fill_text = jm_increase_seqno
-    stroke_text = jm_increase_seqno
-    ignore_text = jm_increase_seqno
-    fill_shade = jm_increase_seqno
-    fill_image = jm_increase_seqno
-    fill_image_mask = jm_increase_seqno
 
-class JM_new_tracetext_device_Device(mupdf.FzDevice2):
+
+class JM_new_texttrace_device(mupdf.FzDevice2):
+    '''
+    Trace TEXT device for Python method Page.get_texttrace()
+    '''
     def __init__(self, out, rot, ptm):
         super().__init__()
         self.use_virtual_fill_path()
@@ -18043,21 +18408,49 @@ class JM_new_tracetext_device_Device(mupdf.FzDevice2):
         self.use_virtual_fill_shade()
         self.use_virtual_fill_image()
         self.use_virtual_fill_image_mask()
+        
+        self.use_virtual_begin_layer()
+        self.use_virtual_end_layer()
+        
         self.out = out
+        
+        dev.seqno = 0
+        dev.depth = 0
+        dev.clips = 0
+        dev.method = None
+        
         self.rot = rot
         self.ptm = ptm
         self.linewidth = 0
         self.seqno = 0
 
+        self.pathdict = dict()
+        self.scissors = list()
+        self.dev_linewidth = 0
+        self.trace_device_ptm = mupdf.Matrix()
+        self.trace_device_ctm = mupdf.Matrix()
+        self.trace_device_rot = mupdf.Matrix()
+        self.lastpoint.x = 0
+        self.lastpoint.y = 0
+        self.pathrect.x0 = 0
+        self.pathrect.y0 = 0
+        self.pathrect.x1 = 0
+        self.pathrect.y1 = 0
+        self.pathfactor = 0
+        self.linecount = 0
+        self.path_type = 0
+    
     fill_path = jm_increase_seqno;
     stroke_path = jm_dev_linewidth
-    fill_text = jm_tracedraw_fill_text
-    stroke_text = jm_tracedraw_stroke_text
-    ignore_text = jm_tracedraw_ignore_text
+    fill_text = jm_lineart_fill_text
+    stroke_text = jm_lineart_stroke_text
+    ignore_text = jm_lineart_ignore_text
     fill_shade = jm_increase_seqno
     fill_image = jm_increase_seqno
     fill_image_mask = jm_increase_seqno
-
+    
+    begin_layer = jm_lineart_begin_layer
+    end_layer = jm_lineart_end_layer
 
 
 #g_timings.mid()
@@ -19877,6 +20270,8 @@ def strip_outlines(doc, outlines, page_count, page_object_nums, names_list):
 
 trace_device_FILL_PATH = 1
 trace_device_STROKE_PATH = 2
+trace_device_CLIP_PATH = 3
+trace_device_CLIP_STROKE_PATH = 4
 
 
 def unicode_to_glyph_name(ch: int) -> str:
