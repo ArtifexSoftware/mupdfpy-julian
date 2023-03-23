@@ -8462,9 +8462,9 @@ class Page:
         prect = mupdf.fz_bound_page(page)
         trace_device_ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
         if callable(callback) or method is not None:
-            dev = JM_new_lineart_device(callback, clips, method)
+            dev = JM_new_lineart_device_Device(callback, clips, method)
         else:
-            dev = JM_new_lineart_device(rc, clips, method)
+            dev = JM_new_lineart_device_Device(rc, clips, method)
         mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device(dev)
 
@@ -8472,7 +8472,7 @@ class Page:
             self.set_rotation(old_rotation)
         if callable(callback) or method is not None:
             return
-        return val
+        return rc
 
     def get_contents(self):
         """Get xrefs of /Contents objects."""
@@ -16029,9 +16029,9 @@ def JM_mupdf_error( message):
         sys.stderr.write(f'mupdfpy error: {message}\n')
 
 
-def JM_new_bbox_device(result):
-    assert isinstance(result, list)
-    return JM_new_bbox_device_Device( result)
+def JM_new_bbox_device(rc, inc_layers):
+    assert isinstance(rc, list)
+    return JM_new_bbox_device_Device( rc, inc_layers)
 
 
 def JM_new_buffer_from_stext_page(page):
@@ -17461,7 +17461,7 @@ def image_profile(img: typing.ByteString) -> dict:
     return TOOLS.image_profile(stream)
 
 
-def jm_append_merge(dev, method):
+def jm_append_merge(dev):
     '''
     Append current path to list or merge into last path of the list.
     (1) Append if first path, different item lists or not a 'stroke' version
@@ -17473,44 +17473,41 @@ def jm_append_merge(dev, method):
     #log('{dev.pathdict=}')
     assert isinstance(dev.out, list)
     
-    len_ = len(dev.out)
-    if callable(method) or method:  # function or method
+    if callable(dev.method) or dev.method:  # function or method
         # callback.
-        if method == Py_None:
+        if dev.method == Py_None:
             # fixme, this surely cannot happen?
             assert 0
-            resp = PyObject_CallFunctionObjArgs(out, dev_pathdict, NULL)
+            resp = PyObject_CallFunctionObjArgs(out, dev.pathdict, NULL)
         else:
-            resp = getattr(out, method)(dev_pathdict)
+            resp = getattr(dev.out, dev.method)(dev.pathdict)
         if not resp:
             print("calling cdrawings callback function/method failed!", file=sys.stderr)
         dev.pathdict = None
         return
-        
+    
+    def append():
+        dev.out.append(dev.pathdict)
+        dev.pathdict = dict()
     assert isinstance(dev.out, list)
-    if len_ == 0:   # 1st path
-        dev.out.append(dev.pathdict)
-        dev.pathdict = dict()
-        return
+    len_ = len(dev.out) # len of output list so far
+    if len_ == 0:   # always append first path
+        return append()
+    print(f'{dev.pathdict=}')
     thistype = dev.pathdict[ dictkey_type]
-    if thistype != "f": # if not stroke, then append
-        dev.out.append(dev.pathdict)
-        dev.pathdict = dict()
-        return
+    if thistype != 's': # if not stroke, then append
+        return append()
     prev = dev.out[ len_-1] # get prev path
     #log( '{prev=}')
     prevtype = prev[ dictkey_type]
-    if prevtype != "f": # if previous not fill, append
-        dev.out.append(dev.pathdict)
-        dev.pathdict = dict()
-        return
+    if prevtype != 'f': # if previous not fill, append
+        return append()
     # last check: there must be the same list of items for "f" and "s".
     previtems = prev[ dictkey_items]
     thisitems = dev.pathdict[ dictkey_items]
     if previtems != thisitems:
-        dev.out.append(dev.pathdict)
-        dev.pathdict = dict()
-        return
+        return append()
+    
     #rc = PyDict_Merge(dev.pathdict, prev, 0);  // merge, do not override
     try:
         for k, v in prev.items():
@@ -17528,10 +17525,7 @@ def jm_append_merge(dev, method):
         return
     else:
         print("could not merge stroke and fill path", file=sys.stderr)
-        #append:;
-        dev.out.append( dev.pathdict)
-        dev.pathdict = dict()
-        return
+        return append()
 
 
 def jm_bbox_add_rect( dev, ctx, rect, code):
@@ -17910,10 +17904,10 @@ def jm_lineart_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alph
         dev.pathdict[ dictkey_rect] = JM_py_from_rect(dev.pathrect)
         dev.pathdict[ "seqno"] = dev.seqno
         jm_append_merge(dev)
-        dev_pathdict[ 'layer'] = dev.layer_name
+        dev.pathdict[ 'layer'] = dev.layer_name
         if dev.clips:
-            dev_pathdict[ 'level'] = dev.depth
-        jm_append_merge(out, dev.method)
+            dev.pathdict[ 'level'] = dev.depth
+        jm_append_merge(dev)
         dev.seqno += 1
     except Exception as e:
         if g_exceptions_verbose:    exception_info()
@@ -18090,7 +18084,7 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
         dev.pathdict[ 'fill'] = None
         dev.pathdict[ 'fill_opacity'] = None
         if 'closePath' not in dev.pathdict:
-            dev_pathdict['closePath'] = False
+            dev.pathdict['closePath'] = False
 
         # output the "dashes" string
         if stroke.dash_len:
@@ -18122,15 +18116,15 @@ def jm_lineart_clip_path(dev, path, even_odd, ctm, scissor):
    dev.ctm = ctm    # fz_concat(ctm, trace_device_ptm);
    dev.path_type = trace_device_CLIP_PATH
    jm_lineart_path(dev, path)
-   dev_pathdict[ dictkey_type] = 'clip'
-   dev_pathdict[ 'even_odd'] = bool(even_odd)
-   if 'closePath' not in dev_pathdict:
-       dev_pathdict['closePath'] = False
+   dev.pathdict[ dictkey_type] = 'clip'
+   dev.pathdict[ 'even_odd'] = bool(even_odd)
+   if 'closePath' not in dev.pathdict:
+       dev.pathdict['closePath'] = False
    
-   dev_pathdict['scissor'] = JM_py_from_rect(compute_scissor())
-   dev_pathdict['level'] = dev.depth
-   dev_pathdict['"layer'] = layer_name
-   jm_append_merge(out, dev.method)
+   dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor())
+   dev.pathdict['level'] = dev.depth
+   dev.pathdict['"layer'] = layer_name
+   jm_append_merge(dev)
    dev.depth += 1
 
 def jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
@@ -18140,14 +18134,14 @@ def jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
    dev.ctm = ctm    # fz_concat(ctm, trace_device_ptm);
    dev.path_type = trace_device_CLIP_STROKE_PATH
    jm_lineart_path(dev, path)
-   dev_pathdict['dictkey_type'] = 'clip'
-   dev_pathdict['even_odd'] = None
-   if 'closePath' not in dev_pathdict:
-       dev_pathdict['closePath'] = False
-   dev_pathdict['scissor'] = JM_py_from_rect(compute_scissor())
-   dev_pathdict['level'] = dev.depth
-   dev_pathdict['layer'] = layer_name
-   jm_append_merge(out, dev.method)
+   dev.pathdict['dictkey_type'] = 'clip'
+   dev.pathdict['even_odd'] = None
+   if 'closePath' not in dev.pathdict:
+       dev.pathdict['closePath'] = False
+   dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor())
+   dev.pathdict['level'] = dev.depth
+   dev.pathdict['layer'] = layer_name
+   jm_append_merge(dev)
    dev.depth += 1
 
 
@@ -18169,7 +18163,7 @@ def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
     if not dev.clips:
         return;
     out = dev.out
-    dev_pathdict = { #Py_BuildValue("{s:s,s:N,s:N,s:N,s:s,s:f,s:i,s:s}",
+    dev.pathdict = { #Py_BuildValue("{s:s,s:N,s:N,s:N,s:s,s:f,s:i,s:s}",
             "type": "group",
             "rect": JM_py_from_rect(bbox),
             "isolated": bool(isolated),
@@ -18179,7 +18173,7 @@ def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
             "level": dev.depth,
             "layer": dev.layer_name,
             }
-    jm_append_merge(out, dev.method)
+    jm_append_merge(dev)
     dev.depth += 1
 
 def jm_lineart_end_group(dev):
@@ -18345,15 +18339,11 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
         self.pathrect = None
         
         self.dev_linewidth = 0
-        self.trace_device_ptm = mupdf.Matrix()
-        self.trace_device_ctm = mupdf.Matrix()
-        self.trace_device_rot = mupdf.Matrix()
-        self.lastpoint.x = 0
-        self.lastpoint.y = 0
-        self.pathrect.x0 = 0
-        self.pathrect.y0 = 0
-        self.pathrect.x1 = 0
-        self.pathrect.y1 = 0
+        self.trace_device_ptm = mupdf.FzMatrix()
+        self.trace_device_ctm = mupdf.FzMatrix()
+        self.trace_device_rot = mupdf.FzMatrix()
+        self.lastpoint = mupdf.FzPoint()
+        self.pathrect = mupdf.FzRect()
         self.pathfactor = 0
         self.linecount = 0
         self.path_type = 0
@@ -18418,12 +18408,8 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
         self.trace_device_ptm = mupdf.Matrix()
         self.trace_device_ctm = mupdf.Matrix()
         self.trace_device_rot = mupdf.Matrix()
-        self.lastpoint.x = 0
-        self.lastpoint.y = 0
-        self.pathrect.x0 = 0
-        self.pathrect.y0 = 0
-        self.pathrect.x1 = 0
-        self.pathrect.y1 = 0
+        self.lastpoint = mupdf.FzPoint()
+        self.pathrect = mupdf.FzRect()
         self.pathfactor = 0
         self.linecount = 0
         self.path_type = 0
