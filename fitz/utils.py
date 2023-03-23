@@ -1994,23 +1994,27 @@ def draw_zigzag(
 
 
 def draw_rect(
-    page: fitz.Page,
-    rect: rect_like,
-    color: OptSeq = (0,),
-    fill: OptSeq = None,
-    dashes: OptStr = None,
-    width: float = 1,
-    lineCap: int = 0,
-    lineJoin: int = 0,
-    morph: OptSeq = None,
-    overlay: bool = True,
-    stroke_opacity: float = 1,
-    fill_opacity: float = 1,
-    oc: int = 0,
-) -> fitz.Point:
-    """Draw a rectangle."""
+        page: fitz.Page,
+        rect: rect_like,
+        color: OptSeq = (0,),
+        fill: OptSeq = None,
+        dashes: OptStr = None,
+        width: float = 1,
+        lineCap: int = 0,
+        lineJoin: int = 0,
+        morph: OptSeq = None,
+        overlay: bool = True,
+        stroke_opacity: float = 1,
+        fill_opacity: float = 1,
+        oc: int = 0,
+        radius=None,
+        )
+        -> fitz.Point:
+    '''
+    Draw a rectangle. See Shape class method for details.
+    '''
     img = page.new_shape()
-    Q = img.draw_rect(fitz.Rect(rect))
+    Q = img.draw_rect(fitz.Rect(rect), radius=radius)
     img.finish(
         color=color,
         fill=fill,
@@ -3306,14 +3310,55 @@ class Shape:
         self.lastPoint = Q
         return self.lastPoint
 
-    def draw_rect(self, rect: rect_like) -> fitz.Point:
-        """Draw a rectangle."""
-        r = fitz.Rect(rect)
-        self.draw_cont += "%g %g %g %g re\n" % fitz.JM_TUPLE(
-            list(r.bl * self.ipctm) + [r.width, r.height]
-        )
+    def draw_rect(self, rect: rect_like, *, radius=None) -> Point:
+        """Draw a rectangle.
+
+        Args:
+            radius: if not None, the rectangle will have rounded corners.
+                This is the radius of the curvature, given as percentage of
+                the rectangle width or height. Valid are values 0 < v <= 0.5.
+                For a sequence of two values, the corners will have different
+                radii. Otherwise, the percentage will be computed from the
+                shorter side. A value of (0.5, 0.5) will draw an ellipse.
+        """
+        r = Rect(rect)
+        if radius == None:  # standard rectangle
+            self.draw_cont += "%g %g %g %g re\n" % JM_TUPLE(
+                list(r.bl * self.ipctm) + [r.width, r.height]
+            )
+            self.updateRect(r)
+            self.lastPoint = r.tl
+            return self.lastPoint
+        # rounded corners requested. This requires 1 or 2 values, each
+        # with 0 < value <= 0.5
+        if hasattr(radius, "__float__"):
+            if radius <= 0 or radius > 0.5:
+                raise ValueError(f"bad radius value {radius}.")
+            d = min(r.width, r.height) * radius
+            px = (d, 0)
+            py = (0, d)
+        elif hasattr(radius, "__len__") and len(radius) == 2:
+            rx, ry = radius
+            px = (rx * r.width, 0)
+            py = (0, ry * r.height)
+            if min(rx, ry) <= 0 or max(rx, ry) > 0.5:
+                raise ValueError(f"bad radius value {radius}.")
+        else:
+            raise ValueError(f"bad radius value {radius}.")
+
+        lp = self.draw_line(r.tl + py, r.bl - py)
+        lp = self.draw_curve(lp, r.bl, r.bl + px)
+
+        lp = self.draw_line(lp, r.br - px)
+        lp = self.draw_curve(lp, r.br, r.br - py)
+
+        lp = self.draw_line(lp, r.tr + py)
+        lp = self.draw_curve(lp, r.tr, r.tr - px)
+
+        lp = self.draw_line(lp, r.tl + px)
+        self.lastPoint = self.draw_curve(lp, r.tl, r.tl + py)
+
         self.updateRect(r)
-        self.lastPoint = r.tl
         return self.lastPoint
 
     def draw_quad(self, quad: quad_like) -> fitz.Point:
