@@ -3212,7 +3212,7 @@ class Shape:
     def draw_circle(self, center: point_like, radius: float) -> fitz.Point:
         """Draw a circle given its center and radius."""
         if not radius > fitz.EPSILON:
-            raise ValueError("radius must be postive")
+            raise ValueError("radius must be positive")
         center = fitz.Point(center)
         p1 = center - (radius, 0)
         return self.draw_sector(center, p1, 360, fullSector=False)
@@ -5004,7 +5004,7 @@ def recover_quad(line_dir: tuple, span: dict) -> fitz.Quad:
         line_dir: (tuple) 'line["dir"]' of the owning line.
         span: the span.
     Returns:
-        The quadrilateral envelopping the span's text.
+        The quadrilateral enveloping the span's text.
     """
     if type(line_dir) is not tuple or len(line_dir) != 2:
         raise ValueError("bad line dir argument")
@@ -5113,7 +5113,7 @@ def recover_char_quad(line_dir: tuple, span: dict, char: dict) -> fitz.Quad:
         span: (dict) the span dict.
         char: (dict) the character dict.
     Returns:
-        The quadrilateral envelopping the character.
+        The quadrilateral enveloping the character.
     """
     if line_dir == None:
         line_dir = span["dir"]

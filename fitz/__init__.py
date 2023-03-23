@@ -4679,7 +4679,7 @@ class Document:
         return last_loc.chapter, last_loc.page
 
     def layer_ui_configs(self):
-        """Show OC visibility status modifyable by user."""
+        """Show OC visibility status modifiable by user."""
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_layer_ui_configs(self)
