@@ -3320,9 +3320,9 @@ class Shape:
                 radii. Otherwise, the percentage will be computed from the
                 shorter side. A value of (0.5, 0.5) will draw an ellipse.
         """
-        r = Rect(rect)
+        r = fitz.Rect(rect)
         if radius == None:  # standard rectangle
-            self.draw_cont += "%g %g %g %g re\n" % JM_TUPLE(
+            self.draw_cont += "%g %g %g %g re\n" % fitz.JM_TUPLE(
                 list(r.bl * self.ipctm) + [r.width, r.height]
             )
             self.updateRect(r)

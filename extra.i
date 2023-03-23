@@ -1748,6 +1748,7 @@ struct jm_tracedraw_device
     int linewidth = 0;
     fz_matrix rot = {};
     fz_matrix ptm = {};
+    const char* layer_name = NULL;
 };
 
 // need own versions of ascender / descender
@@ -2110,14 +2111,26 @@ jm_tracedraw_ignore_text(
     dev->seqno += 1;
 }
 
-mupdf::FzDevice JM_new_tracetext_device(PyObject* out, fz_matrix* rot, fz_matrix* ptm)
+static void
+jm_lineart_begin_layer(fz_context *ctx, fz_device *dev_, const char *name)
+{
+    jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
+    dev->layer_name = name;
+}
+
+static void
+jm_lineart_end_layer(fz_context *ctx, fz_device *dev_)
+{
+    jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
+    dev->layer_name = NULL;
+}
+
+
+mupdf::FzDevice JM_new_texttrace_device(PyObject* out)
 {
     mupdf::FzDevice device(sizeof(jm_tracedraw_device));
     jm_tracedraw_device* dev = (jm_tracedraw_device*) device.m_internal;
     
-    dev->rot = *rot;
-    dev->ptm = *ptm;
-
     dev->super.close_device = nullptr;    
     dev->super.drop_device = jm_tracedraw_drop_device;    
     dev->super.fill_path = jm_fill_path;
@@ -2146,8 +2159,8 @@ mupdf::FzDevice JM_new_tracetext_device(PyObject* out, fz_matrix* rot, fz_matrix
     dev->super.begin_tile = nullptr;
     dev->super.end_tile = nullptr;
 
-    dev->super.begin_layer = nullptr;
-    dev->super.end_layer = nullptr;
+    dev->super.begin_layer = jm_lineart_begin_layer;
+    dev->super.end_layer = jm_lineart_end_layer;
 
     dev->super.render_flags = nullptr;
     dev->super.set_default_colorspaces = nullptr;
@@ -2295,4 +2308,4 @@ int ll_fz_absi(int i);
 
 static std::string getMetadata(mupdf::FzDocument& doc, const char* key);
 
-mupdf::FzDevice JM_new_tracetext_device(PyObject* out, fz_matrix* rot, fz_matrix* ptm);
+mupdf::FzDevice JM_new_texttrace_device(PyObject* out);

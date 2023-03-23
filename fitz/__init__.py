@@ -8849,13 +8849,13 @@ class Page:
         page = self.this
         rc = []
         if g_use_extra:
-            dev = extra.JM_new_tracetext_device(
+            dev = extra.JM_new_texttrace_device(
                     rc,
                     #rot=mupdf.FzMatrix().internal(),
                     #ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1).internal(),
                     )
         else:
-            dev = JM_new_tracetext_device_Device(
+            dev = JM_new_texttrace_device(
                     rc,
                     #rot=mupdf.FzMatrix(),
                     #ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1),
@@ -18388,7 +18388,7 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
     '''
     Trace TEXT device for Python method Page.get_texttrace()
     '''
-    def __init__(self, out, rot, ptm):
+    def __init__(self, out):
         super().__init__()
         self.use_virtual_fill_path()
         self.use_virtual_stroke_path()
@@ -18409,8 +18409,6 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
         dev.clips = 0
         dev.method = None
         
-        self.rot = rot
-        self.ptm = ptm
         self.linewidth = 0
         self.seqno = 0
 
