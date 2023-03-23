@@ -664,7 +664,7 @@ class Annot:
         options = mupdf.FzStextOptions()
         options.flags = flags
         annot = self.this
-        stextpage = mupdf.pdf_new_stext_page_from_annot(annot, options)
+        stextpage = mupdf.FzStextPage(annot, options)
         return TextPage(stextpage)
 
     @property
