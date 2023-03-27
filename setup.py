@@ -505,7 +505,7 @@ def build_mupdf_windows():
         windows_build_dir = f'{mupdf_local}\\{windows_build_tail}'
         #log( f'Building mupdf.')
         shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
-        vs = pipcl.WindowsVS()
+        vs = pipcl.wdev.WindowsVS()
         command = f'cd {mupdf_local}'
         command += F' && {sys.executable} ./scripts/mupdfwrap.py -d {windows_build_tail} -b --refcheck-if "#if 1" --devenv "{vs.devenv}" all'
         if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
