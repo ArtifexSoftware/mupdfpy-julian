@@ -18394,10 +18394,10 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
         
         self.out = out
         
-        dev.seqno = 0
-        dev.depth = 0
-        dev.clips = 0
-        dev.method = None
+        self.seqno = 0
+        self.depth = 0
+        self.clips = 0
+        self.method = None
         
         self.linewidth = 0
         self.seqno = 0
@@ -20631,7 +20631,7 @@ class TOOLS:
                 try:
                     da = mupdf.pdf_dict_get_inheritable( this_annot_obj, PDF_NAME('DA'))
                     if not da.m_internal:
-                        trailer = mupdf.pdf_trailer(this_annot.pdf_apdf)
+                        trailer = mupdf.pdf_trailer(pdf)
                         da = mupdf.pdf_dict_getl(trailer,
                                 PDF_NAME('Root'),
                                 PDF_NAME('AcroForm'),
