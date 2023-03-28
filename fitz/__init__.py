@@ -17910,7 +17910,7 @@ def jm_lineart_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alph
         dev.pathdict[ dictkey_type] ="f"
         dev.pathdict[ "even_odd"] = even_odd
         dev.pathdict[ "fill_opacity"] = alpha
-        log(f'setting dev.pathdict[ "closePath"] to false')
+        #log(f'setting dev.pathdict[ "closePath"] to false')
         #dev.pathdict[ "closePath"] = False
         dev.pathdict[ "fill"] = jm_lineart_color( colorspace, color)
         dev.pathdict[ dictkey_rect] = JM_py_from_rect(dev.pathrect)
@@ -18042,7 +18042,7 @@ class Walker(mupdf.FzPathWalker2):
                 if jm_checkrect(self.dev):
                     log(f'end1: {self.dev.pathdict=}')
                     return
-            log('setting self.dev.pathdict[ "closePath"] to true')
+            #log('setting self.dev.pathdict[ "closePath"] to true')
             self.dev.pathdict[ "closePath"] = True
             self.dev.linecount = 0   # reset # of consec. lines
             log(f'end2: {self.dev.pathdict=}')
@@ -18108,7 +18108,7 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
         dev.pathdict[ 'fill'] = None
         dev.pathdict[ 'fill_opacity'] = None
         if 'closePath' not in dev.pathdict:
-            log('setting dev.pathdict["closePath"] to false')
+            #log('setting dev.pathdict["closePath"] to false')
             dev.pathdict['closePath'] = False
 
         # output the "dashes" string
@@ -18123,6 +18123,7 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
         else:
             dev.pathdict[ 'dashes'] = '[] 0'
         dev.pathdict[ dictkey_rect] = JM_py_from_rect(dev.pathrect)
+        dev.pathdict['layer'] = dev.layer_name
         dev.pathdict[ 'seqno'] = dev.seqno
         if dev.clips:
             pathdict[ 'level'] = dev.depth
@@ -18145,12 +18146,12 @@ def jm_lineart_clip_path(dev, path, even_odd, ctm, scissor):
    dev.pathdict[ dictkey_type] = 'clip'
    dev.pathdict[ 'even_odd'] = bool(even_odd)
    if 'closePath' not in dev.pathdict:
-       log(f'setting dev.pathdict["closePath"] to False')
+       #log(f'setting dev.pathdict["closePath"] to False')
        dev.pathdict['closePath'] = False
    
    dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor())
    dev.pathdict['level'] = dev.depth
-   dev.pathdict['"layer'] = layer_name
+   dev.pathdict['layer'] = dev.layer_name
    jm_append_merge(dev)
    dev.depth += 1
 
@@ -18165,11 +18166,11 @@ def jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
    dev.pathdict['dictkey_type'] = 'clip'
    dev.pathdict['even_odd'] = None
    if 'closePath' not in dev.pathdict:
-       log(f'setting dev.pathdict["closePath"] to False')
+       #log(f'setting dev.pathdict["closePath"] to False')
        dev.pathdict['closePath'] = False
    dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor())
    dev.pathdict['level'] = dev.depth
-   dev.pathdict['layer'] = layer_name
+   dev.pathdict['layer'] = dev.layer_name
    jm_append_merge(dev)
    dev.depth += 1
 
