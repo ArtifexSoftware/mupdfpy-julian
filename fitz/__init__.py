@@ -8464,12 +8464,13 @@ class Page:
         rc = []
         clips = True if extended else False
         prect = mupdf.fz_bound_page(page)
-        trace_device_ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
+        #trace_device_ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
         #log(f'Calling JM_new_lineart_device_Device(). {callback=} {method=}')
         if callable(callback) or method is not None:
             dev = JM_new_lineart_device_Device(callback, clips, method)
         else:
             dev = JM_new_lineart_device_Device(rc, clips, method)
+        dev.ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
         mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device(dev)
 
@@ -18372,9 +18373,9 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
         self.pathrect = None
         
         self.dev_linewidth = 0
-        self.trace_device_ptm = mupdf.FzMatrix()
-        self.trace_device_ctm = mupdf.FzMatrix()
-        self.trace_device_rot = mupdf.FzMatrix()
+        self.ptm = mupdf.FzMatrix()
+        self.ctm = mupdf.FzMatrix()
+        self.rot = mupdf.FzMatrix()
         self.lastpoint = mupdf.FzPoint()
         self.pathrect = mupdf.FzRect()
         self.pathfactor = 0
@@ -18438,14 +18439,15 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
         self.pathdict = dict()
         self.scissors = list()
         self.dev_linewidth = 0
-        self.trace_device_ptm = mupdf.Matrix()
-        self.trace_device_ctm = mupdf.Matrix()
-        self.trace_device_rot = mupdf.Matrix()
+        self.ptm = mupdf.FzMatrix()
+        self.ctm = mupdf.FzMatrix()
+        self.rot = mupdf.FzMatrix()
         self.lastpoint = mupdf.FzPoint()
         self.pathrect = mupdf.FzRect()
         self.pathfactor = 0
         self.linecount = 0
         self.path_type = 0
+        self.layer_name = None
     
     fill_path = jm_increase_seqno;
     stroke_path = jm_dev_linewidth
