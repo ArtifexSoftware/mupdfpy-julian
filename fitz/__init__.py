@@ -12039,7 +12039,7 @@ class TextPage:
                     linerect = mupdf.FzRect(mupdf.FzRect.Fixed_EMPTY)
                     for ch in line:
                         cbbox = JM_char_bbox(line, ch)
-                        if (not mupdf.fz_contains_rect(tp_rect, cbbox)
+                        if (not JM_rects_overlap(tp_rect, cbbox)
                                 and not mupdf.fz_is_infinite_rect(tp_rect)
                                 ):
                             continue
@@ -12050,7 +12050,7 @@ class TextPage:
                         mupdf.fz_append_byte(res, 10)
                     blockrect = mupdf.fz_union_rect(blockrect, linerect)
                 text = JM_EscapeStrFromBuffer(res)
-            elif (mupdf.fz_contains_rect(tp_rect, block.bbox)
+            elif (JM_rects_overlap(tp_rect, block.bbox)
                     or mupdf.fz_is_infinite_rect(tp_rect)
                     ):
                 img = block.i_image()
@@ -12188,7 +12188,7 @@ class TextPage:
                 buflen = 0                        # reset char counter
                 for ch in line:
                     cbbox = JM_char_bbox(line, ch)
-                    if (not mupdf.fz_contains_rect(tp_rect, cbbox)
+                    if (not JM_rects_overlap(tp_rect, cbbox)
                             and not mupdf.fz_is_infinite_rect(tp_rect)
                             ):
                         continue
@@ -14288,7 +14288,7 @@ def JM_copy_rectangle(page, area):
             line_had_text = 0
             for ch in line:
                 r = JM_char_bbox(line, ch)
-                if mupdf.fz_contains_rect(area, r):
+                if JM_rects_overlap(area, r):
                     line_had_text = 1
                     if need_new_line:
                         mupdf.fz_append_string(buffer_, "\n")
@@ -15757,7 +15757,7 @@ def JM_make_spanlist(line_dict, line, raw, buff, tp_rect):
     for ch in line:
         # start-trace
         r = JM_char_bbox(line, ch)
-        if (not mupdf.fz_contains_rect(tp_rect, r)
+        if (not JM_rects_overlap(tp_rect, r)
                 and not mupdf.fz_is_infinite_rect(tp_rect)
                 ):
             continue
@@ -16096,7 +16096,7 @@ def JM_new_buffer_from_stext_page(page):
         if block.m_internal.type == mupdf.FZ_STEXT_BLOCK_TEXT:
             for line in block:
                 for ch in line:
-                    if (not mupdf.fz_contains_rect(rect, JM_char_bbox(line, ch))
+                    if (not JM_rects_overlap(rect, JM_char_bbox(line, ch))
                             and not mupdf.fz_is_infinite_rect(rect)
                             ):
                         continue
@@ -16276,7 +16276,7 @@ def JM_print_stext_page_as_text(out, page):
                 for ch in line:
                     chbbox = JM_char_bbox(line, ch)
                     if (mupdf.fz_is_infinite_rect(rect)
-                            or mupdf.fz_contains_rect(rect, chbbox)
+                            or JM_rects_overlap(rect, chbbox)
                             ):
                         #raw += chr(ch.m_internal.c)
                         last_char = ch.m_internal.c
@@ -16428,6 +16428,17 @@ def JM_rect_from_py(r):
     return mupdf.fz_make_rect(f[0], f[1], f[2], f[3])
 
 
+def JM_rects_overlap(a, b):
+    if (0
+            or a.x0 >= b.x1
+            or a.y0 >= b.y1
+            or a.x1 <= b.x0
+            or a.y1 <= b.y0
+            ):
+        return 0
+    return 1
+
+
 def JM_refresh_links( page):
     '''
     refreshes the link and annotation tables of a page
@@ -16503,7 +16514,7 @@ def JM_search_stext_page(page, needle):
                 i += 1
                 if not mupdf.fz_is_infinite_rect(rect):
                     r = JM_char_bbox(line, ch)
-                    if not mupdf.fz_contains_rect(rect, r):
+                    if not JM_rects_overlap(rect, r):
                         #goto next_char;
                         continue
                 while 1:
