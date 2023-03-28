@@ -16,7 +16,6 @@ doc = fitz.open(filename)
 
 
 def test_image_bbox():
-  try:
     page = doc[0]
     imglist = page.get_images(True)
     bbox_list = []
@@ -32,8 +31,7 @@ def test_image_bbox():
                 match = True
                 break
     assert match
-  except Exception as e:
-    print(f'test_image_bbox(): {e=}')
+
 
 def test_bboxlog():
     doc = fitz.open()
