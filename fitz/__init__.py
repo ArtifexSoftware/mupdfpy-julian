@@ -3919,8 +3919,18 @@ class Document:
         if img_type == mupdf.FZ_IMAGE_UNKNOWN:
             res = None
             img = mupdf.pdf_load_image(pdf, obj)
-            res = mupdf.fz_new_buffer_from_image_as_png(img, mupdf.FzColorParams())
-            ext = "png"
+            cbuf = mupdf.fz_compressed_image_buffer(img);
+            if cbuf.m_internal:
+                img_type = cbuf.params.type
+                ext = JM_image_extension(img_type)
+                res = cbuf.get_buffer()
+            else:
+                res = mupdf.fz_new_buffer_from_image_as_png(
+                        img,
+                        mupdf.FzColorParams(mupdf.fz_default_color_params),
+                        )
+                ext = "png"
+
         else:
             img = mupdf.fz_new_image_from_buffer(res)
         xres, yres = mupdf.fz_image_resolution(img)
