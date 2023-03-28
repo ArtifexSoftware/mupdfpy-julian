@@ -8465,7 +8465,7 @@ class Page:
         clips = True if extended else False
         prect = mupdf.fz_bound_page(page)
         trace_device_ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
-        log(f'Calling JM_new_lineart_device_Device(). {callback=} {method=}')
+        #log(f'Calling JM_new_lineart_device_Device(). {callback=} {method=}')
         if callable(callback) or method is not None:
             dev = JM_new_lineart_device_Device(callback, clips, method)
         else:
@@ -9220,7 +9220,7 @@ class Page:
         for a in self.annot_xrefs():
             log( '{a=}')
         widget_xrefs = [a[0] for a in self.annot_xrefs() if a[1] == PDF_ANNOT_WIDGET]
-        log(f'widgets(): {widget_xrefs=}')
+        #log(f'widgets(): {widget_xrefs=}')
         for xref in widget_xrefs:
             widget = self.load_widget(xref)
             if types == None or widget.field_type in types:
@@ -17476,7 +17476,7 @@ def jm_append_merge(dev):
         and change path["type"] to "fs".
     (3) If "out" is callable, skip the previous and pass dictionary to it.
     '''
-    log(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     assert isinstance(dev.out, list)
     
     if callable(dev.method) or dev.method:  # function or method
@@ -17486,7 +17486,7 @@ def jm_append_merge(dev):
             assert 0
             resp = PyObject_CallFunctionObjArgs(out, dev.pathdict, NULL)
         else:
-            log(f'calling {dev.out=} {dev.method=} {dev.pathdict=}')
+            #log(f'calling {dev.out=} {dev.method=} {dev.pathdict=}')
             resp = getattr(dev.out, dev.method)(dev.pathdict)
         if not resp:
             print("calling cdrawings callback function/method failed!", file=sys.stderr)
@@ -17494,17 +17494,17 @@ def jm_append_merge(dev):
         return
     
     def append():
-        log(f'jm_append_merge(): clearing dev.pathdict')
+        #log(f'jm_append_merge(): clearing dev.pathdict')
         dev.out.append(dev.pathdict)
         dev.pathdict = dict()
     assert isinstance(dev.out, list)
     len_ = len(dev.out) # len of output list so far
-    log('{len_=}')
+    #log('{len_=}')
     if len_ == 0:   # always append first path
         return append()
-    print(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     thistype = dev.pathdict[ dictkey_type]
-    log(f'{thistype=}')
+    #log(f'{thistype=}')
     if thistype != 's': # if not stroke, then append
         return append()
     prev = dev.out[ len_-1] # get prev path
@@ -17532,7 +17532,7 @@ def jm_append_merge(dev):
         if dev.pathdict is not None:
             dev.pathdict[ dictkey_type] = "fs"
         dev.out[ len_ - 1] = dev.pathdict
-        log(f'After PyDict_Merge: {getattr(dev, "pathdict", None)=}')
+        #log(f'After PyDict_Merge: {getattr(dev, "pathdict", None)=}')
         return
     else:
         print("could not merge stroke and fill path", file=sys.stderr)
@@ -17612,7 +17612,7 @@ def jm_checkquad(dev):
     So we check for a polygon (last line's end point equals start point).
     If not true we return 0.
     '''
-    log(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     items = dev.pathdict[ dictkey_items]
     len_ = len(items)
     f = [0] * 8 # coordinates of the 4 corners
@@ -17648,7 +17648,7 @@ def jm_checkrect(dev):
     Check whether the last 3 path items represent a rectangle.
     Returns 1 if we have modified the path, otherwise 0.
     '''
-    log(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     dev.linecount = 0   # reset line count
     orientation = 0 # area orientation of rectangle
     items = dev.pathdict[ dictkey_items]
@@ -17841,7 +17841,7 @@ def jm_trace_text_span(dev, span, type_, ctm, colorspace, color, alpha, seqno):
 
 
 def jm_lineart_color(colorspace, color):
-    log(f' ')
+    #log(f' ')
     if colorspace:
         try:
             # Need to be careful to use a named Python object to ensure
@@ -17894,7 +17894,7 @@ def jm_lineart_drop_device(dev, ctx):
     dev.scissors = []
  
 def jm_lineart_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
-    log(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     even_odd = True if even_odd else False
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
@@ -17921,7 +17921,7 @@ def jm_lineart_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alph
             dev.pathdict[ 'level'] = dev.depth
         jm_append_merge(dev)
         dev.seqno += 1
-        log(f'jm_lineart_fill_path() end: {getattr(dev, "pathdict", None)=}')
+        #log(f'jm_lineart_fill_path() end: {getattr(dev, "pathdict", None)=}')
     except Exception as e:
         if g_exceptions_verbose:    exception_info()
         raise
@@ -17948,7 +17948,7 @@ def jm_lineart_fill_text( dev, ctx, text, ctm, colorspace, color, alpha, color_p
 
 
 def jm_lineart_ignore_text(dev, text, ctm):
-    log(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     jm_trace_text(dev, text, 3, ctm, None, None, 1, dev.seqno)
     dev.seqno += 1
 
@@ -17964,11 +17964,11 @@ class Walker(mupdf.FzPathWalker2):
         self.dev = dev
 
     def moveto(self, ctx, x, y):   # trace_moveto().
-        if isinstance(self.dev.pathdict, dict):
+        if 0 and isinstance(self.dev.pathdict, dict):
             log(f'self.dev.pathdict:')
             for n, v in self.dev.pathdict.items():
                 log( '    {type(n)=} {len(n)=} {n!r} {n}: {v!r}: {v}')
-        log(f'Walker(): {type(self.dev.pathdict)=} {self.dev.pathdict=}')
+        #log(f'Walker(): {type(self.dev.pathdict)=} {self.dev.pathdict=}')
         try:
             #log( '{=dev.ctm type(dev.ctm)}')
             self.dev.lastpoint = mupdf.fz_transform_point(
@@ -17988,7 +17988,7 @@ class Walker(mupdf.FzPathWalker2):
             raise
 
     def lineto(self, ctx, x, y):   # trace_lineto().
-        log(f'Walker(): {self.dev.pathdict=}')
+        #log(f'Walker(): {self.dev.pathdict=}')
         try:
             p1 = mupdf.fz_transform_point( mupdf.fz_make_point(x, y), self.dev.ctm)
             self.dev.pathrect = mupdf.fz_include_point_in_rect( self.dev.pathrect, p1)
@@ -18009,7 +18009,7 @@ class Walker(mupdf.FzPathWalker2):
             raise
 
     def curveto(self, ctx, x1, y1, x2, y2, x3, y3):   # trace_curveto().
-        log(f'Walker(): {self.dev.pathdict=}')
+        #log(f'Walker(): {self.dev.pathdict=}')
         try:
             self.dev.linecount = 0  # reset # of consec. lines
             p1 = mupdf.fz_make_point(x1, y1)
@@ -18036,16 +18036,16 @@ class Walker(mupdf.FzPathWalker2):
             raise
 
     def closepath(self, ctx):    # trace_close().
-        log(f'Walker(): {self.dev.pathdict=}')
+        #log(f'Walker(): {self.dev.pathdict=}')
         try:
             if self.dev.linecount == 3:
                 if jm_checkrect(self.dev):
-                    log(f'end1: {self.dev.pathdict=}')
+                    #log(f'end1: {self.dev.pathdict=}')
                     return
             #log('setting self.dev.pathdict[ "closePath"] to true')
             self.dev.pathdict[ "closePath"] = True
             self.dev.linecount = 0   # reset # of consec. lines
-            log(f'end2: {self.dev.pathdict=}')
+            #log(f'end2: {self.dev.pathdict=}')
         except Exception as e:
             if g_exceptions_verbose:    exception_info()
             raise
@@ -18059,7 +18059,7 @@ def jm_lineart_path(dev, ctx, path):
     * invoke fz_walk_path(), which create the single items
     * if no items detected, empty path dict again
     '''
-    log(f'{getattr(dev, "pathdict", None)=}')
+    #log(f'{getattr(dev, "pathdict", None)=}')
     try:
         dev.pathrect = mupdf.FzRect( mupdf.FzRect.Fixed_INFINITE)
         dev.linecount = 0
@@ -18082,7 +18082,7 @@ def jm_lineart_path(dev, ctx, path):
 
 
 def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, color_params):
-    log(f'{dev.pathdict=} {dev.clips=}')
+    #log(f'{dev.pathdict=} {dev.clips=}')
     try:
         assert isinstance( ctm, mupdf.fz_matrix)
         out = dev.out
@@ -18190,7 +18190,7 @@ def jm_lineart_end_layer(dev):
    dev.layer_name = None
 
 def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
-    log(f'{dev.pathdict=} {dev.clips=}')
+    #log(f'{dev.pathdict=} {dev.clips=}')
     if not dev.clips:
         return;
     out = dev.out
@@ -18208,7 +18208,7 @@ def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
     dev.depth += 1
 
 def jm_lineart_end_group(dev):
-    log(f'{dev.pathdict=} {dev.clips=}')
+    #log(f'{dev.pathdict=} {dev.clips=}')
     if not dev.clips:
         return
     dev.depth -= 1
@@ -18336,7 +18336,7 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
     LINEART device for Python method Page.get_cdrawings()
     '''
     def __init__(self, out, clips, method):
-        log(f'JM_new_lineart_device_Device.__init__()')
+        #log(f'JM_new_lineart_device_Device.__init__()')
         super().__init__()
         # fixme: this results in "Unexpected call of unimplemented virtual_fnptrs fn FzDevice2::drop_device().".
         #self.use_virtual_drop_device()
