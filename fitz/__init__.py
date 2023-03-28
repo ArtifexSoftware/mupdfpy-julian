@@ -4477,6 +4477,16 @@ class Document:
         return True if r else False
 
     @property
+    def is_fast_webaccess(self):
+        '''
+        Check whether we have a linearized PDF.
+        '''
+        pdf = self._this_as_pdf_document()
+        if pdf.m_internal:
+            return mupdf.pdf_doc_was_linearized(pdf)
+        return False    # gracefully handle non-PDF
+
+    @property
     def is_form_pdf(self):
         """Either False or PDF field count."""
         pdf = self.this.pdf_specifics()
@@ -5525,6 +5535,16 @@ class Document:
         JM_update_stream(pdf, obj, res, compress)
         pdf.dirty = 1
 
+    @property
+    def version_count(self):
+        '''
+        Count versions of PDF document.
+        '''
+        pdf = self._this_as_pdf_document()
+        if pdf.m_internal:
+            return mupdf.pdf_count_versions(pdf)
+        return 0
+
     def write(
             self,
             garbage=False,
@@ -5859,6 +5879,12 @@ class DocumentWriter:
     def close( self):
         mupdf.fz_close_document_writer( self.this)
         
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
 
 class Font:
 
@@ -8522,11 +8548,17 @@ class Page:
         """
         log(' ')
         allkeys = (
-                ("closePath", False), ("fill", None),
-                ("color", None), ("width", 0), ("lineCap", [0]),
-                ("lineJoin", 0), ("dashes", "[] 0"), ("stroke_opacity", 1),
-                ("fill_opacity", 1), ("even_odd", True),
-            )
+                ("closePath", False),
+                ("fill", None),
+                ("color", None),
+                ("width", 0),
+                ("lineCap", [0]),
+                ("lineJoin", 0),
+                ("dashes", "[] 0"),
+                ("stroke_opacity", 1),
+                ("fill_opacity", 1),
+                ("even_odd", True),
+                )
         val = self.get_cdrawings(extended=extended)
         for i in range(len(val)):
             npath = val[i]
@@ -11714,6 +11746,18 @@ class Story:
         return Xml( dom)
 
     def element_positions( self, function, args=None):
+        '''
+        Trigger a callback function to record where items have been placed.
+        '''
+        if type(args) is dict:
+            for k in args.keys():
+                if not (type(k) is str and k.isidentifier()):
+                    raise ValueError(f"invalid key '{k}'")
+        else:
+            args = {}
+        if not callable(function) or function.__code__.co_argcount != 1:
+            raise ValueError("callback 'function' must be a callable with exactly one argument")
+        
         def function2( position):
             class Position2:
                 pass
