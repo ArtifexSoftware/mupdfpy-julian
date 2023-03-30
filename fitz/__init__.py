@@ -8222,9 +8222,21 @@ class Page:
         """Get page rectangle."""
         CheckParent(self)
         pdf_page = self._pdf_page()
-        val = pdf_page.pdf_bound_page() if pdf_page.m_internal else self.this.fz_bound_page()
+        try:
+            val = pdf_page.pdf_bound_page() if pdf_page.m_internal else self.this.fz_bound_page()
+        except Exception as e:
+            val = mupdf.FzRect(mupdf.Rect.Fixed_INFINITE)
         val = Rect(val)
-
+        
+        if val.is_infinite and self.parent.is_pdf:
+            cb = self.cropbox
+            w, h = cb.width, cb.height
+            if self.rotation not in (0, 180):
+                w, h = h, w
+            val = Rect(0, 0, w, h)
+            msg = TOOLS.mupdf_warnings(reset=False).splitlines()[-1]
+            print(msg, file=sys.stderr)
+        
         return val
 
     rect = property(bound, doc="page rectangle")
