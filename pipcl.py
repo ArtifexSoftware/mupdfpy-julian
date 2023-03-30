@@ -8,6 +8,7 @@ Run doctests with: `python -m doctest pipcl.py`
 import base64
 import glob
 import hashlib
+import inspect
 import io
 import os
 import platform
@@ -42,7 +43,7 @@ class Package:
     https://pip.pypa.io/en/stable/reference/build-system/setup-py/
 
     Here is a `doctest` example of using pipcl to create a SWIG extension
-    module.
+    module. Requires `swig`.
 
     Create an empty test directory:
 
@@ -76,6 +77,7 @@ class Package:
         ...                         'foo.i',
         ...                         'setup.py',
         ...                         'pipcl.py',
+        ...                         'wdev.py',
         ...                         'README',
         ...                         ]
         ...
@@ -95,7 +97,7 @@ class Package:
         ...             """))
 
     Create the files required by the above `setup.py` - the SWIG `.i` input
-    file, the README file, and a copy of `pipcl.py`.
+    file, the README file, and copies of `pipcl.py` and `wdev.py`.
 
         >>> with open('pipcl_test/foo.i', 'w') as f:
         ...     _ = f.write(textwrap.dedent("""
@@ -104,9 +106,9 @@ class Package:
         ...             #include <string.h>
         ...             int bar(const char* text)
         ...             {
-        ...                 printf("int bar(const char* text): text: %s\\\\n", text);
-        ...                 int len = strlen(text);
-        ...                 printf("int bar(const char* text): len=%i\\\\n", len);
+        ...                 printf("bar(): text: %s\\\\n", text);
+        ...                 int len = (int) strlen(text);
+        ...                 printf("bar(): len=%i\\\\n", len);
         ...                 fflush(stdout);
         ...                 return len;
         ...             }
@@ -120,6 +122,7 @@ class Package:
         ...             """))
 
         >>> _ = shutil.copy2('pipcl.py', 'pipcl_test/pipcl.py')
+        >>> _ = shutil.copy2('wdev.py', 'pipcl_test/wdev.py')
 
     Use `setup.py`'s command-line interface to build and install the extension
     module into `pipcl_test/install/`.
@@ -134,7 +137,6 @@ class Package:
         >>> with open('pipcl_test/test.py', 'w') as f:
         ...     _ = f.write(textwrap.dedent("""
         ...             import sys
-        ...             sys.path.append('install')
         ...             import foo
         ...             text = 'hello'
         ...             print(f'test.py: calling foo.bar() with text={text!r}')
@@ -144,17 +146,18 @@ class Package:
         ...             assert l == len(text)
         ...             """))
 
-    Run the test script.
+    Run the test script, setting `PYTHONPATH` so that `import foo` works.
 
         >>> r = subprocess.run(
         ...         f'cd pipcl_test && {sys.executable} test.py',
         ...         shell=1, check=1, text=1,
         ...         stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+        ...         env=os.environ | dict(PYTHONPATH='install'),
         ...         )
         >>> print(r.stdout)
         test.py: calling foo.bar() with text='hello'
-        int bar(const char* text): text: hello
-        int bar(const char* text): len=5
+        bar(): text: hello
+        bar(): len=5
         test.py: foo.bar() returned: 5
         <BLANKLINE>
 
@@ -434,12 +437,11 @@ class Package:
 
         Returns leafname of generated wheel within `wheel_directory`.
         '''
-        _log('build_wheel():'
-                f' wheel_directory={wheel_directory}'
+        _log(f'wheel_directory={wheel_directory}'
                 f' config_settings={config_settings}'
                 f' metadata_directory={metadata_directory}'
                 )
-        _log('build_wheel(): os.environ is:')
+        _log('os.environ is:')
         for n in sorted( os.environ.keys()):
             v = os.environ[ n]
             _log( f'    {n}: {v!r}')
@@ -479,7 +481,7 @@ class Package:
             _log(f'calling self.fn_build={self.fn_build}')
             items = self.fn_build()
 
-        _log(f'build_wheel(): Creating wheel: {path}')
+        _log(f'Creating wheel: {path}')
         os.makedirs(wheel_directory, exist_ok=True)
         record = _Record()
         with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
@@ -522,7 +524,7 @@ class Package:
             #
             z.writestr(f'{dist_info_dir}/RECORD', record.get())
 
-        _log( f'build_wheel(): Have created wheel: {path}')
+        _log( f'Have created wheel: {path}')
         return os.path.basename(path)
 
 
@@ -540,7 +542,7 @@ class Package:
         Returns leafname of generated archive within `sdist_directory`.
         '''
         if verbose:
-            _log( f'build_sdist(): formats={formats}')
+            _log( f'formats={formats}')
         if formats and formats != 'gztar':
             raise Exception( f'Unsupported: formats={formats}')
         paths = []
@@ -555,7 +557,7 @@ class Package:
             `contents`. If contents is a string, it is encoded using utf8.
             '''
             if verbose:
-                _log( f'build_sdist(): Adding: {name}')
+                _log( f'Adding: {name}')
             if isinstance(contents, str):
                 contents = contents.encode('utf8')
             ti = tarfile.TarInfo(name)
@@ -565,13 +567,13 @@ class Package:
         
         def add_file(tar, path_abs, name):
             if verbose:
-                _log( f'build_sdist(): Adding file: {os.path.relpath(path_abs)} => {name}')
+                _log( f'Adding file: {os.path.relpath(path_abs)} => {name}')
             tar.add( path_abs, name, recursive=False)
 
         os.makedirs(sdist_directory, exist_ok=True)
         tarpath = f'{sdist_directory}/{self.name}-{self.version}.tar.gz'
         if verbose:
-            _log(f'build_sdist(): Creating sdist: {tarpath}')
+            _log(f'Creating sdist: {tarpath}')
         with tarfile.open(tarpath, 'w:gz') as tar:
             found_pyproject_toml = False
             for path in paths:
@@ -588,14 +590,14 @@ class Package:
                 add_file( tar, path_abs, f'{self.name}-{self.version}/{path_rel}')
                 manifest.append(path_rel)
             if not found_pyproject_toml:
-                _log(f'build_sdist(): Warning: no pyproject.toml specified.')
+                _log(f'Warning: no pyproject.toml specified.')
             # Always add a PKG-INFO file.
             add_content(tar, f'{self.name}-{self.version}/PKG-INFO', self._metainfo())
 
             if self.license:
                 add(tar, f'{self.name}-{self.version}/COPYING', self.license)
             
-        _log( f'build_sdist(): Have created sdist: {tarpath}')
+        _log( f'Have created sdist: {tarpath}')
         return os.path.basename(tarpath)
 
 
@@ -624,7 +626,7 @@ class Package:
         Called by `handle_argv()` to handle `install` command..
         '''
         if verbose:
-            _log( f'_argv_install(): {record_path=} {root=}')
+            _log( f'{record_path=} {root=}')
         
         # Do a build and get list of files to install.
         #
@@ -635,10 +637,10 @@ class Package:
         if root is None:
             root = sysconfig.get_path('platlib')
             if verbose:
-                _log( f'_argv_install(): Using sysconfig.get_path("platlib")={root!r}.')
+                _log( f'Using sysconfig.get_path("platlib")={root!r}.')
             # todo: for pure-python we should use sysconfig.get_path('purelib') ?
         
-        _log( f'_argv_install(): Installing into {root=}')
+        _log( f'Installing into {root=}')
         dist_info_dir = self._dist_info_dir()
         
         if not record_path:
@@ -647,14 +649,14 @@ class Package:
         
         def add_file(from_abs, from_rel, to_abs, to_rel):
             if verbose:
-                _log(f'_argv_install(): Copying from {from_rel} to {to_abs}')
+                _log(f'Copying from {from_rel} to {to_abs}')
             os.makedirs( os.path.dirname( to_abs), exist_ok=True)
             shutil.copy2( from_abs, to_abs)
             record.add_file(from_rel, to_rel)
 
         def add_str(content, to_abs, to_rel):
             if verbose:
-                _log( f'_argv_install(): Writing to: {to_abs}')
+                _log( f'Writing to: {to_abs}')
             with open( to_abs, 'w') as f:
                 f.write( content)
             record.add_content(content, to_rel)
@@ -667,12 +669,12 @@ class Package:
         add_str( self._metainfo(), f'{root}/{dist_info_dir}/METADATA', f'{dist_info_dir}/METADATA')
 
         if verbose:
-            _log( f'_argv_install(): Writing to: {record_path}')
+            _log( f'Writing to: {record_path}')
         with open(record_path, 'w') as f:
             f.write(record.get())
 
         if verbose:
-            _log(f'_argv_install(): Finished.')
+            _log(f'Finished.')
 
 
     def _argv_dist_info(self, root):
@@ -705,7 +707,7 @@ class Package:
         '''
         if dirpath is None:
             dirpath = self.root
-        _log(f'_write_info(): creating files in directory {dirpath}')
+        _log(f'Creating files in directory {dirpath}')
         os.makedirs(dirpath, exist_ok=True)
         with open(os.path.join(dirpath, 'PKG-INFO'), 'w') as f:
             f.write(self._metainfo())
@@ -730,7 +732,7 @@ class Package:
 
         This is partial support at best.
         '''
-        #_log(f'handle_argv(): argv: {argv}')
+        #_log(f'argv: {argv}')
 
         class ArgsRaise:
             pass
@@ -856,7 +858,7 @@ class Package:
 
         assert command, 'No command specified'
 
-        _log(f'handle_argv(): Handling command={command}')
+        _log(f'Handling command={command}')
         if 0:   pass
         elif command == 'bdist_wheel':  self.build_wheel(opt_dist_dir, verbose=opt_verbose)
         elif command == 'clean':        self._argv_clean(opt_all)
@@ -906,7 +908,7 @@ class Package:
         else:
             assert 0, f'Unrecognised command: {command}'
 
-        _log(f'handle_argv(): Finished handling command: {command}')
+        _log(f'Finished handling command: {command}')
 
 
     def __str__(self):
@@ -1090,10 +1092,14 @@ def build_extension(
         name:
             Name of generated extension module.
         path_i:
-            Path of input SWIG .i file.
+            Path of input SWIG .i file. Internally we use swig to generate a
+            corresponding .cpp file.
         outdir:
-            Output directory. Will contain files `{name}.py` and `_{name}.so`
-            (or `_{name}.*.pyd` on Windows).
+            Output directory for generated files:
+                {outdir}/{name}.py
+                {outdir}/_{name}.so     # Unix
+                {outdir}/_{name}.*.pyd  # Windows
+            We return the leafname of the `.so` or `.pyd` file.
         includes:
             A string, or a sequence of extra include directories to be prefixed
             with `-I`.
@@ -1124,8 +1130,8 @@ def build_extension(
         swig:
             Base swig command.
     
-    Returns `path_so_leaf`, the leafname of the generated library within
-    `outdir`.
+    Returns the leafname of the generated library file with `outdir`, e.g.
+    `_{name}.so` on Unix or `_{name}.cp311-win_amd64.pyd` on Windows.
     '''
     includes_text = _flags( includes, '-I')
     defines_text = _flags( defines, '-D')
@@ -1135,6 +1141,7 @@ def build_extension(
     if not os.path.exists( outdir):
         os.mkdir( outdir)
     # Run SWIG.
+    #run( f'{swig} -version')
     if _doit(force, _fs_mtime(path_i) >= _fs_mtime(path_cpp)):
         run( f'''
                 {swig}
@@ -1148,6 +1155,8 @@ def build_extension(
                     {path_i}
                 '''
                 )
+    else:
+        _log(f'Not running swig because {path_cpp} newer than {path_i}')
     
     if windows():
         python_version = ''.join(platform.python_version_tuple()[:2])
@@ -1493,8 +1502,9 @@ def _log(text=''):
     '''
     Logs lines with prefix.
     '''
+    caller = inspect.stack()[1].function
     for line in text.split('\n'):
-        print(f'pipcl.py: {line}')
+        print(f'pipcl.py: {caller}(): {line}')
     sys.stdout.flush()
 
 
@@ -1514,14 +1524,14 @@ class _Record:
         digest = base64.urlsafe_b64encode(digest)
         self.text += f'{to_},sha256={digest},{len(content)}\n'
         if verbose:
-            _log(f'_Record: Adding {to_}')
+            _log(f'Adding {to_}')
 
     def add_file(self, from_, to_, verbose=False):
         with open(from_, 'rb') as f:
             content = f.read()
         self.add_content(content, to_, verbose=False)
         if verbose:
-            _log(f'_Record: Adding file: {os.path.relpath(from_)} => {to_}')
+            _log(f'Adding file: {os.path.relpath(from_)} => {to_}')
 
     def get(self):
         return self.text
