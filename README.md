@@ -21,9 +21,10 @@ pre
 ## Overview
 
 **mupdfpy** is an alternative implementation of
-[PyMuPDF](https://github.com/pymupdf/PyMuPDF) that primarily uses [MuPDF's
-native Python bindings](http://mupdf.com/r/C-and-Python-APIs) instead of SWIG
-and C code.
+[PyMuPDF](https://github.com/pymupdf/PyMuPDF)
+that primarily uses [MuPDF's native Python
+bindings](https://mupdf.readthedocs.io/en/latest/language-bindings.html)
+instead of SWIG and C code.
 
 **mupdfpy** provides a Python package/module called `fitz`, a drop-in
 replacement for PyMuPDF's package/module of the same name.
@@ -36,30 +37,39 @@ to `0`.
 
 ## Benefits
 
-* Simpler implementation because of MuPDF C++ and Python API features:
+* Improved lifetime management.
 
-    * Automatic reference counting.
-    * Automatic contexts.
-    * Native C++ and Python exceptions.
+  The underlying MuPDF C++/Python APIs have automatic reference counting, which
+  avoids various tricky leaks in native PyMuPDF.
 
-* Potential support for multithreaded use (native PyMuPDF is explicitly
-  single-threaded).
+* Possibly multithreaded use, unlike native PyMuPDF which is explicitly
+  single-threaded.
+
+  This is because the underlying MuPDF C++/Python APIs have automated
+  per-thread contexts.
+
+* Simplified implementation.
+
+  The underlying MuPDF C++/Python APIs' automated reference counting,
+  automatatic contexts, and native C++ and Python exceptions make the
+  implementation much simpler than native PyMuPDF.
 
 * Access to the underlying MuPDF Python API in the `fitz.mupdf` module.
 
-* Tracing of all calls of MuPDF C functions, by setting environment
-  variables. As of 2023-02-24 this is only enabled in debug builds of the C++
-  bindings. See:
-  https://mupdf.readthedocs.io/en/latest/language-bindings.html#environmental-variables
+* Optional tracing of all calls of MuPDF C functions, by setting environment
+  variables. As of 2023-02-24 this is only enabled in debug builds of the MuPDF
+  C++ bindings. See:
+  <https://mupdf.readthedocs.io/en/latest/language-bindings.html#environmental-variables>
 
 
 ## Status
 
-* Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch 1.21.x and
-  branch master.
+[As of 2023-03-30.]
+
+* Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch master.
+* With swig-4.1 and later, we get lots of runtime warnings like: `swig/python
+  detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
 * On Windows:
-    * We get lots of runtime warnings like:
-      `swig/python detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
     * Debug builds fail to build due to SWIG generating code that tries to access
       MuPDF global variables, which are not visible due to a problem with the
       underlying MuPDF Python API.
@@ -68,48 +78,7 @@ to `0`.
       but it still may effect performance slightly.
  
 
-## Changelog
-
-**Latest**:
-
-* Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch 1.21.x and
-  branch master.
-* Also works with MuPDF branch master.
-* Updated with recent PyMuPDF code changes.
-* Uses pipcl.py's new support for building extension modules.
-* Added doctest to pipcl.py.
-* Added support for building extension modules to pipcl.py.
-
-**2023-01-20**:
-
-* Simplified build/install instructions and added example commands for windows.
-* Installing with `pip` will now install `libclang` and `swig` automatically.
-* Removed unnecessary `WeakValueDictionary` code.
-* Some code cleanup.
-
-**2023-01-17**:
-
-* Added support for Windows.
-* Pass all PyMuPDF tests on Windows.
-* Added optimised tracetext device implemented in C++.
-* Moved all global trace_device state into individual devices.
-
-
-**2023-01-13**:
-* Added Story support.
-
-**2023-01-04**:
-
-* Recommend using pip to install libclang and swig, to simplify installation.
-* warn if incomplete fitz/ directory is in cwd
-
-
-## License
-
-SPDX-License-Identifier: GPL-3.0-only
-
-
-## Build and install [last updated 2023-1-20]
+## Build and install
 
 Supported OS's:
 
@@ -119,7 +88,7 @@ Supported OS's:
 
 Steps:
 
-* Get MuPDF, 1.21.x branch.
+* Get MuPDF, master branch.
 * Get mupdfpy, master branch.
 * Set up a Python virtual environment (venv).
 * Update pip to latest version.
@@ -130,13 +99,14 @@ Steps:
 
 So:
 
-    # Get MuPDF, branch 1.21.x.
+    # Get MuPDF, master branch.
     git clone --recursive git://git.ghostscript.com/mupdf.git
-    git checkout 1.21.x
     git submodule update --init
 
     # Get mupdfpy (requires ghostscript login).
     git clone ghostscript.com:/home/julian/repos/mupdfpy.git
+
+Then on Unix:
 
     # Create and enter Python virtual environment.
     python3 -m venv pylocal
@@ -146,12 +116,20 @@ So:
     python -m pip install --upgrade pip
     
     # Use pip to build and install mupdfpy (will also build MuPDF).
-    
-    # Unix:
     cd mupdfpy
     PYMUPDF_SETUP_MUPDF_BUILD=../mupdf python -m pip install -vv ./
 
-    # Windows
+Or on Windows:
+
+    # Create and enter Python virtual environment.
+    py -m venv pylocal
+    .\pylocal\Scripts\activate
+    
+    # Update pip to latest version.
+    python -m pip install --upgrade pip
+    
+    # Use pip to build and install mupdfpy (will also build MuPDF).
+    cd mupdfpy
     set PYMUPDF_SETUP_MUPDF_BUILD=../mupdf
     python -m pip install -vv ./
 
@@ -171,12 +149,13 @@ warning in this case.
     platform/c++/implementation/internal.cpp:160:reinit_singlethreaded(): Reinitialising as single-threaded.
 
 
-### PyMuPDF tests.
+### Run tests.
 
-These can be run in the usual way, for example:
+mupdfpy has a copy of native PyMuPDF's tests. These can be run in the usual
+way, for example:
 
     pip install pytest fontTools
-    pytest PyMuPDF
+    pytest mupdfpy
 
 
 ## Details
@@ -224,3 +203,44 @@ itself. It might be possible to install these separately (e.g. with `cd mupdf
 && ./setup.py install`), but it's not clear whether `_extra.so` (which contains
 C++ code that uses the MuPDF C++ API) would get access to `libmupdf.so` and
 `libmupdfcpp.so`.
+
+
+## Changelog
+
+**Latest**:
+
+**2023-03-30**:
+
+* Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch master.
+* Updated with PyMuPDF code changes as of 2023-03-30.
+* Uses pipcl.py's new support for building extension modules.
+* Added doctest to pipcl.py.
+* Added support for building extension modules to pipcl.py.
+
+**2023-01-20**:
+
+* Simplified build/install instructions and added example commands for windows.
+* Installing with `pip` will now install `libclang` and `swig` automatically.
+* Removed unnecessary `WeakValueDictionary` code.
+* Some code cleanup.
+
+**2023-01-17**:
+
+* Added support for Windows.
+* Pass all PyMuPDF tests on Windows.
+* Added optimised tracetext device implemented in C++.
+* Moved all global trace_device state into individual devices.
+
+
+**2023-01-13**:
+* Added Story support.
+
+**2023-01-04**:
+
+* Recommend using pip to install libclang and swig, to simplify installation.
+* warn if incomplete fitz/ directory is in cwd
+
+
+## License
+
+SPDX-License-Identifier: GPL-3.0-only
