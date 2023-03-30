@@ -15,7 +15,7 @@ jobs:
     strategy:
       matrix:
         #os: [ubuntu-20.04, windows-2019, macos-10.15]
-        os: [ubuntu-20.04]
+        os: [ubuntu-20.04, windows-2019]
 
       # Avoid cancelling of all cibuildwheel runs after a single failure.
       fail-fast: false
@@ -41,6 +41,9 @@ jobs:
 
             # Build on single cpu.
             CIBW_ARCHS_LINUX: x86_64
+
+            # On win32, libclang appears to be broken.
+            CIBW_ARCHS_WINDOWS: AMD64
 
             # Build for single python version.
             CIBW_BUILD: "cp311*"
