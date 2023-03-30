@@ -124,10 +124,8 @@ class WindowsVS:
             for filename in filenames:
                 if filename == 'csc.exe':
                     csc = os.path.join(dirpath, filename)
-                    _log(f'{csc=}')
+                    #_log(f'{csc=}')
                     #break
-            #if csc:
-            #    break
 
         self.cl = cl
         self.devenv = devenv
