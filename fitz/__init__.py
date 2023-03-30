@@ -9586,7 +9586,7 @@ class Pixmap:
         #return _fitz.Pixmap__samples_ptr(self)
         return self.this.fz_pixmap_samples_int()
 
-    def _tobytes(self, format_, quality):
+    def _tobytes(self, format_, jpg_quality):
         '''
         Pixmap._tobytes
         '''
@@ -9600,13 +9600,13 @@ class Pixmap:
         elif format_ == 3:  mupdf.fz_write_pixmap_as_pam(out, pm)
         elif format_ == 5:  mupdf.fz_write_pixmap_as_psd(out, pm)
         elif format_ == 6:  mupdf.fz_write_pixmap_as_ps(out, pm)
-        elif format_ == 7:  mupdf.fz_write_pixmap_as_jpeg(out, pm, quality)
+        elif format_ == 7:  mupdf.fz_write_pixmap_as_jpeg(out, pm, jpg_quality)
         else:               mupdf.fz_write_pixmap_as_png(out, pm)
 
         barray = JM_BinFromBuffer(res)
         return barray
 
-    def _writeIMG(self, filename, format_, quality):
+    def _writeIMG(self, filename, format_, jpg_quality):
         #return _fitz.Pixmap__writeIMG(self, filename, format)
         pm = self.this
         if   format_ == 1:  mupdf.fz_save_pixmap_as_png(pm, filename)
@@ -9614,7 +9614,7 @@ class Pixmap:
         elif format_ == 3:  mupdf.fz_save_pixmap_as_pam(pm, filename)
         elif format_ == 5:  mupdf.fz_save_pixmap_as_psd(pm, filename)
         elif format_ == 6:  mupdf.fz_save_pixmap_as_ps(pm, filename)
-        elif format_ == 7:  mupdf.fz_save_pixmap_as_jpeg(pm, filename, quality)
+        elif format_ == 7:  mupdf.fz_save_pixmap_as_jpeg(pm, filename, jpg_quality)
         else:               mupdf.fz_save_pixmap_as_png(pm, filename)
 
     @property
@@ -9690,7 +9690,7 @@ class Pixmap:
             return
         mupdf.fz_gamma_pixmap( self.this, gamma)
 
-    def tobytes(self, output="png", quality=95):
+    def tobytes(self, output="png", jpg_quality=95):
         '''
         Convert to binary image stream of desired type.
         '''
@@ -9717,7 +9717,7 @@ class Pixmap:
             raise ValueError("unsupported colorspace for '{output}'")
         if idx == 7:
             self.set_dpi(self.xres, self.yres)
-        barray = self._tobytes(idx, quality)
+        barray = self._tobytes(idx, jpg_quality)
         return barray
 
     @property
@@ -9862,7 +9862,7 @@ class Pixmap:
         mv = self.samples_mv
         return bytes( mv)
 
-    def save(self, filename, output=None, quality=95):
+    def save(self, filename, output=None, jpg_quality=95):
         """Output as image in format determined by filename extension.
 
         Args:
@@ -9901,7 +9901,7 @@ class Pixmap:
             raise ValueError("unsupported colorspace for '%s'" % output)
         if idx == 7:
             self.set_dpi(self.xres, self.yres)
-        return self._writeIMG(filename, idx, quality)
+        return self._writeIMG(filename, idx, jpg_quality)
 
     def set_alpha(self, alphavalues=None, premultiply=1, opaque=None, matte=None):
         """Set alpha channel to values contained in a byte array.
