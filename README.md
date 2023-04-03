@@ -103,8 +103,8 @@ So:
     git clone --recursive git://git.ghostscript.com/mupdf.git
     git submodule update --init
 
-    # Get mupdfpy (requires ghostscript login).
-    git clone ghostscript.com:/home/julian/repos/mupdfpy.git
+    # Get mupdfpy, master branch (requires ghostscript login).
+    git clone USER@ghostscript.com:/home/julian/repos/mupdfpy.git
 
 Then on Unix:
 
