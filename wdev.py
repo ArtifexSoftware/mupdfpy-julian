@@ -34,7 +34,8 @@ class WindowsVS:
         '''
         Args:
             year:
-                None or, for example, `2019`.
+                None or, for example, `2019`. If None we use environment
+                variable WDEV_VS_YEAR if set.
             grade:
                 None or, for example, one of:
 
@@ -42,11 +43,24 @@ class WindowsVS:
                 * `Professional`
                 * `Enterprise`
 
+                If None we use environment variable WDEV_VS_GRADE if set.
             version:
-                None or, for example: `14.28.29910`
+                None or, for example: `14.28.29910`. If None we use environment
+                variable WDEV_VS_VERSION if set.
             cpu:
                 None or a `WindowsCpu` instance.
         '''
+        def default(value, name):
+            if value is None:
+                name2 = f'WDEV_VS_{name.upper()}'
+                value = os.environ.get(name2)
+                if value is not None:
+                    _log(f'Setting {name} from environment variable {name2}: {value!r}')
+            return value
+        year = default(year, 'year')
+        grade = default(grade, 'grade')
+        version = default(version, 'version')
+
         if not cpu:
             cpu = WindowsCpu()
 
