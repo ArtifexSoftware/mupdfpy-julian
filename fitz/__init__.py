@@ -9650,11 +9650,15 @@ class Pixmap:
         # is commented-out in PyMuPDF/fitz/fitz.i,
         allpixels = 0
         cnt = 0
+        if clip != None and self.irect in Rect(clip):
+            clip = self.irect
         for pixel, count in self.color_count(colors=True,clip=clip).items():
             allpixels += count
             if count > cnt:
                 cnt = count
                 maxpixel = pixel
+        if not allpixels:
+            return (1, bytes([255] * self.n))
         return (cnt / allpixels, maxpixel)
 
     @property
@@ -12546,8 +12550,13 @@ class TextWriter:
             new_cont_lines.append(bdc)
 
         cb = page.cropbox_position
-        if bool(cb):
-            new_cont_lines.append("1 0 0 1 %g %g cm" % (cb.x, cb.y))
+        if page.rotation in (90, 270):
+            delta = page.rect.height - page.rect.width
+        else:
+            delta = 0
+        mb = page.mediabox
+        if bool(cb) or mb.y0 != 0 or delta != 0:
+            new_cont_lines.append("1 0 0 1 %g %g cm" % (cb.x, cb.y + mb.y0 - delta))
 
         if morph:
             p = morph[0] * self.ictm
