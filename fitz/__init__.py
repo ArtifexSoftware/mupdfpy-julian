@@ -20879,6 +20879,7 @@ class TOOLS:
             g_small_glyph_heights = 1
         else:
             g_small_glyph_heights = 0
+        extra.set_small_glyph_heights( g_small_glyph_heights)
         return g_small_glyph_heights
 
 

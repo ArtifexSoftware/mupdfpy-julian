@@ -1742,6 +1742,11 @@ int g_skip_quad_corrections = 0;
 int g_subset_fontnames = 0;
 int g_small_glyph_heights = 0;
 
+void set_small_glyph_heights(int on)
+{
+    g_small_glyph_heights = on;
+}
+
 struct jm_tracedraw_device
 {
     fz_device super;
@@ -2465,3 +2470,5 @@ mupdf::FzDevice JM_new_texttrace_device(PyObject* out);
 
 static fz_quad JM_char_quad( fz_stext_line *line, fz_stext_char *ch);
 void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page);
+
+void set_small_glyph_heights(int on);
