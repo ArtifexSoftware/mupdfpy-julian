@@ -32,6 +32,7 @@ catch(...) {
 
 
 #include <algorithm>
+#include <float.h>
 
 
 /* Returns equivalent of `repr(x)`. */
@@ -1739,6 +1740,7 @@ enum
 /* todo: implement fns to set these and sync with __init__.py. */
 int g_skip_quad_corrections = 0;
 int g_subset_fontnames = 0;
+int g_small_glyph_heights = 0;
 
 struct jm_tracedraw_device
 {
@@ -2171,6 +2173,157 @@ mupdf::FzDevice JM_new_texttrace_device(PyObject* out)
     return device;
 }
 
+
+static fz_quad
+JM_char_quad(fz_stext_line *line, fz_stext_char *ch)
+{
+    if (g_skip_quad_corrections) {  // no special handling
+        return ch->quad;
+    }
+    if (line->wmode) {  // never touch vertical write mode
+        return ch->quad;
+    }
+    fz_font *font = ch->font;
+    float asc = JM_font_ascender(font);
+    float dsc = JM_font_descender(font);
+    float c, s, fsize = ch->size;
+    float asc_dsc = asc - dsc + FLT_EPSILON;
+    if (asc_dsc >= 1 && g_small_glyph_heights == 0) {  // no problem
+       return ch->quad;
+    }
+    if (asc < 1e-3) {  // probably Tesseract glyphless font
+        dsc = -0.1f;
+        asc = 0.9f;
+        asc_dsc = 1.0f;
+    }
+
+    if (g_small_glyph_heights || asc_dsc < 1) {
+        dsc = dsc / asc_dsc;
+        asc = asc / asc_dsc;
+    }
+    asc_dsc = asc - dsc;
+    asc = asc * fsize / asc_dsc;
+    dsc = dsc * fsize / asc_dsc;
+
+    /* ------------------------------
+    Re-compute quad with the adjusted ascender / descender values:
+    Move ch->origin to (0,0) and de-rotate quad, then adjust the corners,
+    re-rotate and move back to ch->origin location.
+    ------------------------------ */
+    fz_matrix trm1, trm2, xlate1, xlate2;
+    fz_quad quad;
+    c = line->dir.x;  // cosine
+    s = line->dir.y;  // sine
+    trm1 = mupdf::ll_fz_make_matrix(c, -s, s, c, 0, 0);  // derotate
+    trm2 = mupdf::ll_fz_make_matrix(c, s, -s, c, 0, 0);  // rotate
+    if (c == -1) {  // left-right flip
+        trm1.d = 1;
+        trm2.d = 1;
+    }
+    xlate1 = mupdf::ll_fz_make_matrix(1, 0, 0, 1, -ch->origin.x, -ch->origin.y);
+    xlate2 = mupdf::ll_fz_make_matrix(1, 0, 0, 1, ch->origin.x, ch->origin.y);
+
+    quad = mupdf::ll_fz_transform_quad(ch->quad, xlate1);  // move origin to (0,0)
+    quad = mupdf::ll_fz_transform_quad(quad, trm1);  // de-rotate corners
+
+    // adjust vertical coordinates
+    if (c == 1 && quad.ul.y > 0) {  // up-down flip
+        quad.ul.y = asc;
+        quad.ur.y = asc;
+        quad.ll.y = dsc;
+        quad.lr.y = dsc;
+    } else {
+        quad.ul.y = -asc;
+        quad.ur.y = -asc;
+        quad.ll.y = -dsc;
+        quad.lr.y = -dsc;
+    }
+
+    // adjust horizontal coordinates that are too crazy:
+    // (1) left x must be >= 0
+    // (2) if bbox width is 0, lookup char advance in font.
+    if (quad.ll.x < 0) {
+        quad.ll.x = 0;
+        quad.ul.x = 0;
+    }
+    float cwidth = quad.lr.x - quad.ll.x;
+    if (cwidth < FLT_EPSILON) {
+        int glyph = mupdf::ll_fz_encode_character( font, ch->c);
+        if (glyph) {
+            float fwidth = mupdf::ll_fz_advance_glyph( font, glyph, line->wmode);
+            quad.lr.x = quad.ll.x + fwidth * fsize;
+            quad.ur.x = quad.lr.x;
+        }
+    }
+
+    quad = mupdf::ll_fz_transform_quad(quad, trm2);  // rotate back
+    quad = mupdf::ll_fz_transform_quad(quad, xlate2);  // translate back
+    return quad;
+}
+
+
+static fz_rect
+JM_char_bbox(mupdf::FzStextLine& line, mupdf::FzStextChar& ch)
+{
+    fz_rect r = mupdf::ll_fz_rect_from_quad(JM_char_quad( line.m_internal, ch.m_internal));
+    if (!line.m_internal->wmode) {
+        return r;
+    }
+    if (r.y1 < r.y0 + ch.m_internal->size) {
+        r.y0 = r.y1 - ch.m_internal->size;
+    }
+    return r;
+}
+
+static int JM_rects_overlap(const fz_rect a, const fz_rect b)
+{
+    if (0
+            || a.x0 >= b.x1
+            || a.y0 >= b.y1
+            || a.x1 <= b.x0
+            || a.y1 <= b.y0
+            )
+        return 0;
+    return 1;
+}
+
+void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page)
+{
+    fz_rect rect = page.m_internal->mediabox;
+
+    for (auto block: page)
+    {
+        if (block.m_internal->type == FZ_STEXT_BLOCK_TEXT)
+        {
+            for (auto line: block)
+            {
+                int last_char = 0;
+                for (auto ch: line)
+                {
+                    fz_rect chbbox = JM_char_bbox( line, ch);
+                    if (mupdf::ll_fz_is_infinite_rect(rect)
+                            || JM_rects_overlap(rect, chbbox)
+                            )
+                    {
+                        last_char = ch.m_internal->c;
+                        char utf[10];
+                        int n = mupdf::ll_fz_runetochar(utf, ch.m_internal->c);
+                        for (int i = 0; i < n; i++)
+                        {
+                            mupdf::fz_write_byte( out, utf[i]);
+                        }
+                    }
+                }
+                if (last_char != 10 && last_char > 0)
+                {
+                    mupdf::fz_write_string( out, "\n");
+                }
+            }
+        }
+    }
+}
+
+
 %}
 
 /* Declarations for functions defined above. */
@@ -2309,3 +2462,6 @@ int ll_fz_absi(int i);
 static std::string getMetadata(mupdf::FzDocument& doc, const char* key);
 
 mupdf::FzDevice JM_new_texttrace_device(PyObject* out);
+
+static fz_quad JM_char_quad( fz_stext_line *line, fz_stext_char *ch);
+void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page);

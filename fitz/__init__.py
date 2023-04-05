@@ -14080,6 +14080,11 @@ def JM_char_quad(line, ch):
     '''
     re-compute char quad if ascender/descender values make no sense
     '''
+    if 1 and g_use_extra:
+        # This reduces time taken to extract text from PyMuPDF.pdf from 20s to
+        # 15s.
+        return mupdf.FzQuad(extra.JM_char_quad( line.m_internal, ch.m_internal))
+        
     assert isinstance(line, mupdf.FzStextLine)
     assert isinstance(ch, mupdf.FzStextChar)
     if g_skip_quad_corrections:   # no special handling
@@ -16283,6 +16288,9 @@ def JM_print_stext_page_as_text(out, page):
     but lines within a block are concatenated by space instead a new-line
     character (which else leads to 2 new-lines).
     '''
+    if 1 and g_use_extra:
+        return extra.JM_print_stext_page_as_text( out, page)
+    
     assert isinstance(out, mupdf.FzOutput)
     assert isinstance(page, mupdf.FzStextPage)
     rect = mupdf.FzRect(page.m_internal.mediabox)
