@@ -875,7 +875,7 @@ def get_pixmap(
     """
     if dpi:
         zoom = dpi / 72
-        matrix = Matrix(zoom, zoom)
+        matrix = fitz.Matrix(zoom, zoom)
 
     if type(colorspace) is str:
         if colorspace.upper() == "GRAY":
