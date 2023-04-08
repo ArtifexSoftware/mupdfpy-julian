@@ -15135,7 +15135,7 @@ def JM_get_widget_properties(annot, Widget):
     SETATTR_DROP(Widget, "border_style", JM_UnicodeFromStr(mupdf.pdf_field_border_style(annot_obj)))
     SETATTR_DROP(Widget, "field_type_string", JM_UnicodeFromStr(JM_field_type_text(field_type)))
 
-    field_name = mupdf.pdf_field_name(annot_obj)
+    field_name = mupdf.pdf_load_field_name(annot_obj)
     SETATTR_DROP(Widget, "field_name", field_name)
 
     obj = mupdf.pdf_dict_get(annot_obj, PDF_NAME('TU'))
@@ -16868,7 +16868,7 @@ def JM_set_widget_properties(annot, Widget):
     value = GETATTR("field_name");
     if value is not None:
         name = JM_StrAsChar(value)
-        old_name = mupdf.pdf_field_name(annot_obj)
+        old_name = mupdf.pdf_load_field_name(annot_obj)
         if name != old_name:
             mupdf.pdf_dict_put_text_string(annot_obj, PDF_NAME('T'), name)
 
