@@ -121,6 +121,11 @@ Then on Unix:
 
 Or on Windows:
 
+[As of 2023-04-06, MuPDF Windows builds are hard-coded for Visual Studio
+2019 so the build fails with Visual Studio 2022. A workaround is to set
+PYMUPDF_SETUP_MUPDF_VS_UPGRADE=1, which makes MuPDF builds use a duplicate tree
+of build files that have been upgraded with `devenv.com /upgrade`.]
+
     # Create and enter Python virtual environment.
     py -m venv pylocal
     .\pylocal\Scripts\activate
