@@ -20,10 +20,6 @@ Overview:
 
 Environmental variables:
 
-    PYMUPDF_SETUP_DEVENV
-        Location of devenv.com on Windows. If unset we search in some
-        hard-coded default locations; if that fails we use just 'devenv.com'.
-
     PYMUPDF_SETUP_MUPDF_BUILD
         If set, overrides location of mupdf when building PyMuPDF:
             Empty string:
@@ -49,6 +45,10 @@ Environmental variables:
     PYMUPDF_SETUP_MUPDF_CLEAN
         If '1', we do a clean MuPDF build.
 
+    PYMUPDF_SETUP_MUPDF_VS_UPGRADE
+        If '1' we run mupdf `scripts/mupdfwrap.py` with `--vs-upgrade 1` to
+        help Windows builds work with Visual Studio versions newer than 2019.
+
     PYMUPDF_SETUP_MUPDF_TGZ
         If set, overrides location of MuPDF .tar.gz file:
             Empty string:
@@ -66,6 +66,13 @@ Environmental variables:
     PYMUPDF_SETUP_REBUILD
         If 0 we do not rebuild mupdfpy. If 1 we always rebuild mupdfpy. If
         unset we rebuild if necessary.
+
+    WDEV_VS_YEAR
+        If set, we use as Visual Studio year, for example '2019' or '2022'.
+
+    WDEV_VS_GRADE
+        If set, we use as Visual Studio grade, for example 'Community' or
+        'Professional' or 'Enterprise'.
 
 Building MuPDF:
     When building MuPDF, we overwrite the mupdf's include/mupdf/fitz/config.h
@@ -506,8 +513,10 @@ def build_mupdf_windows():
         #log( f'Building mupdf.')
         shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
         vs = pipcl.wdev.WindowsVS()
-        command = f'cd {mupdf_local}'
-        command += F' && {sys.executable} ./scripts/mupdfwrap.py -d {windows_build_tail} -b --refcheck-if "#if 1" --devenv "{vs.devenv}" all'
+        command = f'cd {mupdf_local} && {sys.executable} ./scripts/mupdfwrap.py'
+        if os.environ.get('PYMUPDF_SETUP_MUPDF_VS_UPGRADE') == '1':
+            command += ' --vs-upgrade 1'
+        command += f' -d {windows_build_tail} -b --refcheck-if "#if 1" --devenv "{vs.devenv}" all'
         if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
             log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
         else:
