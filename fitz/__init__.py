@@ -18212,7 +18212,10 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
             mupdf.fz_append_string( buff, "[ ") # left bracket
             # fixme: this does not use fz_append_printf()'s special handling of %g etc.
             for i in range( stroke.dash_len):
-                mupdf.fz_append_string( buff, f'{dev.pathfactor * stroke.dash_list[i]:g} ')
+                # We use mupdf python's SWIG-generated floats_getitem() fn to
+                # access float *stroke.dash_list[].
+                value = mupdf.floats_getitem( stroke.dash_list, i)  # stroke.dash_list[i].
+                mupdf.fz_append_string( buff, f'{dev.pathfactor * value:g} ')
             mupdf.fz_append_string( buff, f'] {dev.pathfactor * stroke.dash_phase:g}')
             dev.pathdict[ 'dashes'] = buff
         else:
@@ -18221,7 +18224,7 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
         dev.pathdict['layer'] = dev.layer_name
         dev.pathdict[ 'seqno'] = dev.seqno
         if dev.clips:
-            pathdict[ 'level'] = dev.depth
+            dev.pathdict[ 'level'] = dev.depth
         jm_append_merge(dev)
         dev.seqno += 1
     
@@ -18230,61 +18233,59 @@ def jm_lineart_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alph
         raise
 
 
-def jm_lineart_clip_path(dev, path, even_odd, ctm, scissor):
-   log(f'{dev.pathdict=} {dev.clips=}')
+def jm_lineart_clip_path(dev, ctx, path, even_odd, ctm, scissor):
    if not dev.clips:
        return
    out = dev.out
-   dev.ctm = ctm    # fz_concat(ctm, trace_device_ptm);
+   dev.ctm = mupdf.FzMatrix(ctm)    # fz_concat(ctm, trace_device_ptm);
    dev.path_type = trace_device_CLIP_PATH
-   jm_lineart_path(dev, path)
+   jm_lineart_path(dev, ctx, path)
    dev.pathdict[ dictkey_type] = 'clip'
    dev.pathdict[ 'even_odd'] = bool(even_odd)
    if 'closePath' not in dev.pathdict:
        #log(f'setting dev.pathdict["closePath"] to False')
        dev.pathdict['closePath'] = False
    
-   dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor())
+   dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor(dev))
    dev.pathdict['level'] = dev.depth
    dev.pathdict['layer'] = dev.layer_name
    jm_append_merge(dev)
    dev.depth += 1
 
-def jm_lineart_clip_stroke_path(dev, path, stroke, ctm, scissor):
-   log(f'{dev.pathdict=} {dev.clips=}')
+def jm_lineart_clip_stroke_path(dev, ctx, path, stroke, ctm, scissor):
    if not dev.clips:
        return
    out = dev.out
-   dev.ctm = ctm    # fz_concat(ctm, trace_device_ptm);
+   dev.ctm = mupdf.FzMatrix(ctm)    # fz_concat(ctm, trace_device_ptm);
    dev.path_type = trace_device_CLIP_STROKE_PATH
-   jm_lineart_path(dev, path)
+   jm_lineart_path(dev, ctx, path)
    dev.pathdict['dictkey_type'] = 'clip'
    dev.pathdict['even_odd'] = None
    if 'closePath' not in dev.pathdict:
        #log(f'setting dev.pathdict["closePath"] to False')
        dev.pathdict['closePath'] = False
-   dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor())
+   dev.pathdict['scissor'] = JM_py_from_rect(compute_scissor(dev))
    dev.pathdict['level'] = dev.depth
    dev.pathdict['layer'] = dev.layer_name
    jm_append_merge(dev)
    dev.depth += 1
 
 
-def jm_lineart_pop_clip(dev):
+def jm_lineart_pop_clip(dev, ctx):
     if not dev.clips:
         return
-    len_ = len(scissors)
-    del scissors[-1]
+    len_ = len(dev.scissors)
+    del dev.scissors[-1]
     dev.depth -= 1
 
 
-def jm_lineart_begin_layer(dev, name):
+def jm_lineart_begin_layer(dev, ctx, name):
    dev.layer_name = name
 
-def jm_lineart_end_layer(dev):
+def jm_lineart_end_layer(dev, ctx):
    dev.layer_name = None
 
-def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
+def jm_lineart_begin_group(dev, ctx, bbox, cs, isolated, knockout, blendmode, alpha):
     #log(f'{dev.pathdict=} {dev.clips=}')
     if not dev.clips:
         return;
@@ -18302,7 +18303,7 @@ def jm_lineart_begin_group(dev, bbox, cs, isolated, knockout, blendmode, alpha):
     jm_append_merge(dev)
     dev.depth += 1
 
-def jm_lineart_end_group(dev):
+def jm_lineart_end_group(dev, ctx):
     #log(f'{dev.pathdict=} {dev.clips=}')
     if not dev.clips:
         return
@@ -18418,12 +18419,12 @@ def compute_scissor(dev):
         dev.scissors = list()
     num_scissors = len(dev.scissors)
     if num_scissors > 0:
-        last_scissor = scissors[num_scissors-1]
+        last_scissor = dev.scissors[num_scissors-1]
         scissor = JM_rect_from_py(last_scissor)
-        scissor = mupdf.fz_intersect_rect(scissor, dev_pathrect)
+        scissor = mupdf.fz_intersect_rect(scissor, dev.pathrect)
     else:
         scissor = dev.pathrect
-    scissors.append(JM_py_from_rect(scissor))
+    dev.scissors.append(JM_py_from_rect(scissor))
     return scissor
 
 class JM_new_lineart_device_Device(mupdf.FzDevice2):
