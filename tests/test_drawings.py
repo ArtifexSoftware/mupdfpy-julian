@@ -140,3 +140,7 @@ def test_drawings3():
     diff = _dict_difference( drawings3, drawings4)
     assert diff == (set(), set(), {'closePath': (False, True)})
     
+def test_drawings4():
+    document = fitz.open(f'{scriptdir}/resources/1.pdf')
+    page = document[0]
+    page.get_drawings(extended=True)
