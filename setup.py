@@ -308,7 +308,7 @@ def get_mupdf_tgz():
     '''
     mupdf_url_or_local = os.environ.get(
             'PYMUPDF_SETUP_MUPDF_TGZ',
-            'https://mupdf.com/downloads/archive/mupdf-1.21.0-source.tar.gz',
+            'https://mupdf.com/downloads/archive/mupdf-1.22.0-source.tar.gz',
             )
     log( f'mupdf_url_or_local={mupdf_url_or_local!r}')
     if mupdf_url_or_local == '':
@@ -679,7 +679,7 @@ with open( f'{g_root}/README.md', encoding="utf-8") as f:
 
 p = pipcl.Package(
         'mupdfpy',
-        '1.21.1',
+        '1.22.0',
         summary="Rebased PyMuPDF bindings for the PDF toolkit and renderer MuPDF",
         description=readme,
         description_content_type="text/markdown",

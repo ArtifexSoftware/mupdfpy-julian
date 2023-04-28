@@ -3920,7 +3920,14 @@ class Document:
             res = None
             img = mupdf.pdf_load_image(pdf, obj)
             ll_cbuf = mupdf.ll_fz_compressed_image_buffer(img.m_internal)
-            if ll_cbuf:
+            if (ll_cbuf
+                    and cbuf.params.type not in (
+                        mupdf.FZ_IMAGE_RAW,
+                        FZ_IMAGE_FLATE,
+                        FZ_IMAGE_LZW,
+                        FZ_IMAGE_RLD,
+                        )
+                    ):
                 img_type = ll_cbuf.params.type
                 ext = JM_image_extension(img_type)
                 res = mupdf.FzBuffer(mupdf.ll_fz_keep_buffer(ll_cbuf.buffer))
@@ -16918,18 +16925,14 @@ def JM_set_widget_properties(annot, Widget):
     mupdf.pdf_dict_del(annot_obj, PDF_NAME('RC'))  # not supported by MuPDF
 
     # field flags ------------------------------------------------------------
-    field_flags = 0
-    Ff = 0
-    if field_type not in (
-            PDF_WIDGET_TYPE_CHECKBOX,
-            PDF_WIDGET_TYPE_BUTTON,
-            PDF_WIDGET_TYPE_RADIOBUTTON,
-            ):
-        value = GETATTR("field_flags") or 0
-        field_flags = value
-        Ff = mupdf.pdf_field_flags(annot_obj)
-        Ff |= field_flags
-        mupdf.pdf_dict_put_int(annot_obj, PDF_NAME('Ff'), Ff)
+    field_flags = GETATTR("field_flags");
+    if field_type == PDF_WIDGET_TYPE_COMBOBOX:
+        field_flags |= PDF_CH_FIELD_IS_COMBO
+    elif field_type == PDF_WIDGET_TYPE_RADIOBUTTON:
+        field_flags |= PDF_BTN_FIELD_IS_RADIO
+    elif field_type == PDF_WIDGET_TYPE_BUTTON:
+        field_flags |= PDF_BTN_FIELD_IS_PUSHBUTTON
+    mupdf.pdf_dict_put_int( annot_obj, PDF_NAME('Ff'), field_flags)
 
     # button caption ---------------------------------------------------------
     value = GETATTR("button_caption")
