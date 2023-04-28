@@ -2371,8 +2371,14 @@ class Colorspace:
     def __init__(self, type_):
         """Supported are GRAY, RGB and CMYK."""
         #this = _fitz.new_Colorspace(type)
-        this = mupdf.FzColorspace(type_)
-        self.this = this
+        if type_ == CS_GRAY:
+            self.this = mupdf.FzColorspace(mupdf.FzColorspace.Fixed_GRAY)
+        elif type_ == CS_CMYK:
+            self.this = mupdf.FzColorspace(mupdf.FzColorspace.Fixed_CMYK)
+        elif type_ == CS_RGB:
+            self.this = mupdf.FzColorspace(mupdf.FzColorspace.Fixed_RGB)
+        else:
+            self.this = mupdf.FzColorspace(mupdf.FzColorspace.Fixed_RGB)
 
     def __repr__(self):
         x = ("", "GRAY", "", "RGB", "CMYK")[self.n]
@@ -3921,11 +3927,12 @@ class Document:
             img = mupdf.pdf_load_image(pdf, obj)
             ll_cbuf = mupdf.ll_fz_compressed_image_buffer(img.m_internal)
             if (ll_cbuf
-                    and cbuf.params.type not in (
+                    and ll_cbuf.params.type not in (
                         mupdf.FZ_IMAGE_RAW,
-                        FZ_IMAGE_FLATE,
-                        FZ_IMAGE_LZW,
-                        FZ_IMAGE_RLD,
+                        mupdf.FZ_IMAGE_FAX,
+                        mupdf.FZ_IMAGE_FLATE,
+                        mupdf.FZ_IMAGE_LZW,
+                        mupdf.FZ_IMAGE_RLD,
                         )
                     ):
                 img_type = ll_cbuf.params.type
@@ -6748,7 +6755,7 @@ class Widget:
         self.field_name = None  # field name
         self.field_label = None  # field label
         self.field_value = None
-        self.field_flags = None
+        self.field_flags = 0
         self.field_display = 0
         self.field_type = 0  # valid range 1 through 7
         self.field_type_string = None  # field type as string
@@ -9473,9 +9480,12 @@ class Pixmap:
             #log( '{t=}')
             self.this = pm
 
-        elif args_match(args, mupdf.FzColorspace, int, int, None, int):
+        elif args_match(args, (mupdf.FzColorspace, fitz.Colorspace), int, int, None, (int, bool)):
             # create pixmap from samples data
             cs, w, h, samples, alpha = args
+            if isinstance(cs, fitz.Colorspace):
+                cs = cs.this
+                assert isinstance(cs, mupdf.FzColorspace)
             n = mupdf.fz_colorspace_n(cs)
             stride = (n + alpha) * w
             size = 0;
@@ -9484,19 +9494,11 @@ class Pixmap:
                 raise ValueError( "bad samples data")
             size, c = mupdf.fz_buffer_storage(res)
             if stride * h != size:
-                raise ValueError( "bad samples length")
+                raise ValueError( f"bad samples length {w=} {h=} {alpha=} {n=} {stride=} {size=}")
+            seps = mupdf.FzSeparations()
             pm = mupdf.fz_new_pixmap(cs, w, h, seps, alpha)
-            assert 0, 'cannot memcpy from buffer to pixmap samples.'
-            # do we need one of these?:
-            #   fz_pixmap *fz_new_pixmap_from_buffer(fz_buffer* buffer,
-            #           fz_colorspace *cs, int w, int h, fz_separations *seps, int alpha
-            #           );
-            #   fz_pixmap *fz_new_pixmap_from_samples(const unsigned char* samples,
-            #           fz_colorspace *cs, int w, int h, fz_separations *seps, int alpha
-            #           );
-            #
-
-            #memcpy(pm->samples, c, size);
+            samples2 = mupdf.python_bytes_data(samples) # raw swig proxy for `const unsigned char*`.
+            mupdf.mupdfpy_pixmap_copy_raw( pm.m_internal, samples2)
             self.this = pm
 
         elif args_match(args, None):
@@ -12884,12 +12886,6 @@ Base14_fontdict["tiit"] = "Times-Italic"
 Base14_fontdict["tibi"] = "Times-BoldItalic"
 Base14_fontdict["symb"] = "Symbol"
 Base14_fontdict["zadb"] = "ZapfDingbats"
-
-CS_GRAY = mupdf.FzColorspace.Fixed_GRAY
-CS_RGB = mupdf.FzColorspace.Fixed_RGB
-CS_BGR = mupdf.FzColorspace.Fixed_BGR
-CS_CMYK = mupdf.FzColorspace.Fixed_CMYK
-CS_LAB = mupdf.FzColorspace.Fixed_LAB
 
 EPSILON = 1e-5
 FLT_EPSILON = 1e-5
@@ -16926,13 +16922,14 @@ def JM_set_widget_properties(annot, Widget):
 
     # field flags ------------------------------------------------------------
     field_flags = GETATTR("field_flags");
-    if field_type == PDF_WIDGET_TYPE_COMBOBOX:
-        field_flags |= PDF_CH_FIELD_IS_COMBO
-    elif field_type == PDF_WIDGET_TYPE_RADIOBUTTON:
-        field_flags |= PDF_BTN_FIELD_IS_RADIO
-    elif field_type == PDF_WIDGET_TYPE_BUTTON:
-        field_flags |= PDF_BTN_FIELD_IS_PUSHBUTTON
-    mupdf.pdf_dict_put_int( annot_obj, PDF_NAME('Ff'), field_flags)
+    if field_flags is not None:
+        if field_type == PDF_WIDGET_TYPE_COMBOBOX:
+            field_flags |= PDF_CH_FIELD_IS_COMBO
+        elif field_type == PDF_WIDGET_TYPE_RADIOBUTTON:
+            field_flags |= PDF_BTN_FIELD_IS_RADIO
+        elif field_type == PDF_WIDGET_TYPE_BUTTON:
+            field_flags |= PDF_BTN_FIELD_IS_PUSHBUTTON
+        mupdf.pdf_dict_put_int( annot_obj, PDF_NAME('Ff'), field_flags)
 
     # button caption ---------------------------------------------------------
     value = GETATTR("button_caption")
