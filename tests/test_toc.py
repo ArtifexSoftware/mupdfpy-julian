@@ -5,6 +5,7 @@
 * Verify stability against circular TOC items
 """
 import os
+import sys
 import fitz
 
 scriptdir = os.path.abspath(os.path.dirname(__file__))
