@@ -2666,7 +2666,7 @@ class Document:
                     # original PyMuPDF code makes the same assumption. Presumably
                     # setting self.stream above ensures that the bytes will not be
                     # garbage collected?
-                    data = mupdf.fz_open_memory(mupdf.python_bytes_data(c), len(c))
+                    data = mupdf.fz_open_memory(mupdf.python_buffer_data(c), len(c))
                 magic = filename
                 if not magic:
                     magic = filetype
@@ -9424,12 +9424,12 @@ class Pixmap:
                 # We use specially-provided mupdfpy_pixmap_copy() to get best
                 # performance.
                 # test_pixmap.py:test_setalpha(): 3.9s t=0.0062
-                mupdf.mupdfpy_pixmap_copy( pm.m_internal, src_pix.m_internal, n)
+                mupdf.ll_fz_pixmap_copy( pm.m_internal, src_pix.m_internal, n)
             elif 1:
                 # Use memoryview.
                 # test_pixmap.py:test_setalpha(): 4.6 t=0.51
-                src_view = mupdf.fz_pixmap_samples2( src_pix)
-                pm_view = mupdf.fz_pixmap_samples2( pm)
+                src_view = mupdf.fz_pixmap_samples_memoryview( src_pix)
+                pm_view = mupdf.fz_pixmap_samples_memoryview( pm)
                 if src_pix.alpha() == pm.alpha():   # identical samples
                     #memcpy(tptr, sptr, w * h * (n + alpha));
                     size = w * h * (n + alpha)
@@ -9488,17 +9488,22 @@ class Pixmap:
                 assert isinstance(cs, mupdf.FzColorspace)
             n = mupdf.fz_colorspace_n(cs)
             stride = (n + alpha) * w
-            size = 0;
-            res = JM_BufferFromBytes(samples);
-            if not res.m_internal:
-                raise ValueError( "bad samples data")
-            size, c = mupdf.fz_buffer_storage(res)
-            if stride * h != size:
-                raise ValueError( f"bad samples length {w=} {h=} {alpha=} {n=} {stride=} {size=}")
             seps = mupdf.FzSeparations()
             pm = mupdf.fz_new_pixmap(cs, w, h, seps, alpha)
-            samples2 = mupdf.python_bytes_data(samples) # raw swig proxy for `const unsigned char*`.
-            mupdf.mupdfpy_pixmap_copy_raw( pm.m_internal, samples2)
+
+            if isinstance( samples, (bytes, bytearray)):
+                log('using mupdf.python_buffer_data()')
+                samples2 = mupdf.python_buffer_data(samples)
+                size = len(samples)
+            else:
+                res = JM_BufferFromBytes(samples);
+                if not res.m_internal:
+                    raise ValueError( "bad samples data")
+                size, c = mupdf.fz_buffer_storage(res)
+                samples2 = mupdf.python_buffer_data(samples) # raw swig proxy for `const unsigned char*`.
+            if stride * h != size:
+                raise ValueError( f"bad samples length {w=} {h=} {alpha=} {n=} {stride=} {size=}")
+            mupdf.ll_fz_pixmap_copy_raw( pm.m_internal, samples2)
             self.this = pm
 
         elif args_match(args, None):
@@ -9588,7 +9593,7 @@ class Pixmap:
         Pixmap samples memoryview.
         '''
         #return _fitz.Pixmap__samples_mv(self)
-        return self.this.fz_pixmap_samples2()
+        return self.this.fz_pixmap_samples_memoryview()
 
     @property
     def samples_ptr(self):
@@ -9948,7 +9953,7 @@ class Pixmap:
             for i in range(n):
                 bgcolor[i] = matte[i]
             bground = 1
-        
+        data = bytes()
         data_len = 0;
         if alphavalues:
             #res = JM_BufferFromBytes(alphavalues)
@@ -9972,7 +9977,7 @@ class Pixmap:
                     n,
                     data_len,
                     zero_out,
-                    mupdf.python_bytes_data( data),
+                    mupdf.python_buffer_data( data),
                     pix.m_internal,
                     premultiply,
                     bground,
@@ -13758,25 +13763,20 @@ def JM_EscapeStrFromStr(c):
 
 def JM_BufferFromBytes(stream):
     '''
-    Make fz_buffer from a PyBytes, PyByteArray, io.BytesIO object.
+    Make fz_buffer from a PyBytes, PyByteArray or io.BytesIO object. If a text
+    io.BytesIO, we convert to binary by encoding as utf8.
     '''
-    if isinstance(stream, bytes):
-        #log( 'bytes. calling mupdf.FzBuffer.fz_new_buffer_from_copied_data()')
-        return mupdf.FzBuffer.fz_new_buffer_from_copied_data(stream)
-    if isinstance(stream, bytearray):
-        #log( 'bytearray. calling mupdf.FzBuffer.fz_new_buffer_from_copied_data()')
-        return mupdf.FzBuffer.fz_new_buffer_from_copied_data(stream)
-    if hasattr(stream, 'getvalue'):
-        #log( '.getvalue')
+    if isinstance(stream, (bytes, bytearray)):
+        data = stream
+    elif hasattr(stream, 'getvalue'):
         data = stream.getvalue()
-        if isinstance(data, bytes):
-            pass
-        elif isinstance(data, str):
+        if isinstance(data, str):
             data = data.encode('utf-8')
-        else:
+        if not isinstance(data, (bytes, bytearray)):
             raise Exception(f'.getvalue() returned unexpected type: {type(data)}')
-        return mupdf.FzBuffer.fz_new_buffer_from_copied_data(data)
-    return mupdf.FzBuffer()
+    else:
+        return mupdf.FzBuffer()
+    return mupdf.FzBuffer.fz_new_buffer_from_copied_data(data)
 
 
 def JM_FLOAT_ITEM(obj, idx):
