@@ -24,7 +24,7 @@ if os.path.exists( 'fitz/__init__.py'):
         print( '#' * 40)
 
 jlib = None
-if 1:
+if 0:
     try:
         import jlib # This is .../mupdf/scripts/jlib.py
         print('Imported of jlib succeeded.')
@@ -34,10 +34,10 @@ if 1:
         exception_info = jlib.exception_info
         Timings = jlib.Timings
     except ImportError:
+        print('Imported of jlib failed.')
         pass
 
 if not jlib:
-    print('Imported of jlib failed.')
     import sys
     
     def log( text):
@@ -74,7 +74,6 @@ import math
 import os
 import re
 import sys
-import time
 import typing
 import warnings
 import weakref
@@ -8523,18 +8522,21 @@ class Page:
             # Downcast pdf_page to fz_page.
             page = mupdf.FzPage(page)
         assert isinstance(page, mupdf.FzPage), f'self.this={self.this}'
-        rc = []
         clips = True if extended else False
         prect = mupdf.fz_bound_page(page)
         #trace_device_ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
         #log(f'Calling JM_new_lineart_device_Device(). {callback=} {method=}')
-        if callable(callback) or method is not None:
-            dev = JM_new_lineart_device_Device(callback, clips, method)
+        if g_use_extra:
+            rc = extra.get_cdrawings(page, extended, callback, method)
         else:
-            dev = JM_new_lineart_device_Device(rc, clips, method)
-        dev.ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
-        mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
-        mupdf.fz_close_device(dev)
+            rc = list()
+            if callable(callback) or method is not None:
+                dev = JM_new_lineart_device_Device(callback, clips, method)
+            else:
+                dev = JM_new_lineart_device_Device(rc, clips, method)
+            dev.ptm = mupdf.FzMatrix(1, 0, 0, -1, 0, prect.y1)
+            mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
+            mupdf.fz_close_device(dev)
 
         if old_rotation != 0:
             self.set_rotation(old_rotation)
@@ -9417,8 +9419,6 @@ class Pixmap:
             pm.m_internal.yres = src_pix.m_internal.yres
 
             # copy samples data ------------------------------------------
-            import time
-            t = time.time()
             if 1:
                 # We use specially-provided mupdfpy_pixmap_copy() to get best
                 # performance.
@@ -9475,8 +9475,6 @@ class Pixmap:
                             pm.fz_samples_set(tptr, 255)
                             tptr += 1
                         sptr += n + src_pix_alpha
-            t = time.time() - t
-            #log( '{t=}')
             self.this = pm
 
         elif args_match(args, (mupdf.FzColorspace, fitz.Colorspace), int, int, None, (int, bool)):
@@ -12801,7 +12799,6 @@ if 1:
     self = sys.modules[__name__]
     #print( f'__name__={__name__}')
     #print( f'self={self}')
-    t0 = time.time()
     if 1:
         for name, value in mupdf.__dict__.items():
             if name.startswith(('PDF_', 'UCDN_SCRIPT_')):
@@ -12846,8 +12843,6 @@ if 1:
     #print( f'fitz/__init__.py: UCDN_SCRIPT_ADLAM={UCDN_SCRIPT_ADLAM}')
     assert UCDN_SCRIPT_ADLAM == mupdf.UCDN_SCRIPT_ADLAM
     del self
-    t = time.time() - t0
-    #print( f'Time to add mupdf.PDF_* and mupdf.UCDN_SCRIPT_* to fizt: {t=}')
 
 #g_timings.mid()
 _adobe_glyphs = {}
@@ -15151,7 +15146,7 @@ def JM_get_widget_properties(annot, Widget):
     obj = mupdf.pdf_dict_get(annot_obj, PDF_NAME('TU'))
     if obj.m_internal:
         label = mupdf.pdf_to_text_string(obj)
-    SETATTR_DROP(Widget, "field_label", label)
+        SETATTR_DROP(Widget, "field_label", label)
 
     SETATTR_DROP(Widget, "field_value", mupdf.pdf_field_value(annot_obj))
 
