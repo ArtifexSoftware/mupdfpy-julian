@@ -20,7 +20,7 @@ pre
 
 ## Overview
 
-**mupdfpy** is an alternative implementation of
+**mupdfpy** is an improved implementation of
 [PyMuPDF](https://github.com/pymupdf/PyMuPDF)
 that primarily uses [MuPDF's native Python
 bindings](https://mupdf.readthedocs.io/en/latest/language-bindings.html)
@@ -42,33 +42,34 @@ to `0`.
   The underlying MuPDF C++/Python APIs have automatic reference counting, which
   avoids various tricky leaks in native PyMuPDF.
 
-* Possibly multithreaded use, unlike native PyMuPDF which is explicitly
-  single-threaded.
+* Multithreaded use, unlike native PyMuPDF which is explicitly single-threaded.
 
   This is because the underlying MuPDF C++/Python APIs have automated
   per-thread contexts.
 
 * Simplified implementation.
 
-  The underlying MuPDF C++/Python APIs' automated reference counting,
-  automatatic contexts, and native C++ and Python exceptions make the
-  implementation much simpler than native PyMuPDF.
+  The underlying MuPDF C++/Python APIs' automated reference counting, automatic
+  contexts, and native C++ and Python exceptions make the implementation much
+  simpler than native PyMuPDF.
 
-* Access to the underlying MuPDF Python API in the `fitz.mupdf` module.
+  This also simplifies development of new PyMuPDF functionality.
+
+* Access to the underlying MuPDF Python API in the `fitz.mupdf` module - this
+  is not possible with native PyMuPDF, and can give useful flexibility to the
+  user.
 
 * Optional tracing of all calls of MuPDF C functions, by setting environment
-  variables. As of 2023-02-24 this is only enabled in debug builds of the MuPDF
-  C++ bindings. See:
-  <https://mupdf.readthedocs.io/en/latest/language-bindings.html#environmental-variables>
+  variables; this is a feature of the MuPDF C++ and Python APIs which can be
+  very useful during development and when reporting bugs. See:
+  <https://mupdf.readthedocs.io/en/latest/language-bindings.html#environmental-variables>]
 
 
 ## Status
 
-[As of 2023-03-30.]
+[As of 2023-05-1.]
 
 * Passes all PyMuPDF tests on Unix and Windows, using MuPDF branch master.
-* With swig-4.1 and later, we get lots of runtime warnings like: `swig/python
-  detected a memory leak of type 'mupdf::PdfObj *', no destructor found.`
 * On Windows:
     * Debug builds fail to build due to SWIG generating code that tries to access
       MuPDF global variables, which are not visible due to a problem with the
@@ -214,6 +215,10 @@ C++ code that uses the MuPDF C++ API) would get access to `libmupdf.so` and
 ## Changelog
 
 **Latest**:
+
+**2023-05-01**:
+
+* Updated to match PyMuPDF-1.22.2.
 
 **2023-03-30**:
 
