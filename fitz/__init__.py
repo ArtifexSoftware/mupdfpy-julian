@@ -8582,18 +8582,17 @@ class Page:
         of the C version to respective Point / Rect / Quad objects.
         It also adds default items that are missing in original path types.
         """
-        log(' ')
         allkeys = (
-                ("closePath", False),
-                ("fill", None),
-                ("color", None),
-                ("width", 0),
-                ("lineCap", [0]),
-                ("lineJoin", 0),
-                ("dashes", "[] 0"),
-                ("stroke_opacity", 1),
-                ("fill_opacity", 1),
-                ("even_odd", True),
+                'closePath',
+                'fill',
+                'color',
+                'width',
+                'lineCap',
+                'lineJoin',
+                'dashes',
+                'stroke_opacity',
+                'fill_opacity',
+                'even_odd',
                 )
         val = self.get_cdrawings(extended=extended)
         for i in range(len(val)):
@@ -8616,9 +8615,9 @@ class Page:
                         item = tuple([cmd] + [Point(i) for i in rest])
                     newitems.append(item)
                 npath["items"] = newitems
-            if npath["type"] in ("f", "s", "fs"):
-                for k, v in allkeys:
-                    npath[k] = npath.get(k, v)
+            if npath['type'] in ('f', 's'):
+                for k in allkeys:
+                    npath[k] = npath.get(k)
             val[i] = npath
         return val
 
@@ -14450,6 +14449,9 @@ def JM_cropbox(page_obj):
     '''
     return a PDF page's CropBox
     '''
+    if g_use_extra:
+        return extra.JM_cropbox(page_obj)
+    
     mediabox = JM_mediabox(page_obj)
     cropbox = mupdf.pdf_to_rect(
                 mupdf.pdf_dict_get_inheritable(page_obj, PDF_NAME('CropBox'))
