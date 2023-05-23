@@ -30,7 +30,6 @@ catch(...) {
 #include "mupdf/exceptions.h"
 #include "mupdf/internal.h"
 
-
 #include <algorithm>
 #include <float.h>
 
@@ -75,6 +74,8 @@ const char MSG_IS_NO_PDF[] = "is no PDF";
 const char MSG_IS_NO_DICT[] = "object is no PDF dict";
 const char MSG_PIX_NOALPHA[] = "source pixmap has no alpha";
 const char MSG_PIXEL_OUTSIDE[] = "pixel(s) outside image";
+
+#define JM_BOOL(x) PyBool_FromLong((long) (x))
 
 
 PyObject* JM_EscapeStrFromStr(const char* c)
@@ -528,7 +529,7 @@ static PyObject* Annot_getAP(mupdf::PdfAnnot& annot)
     return PyBytes_FromStringAndSize("", 0);
 }
 
-void Tools_update_da(struct mupdf::PdfAnnot& this_annot, const char* da_str)
+void Tools_update_da(mupdf::PdfAnnot& this_annot, const char* da_str)
 {
     mupdf::PdfObj this_annot_obj = mupdf::pdf_annot_obj(this_annot);
     mupdf::pdf_dict_put_text_string(this_annot_obj, PDF_NAME(DA), da_str);
@@ -861,6 +862,10 @@ static PyObject* JM_py_from_rect(fz_rect r)
 {
     return Py_BuildValue("ffff", r.x0, r.y0, r.x1, r.y1);
 }
+static PyObject* JM_py_from_rect(mupdf::FzRect r)
+{
+    return JM_py_from_rect(*r.internal());
+}
 
 //-----------------------------------------------------------------------------
 // PySequence from fz_point
@@ -868,6 +873,17 @@ static PyObject* JM_py_from_rect(fz_rect r)
 static PyObject* JM_py_from_point(fz_point p)
 {
     return Py_BuildValue("ff", p.x, p.y);
+}
+
+//-----------------------------------------------------------------------------
+// PySequence from fz_quad.
+//-----------------------------------------------------------------------------
+static PyObject *
+JM_py_from_quad(fz_quad q)
+{
+    return Py_BuildValue("((f,f),(f,f),(f,f),(f,f))",
+                          q.ul.x, q.ul.y, q.ur.x, q.ur.y,
+                          q.ll.x, q.ll.y, q.lr.x, q.lr.y);
 }
 
 //----------------------------------------------------------------
@@ -1010,7 +1026,7 @@ static mupdf::FzRect JM_mediabox(mupdf::PdfObj& page_obj)
 //----------------------------------------------------------------------------
 // return a PDF page's CropBox
 //----------------------------------------------------------------------------
-static mupdf::FzRect JM_cropbox(mupdf::PdfObj& page_obj)
+mupdf::FzRect JM_cropbox(mupdf::PdfObj& page_obj)
 {
     mupdf::FzRect mediabox = JM_mediabox(page_obj);
     mupdf::FzRect cropbox = mupdf::pdf_to_rect(
@@ -1747,16 +1763,42 @@ void set_small_glyph_heights(int on)
     g_small_glyph_heights = on;
 }
 
+struct jm_lineart_device
+{
+    fz_device super;
+    
+    PyObject* out = {};
+    PyObject* method = {};
+    PyObject* pathdict = {};
+    PyObject* scissors = {};
+    float pathfactor = {};
+    fz_matrix ctm = {};
+    fz_matrix ptm = {};
+    fz_matrix rot = {};
+    fz_point lastpoint = {};
+    fz_rect pathrect = {};
+    int clips = {};
+    int linecount = {};
+    int linewidth = {};
+    int path_type = {};
+    long depth = {};
+    size_t seqno = {};
+    char* layer_name;
+};
+
+/*
 struct jm_tracedraw_device
 {
     fz_device super;
-    PyObject* out;
-    size_t seqno = 0;
-    int linewidth = 0;
-    fz_matrix rot = {};
+    
+    PyObject* out = {};
     fz_matrix ptm = {};
-    const char* layer_name = NULL;
-};
+    fz_matrix rot = {};
+    int linewidth = {};
+    size_t seqno = {};
+    std::string layer_name;
+};*/
+typedef jm_lineart_device jm_tracedraw_device;
 
 // need own versions of ascender / descender
 static float JM_font_ascender(fz_font* font)
@@ -2045,7 +2087,6 @@ static void jm_dev_linewidth(
 }
 
 static void jm_trace_text(
-        fz_context* ctx,
         jm_tracedraw_device* dev,
         const fz_text* text,
         int type,
@@ -2082,7 +2123,7 @@ jm_tracedraw_fill_text(
         )
 {
     jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
-    jm_trace_text(ctx, dev, text, 0, ctm, colorspace, color, alpha, dev->seqno);
+    jm_trace_text(dev, text, 0, ctm, colorspace, color, alpha, dev->seqno);
     dev->seqno += 1;
 }
 
@@ -2100,7 +2141,7 @@ jm_tracedraw_stroke_text(
         )
 {
     jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
-    jm_trace_text(ctx, dev, text, 1, ctm, colorspace, color, alpha, dev->seqno);
+    jm_trace_text(dev, text, 1, ctm, colorspace, color, alpha, dev->seqno);
     dev->seqno += 1;
 }
 
@@ -2114,7 +2155,7 @@ jm_tracedraw_ignore_text(
         )
 {
     jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
-    jm_trace_text(ctx, dev, text, 3, ctm, nullptr, nullptr, 1, dev->seqno);
+    jm_trace_text(dev, text, 3, ctm, nullptr, nullptr, 1, dev->seqno);
     dev->seqno += 1;
 }
 
@@ -2122,14 +2163,16 @@ static void
 jm_lineart_begin_layer(fz_context *ctx, fz_device *dev_, const char *name)
 {
     jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
-    dev->layer_name = name;
+    mupdf::ll_fz_free(dev->layer_name);
+    dev->layer_name = mupdf::ll_fz_strdup(name);
 }
 
 static void
 jm_lineart_end_layer(fz_context *ctx, fz_device *dev_)
 {
     jm_tracedraw_device* dev = (jm_tracedraw_device*) dev_;
-    dev->layer_name = NULL;
+    mupdf::ll_fz_free(dev->layer_name);
+    dev->layer_name = nullptr;
 }
 
 
@@ -2268,7 +2311,7 @@ JM_char_quad(fz_stext_line *line, fz_stext_char *ch)
 
 
 static fz_rect
-JM_char_bbox(mupdf::FzStextLine& line, mupdf::FzStextChar& ch)
+JM_char_bbox(const mupdf::FzStextLine& line, const mupdf::FzStextChar& ch)
 {
     fz_rect r = mupdf::ll_fz_rect_from_quad(JM_char_quad( line.m_internal, ch.m_internal));
     if (!line.m_internal->wmode) {
@@ -2292,8 +2335,52 @@ static int JM_rects_overlap(const fz_rect a, const fz_rect b)
     return 1;
 }
 
+//
+void ll_JM_print_stext_page_as_text(fz_output *out, fz_stext_page *page)
+{
+    fz_stext_block *block;
+    fz_stext_line *line;
+    fz_stext_char *ch;
+    fz_rect rect = page->mediabox;
+    fz_rect chbbox;
+    int last_char = 0;
+    char utf[10];
+    int i, n;
+
+    for (block = page->first_block; block; block = block->next) {
+        if (block->type == FZ_STEXT_BLOCK_TEXT) {
+            for (line = block->u.t.first_line; line; line = line->next) {
+                last_char = 0;
+                for (ch = line->first_char; ch; ch = ch->next) {
+                    chbbox = JM_char_bbox(line, ch);
+                    if (mupdf::ll_fz_is_infinite_rect(rect) ||
+                        JM_rects_overlap(rect, chbbox)) {
+                        last_char = ch->c;
+                        n = mupdf::ll_fz_runetochar(utf, ch->c);
+                        for (i = 0; i < n; i++) {
+                            mupdf::ll_fz_write_byte(out, utf[i]);
+                        }
+                    }
+                }
+                if (last_char != 10 && last_char > 0) {
+                    mupdf::ll_fz_write_string(out, "\n");
+                }
+            }
+        }
+    }
+}
+//-----------------------------------------------------------------------------
+// Plain text output. An identical copy of fz_print_stext_page_as_text,
+// but lines within a block are concatenated by space instead a new-line
+// character (which else leads to 2 new-lines).
+//-----------------------------------------------------------------------------
 void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page)
 {
+    if (0)
+    {
+        return ll_JM_print_stext_page_as_text(out.m_internal, page.m_internal);
+    }
+    
     fz_rect rect = page.m_internal->mediabox;
 
     for (auto block: page)
@@ -2313,10 +2400,7 @@ void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page)
                         last_char = ch.m_internal->c;
                         char utf[10];
                         int n = mupdf::ll_fz_runetochar(utf, ch.m_internal->c);
-                        for (int i = 0; i < n; i++)
-                        {
-                            mupdf::fz_write_byte( out, utf[i]);
-                        }
+                        mupdf::ll_fz_write_data( out.m_internal, utf, n);
                     }
                 }
                 if (last_char != 10 && last_char > 0)
@@ -2326,6 +2410,655 @@ void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page)
             }
         }
     }
+}
+
+
+static int LIST_APPEND_DROP(PyObject *list, PyObject *item)
+{
+    if (!list || !PyList_Check(list) || !item) return -2;
+    int rc = PyList_Append(list, item);
+    Py_DECREF(item);
+    return rc;
+}
+
+static int DICT_SETITEM_DROP(PyObject *dict, PyObject *key, PyObject *value)
+{
+    if (!dict || !PyDict_Check(dict) || !key || !value) return -2;
+    int rc = PyDict_SetItem(dict, key, value);
+    Py_DECREF(value);
+    return rc;
+}
+
+static int DICT_SETITEMSTR_DROP(PyObject *dict, const char *key, PyObject *value)
+{
+    if (!dict || !PyDict_Check(dict) || !key || !value) return -2;
+    int rc = PyDict_SetItemString(dict, key, value);
+    Py_DECREF(value);
+    return rc;
+}
+
+
+
+// path_type is one of:
+#define FILL_PATH 1
+#define STROKE_PATH 2
+#define CLIP_PATH 3
+#define CLIP_STROKE_PATH 4
+
+// Every scissor of a clip is a sub rectangle of the preceeding clip
+// scissor if the clip level is larger.
+static fz_rect compute_scissor(jm_lineart_device *dev)
+{
+	PyObject *last_scissor = NULL;
+	fz_rect scissor;
+	if (!dev->scissors) {
+		dev->scissors = PyList_New(0);
+	}
+	Py_ssize_t num_scissors = PyList_Size(dev->scissors);
+	if (num_scissors > 0) {
+		last_scissor = PyList_GET_ITEM(dev->scissors, num_scissors-1);
+		scissor = JM_rect_from_py(last_scissor);
+		scissor = fz_intersect_rect(scissor, dev->pathrect);
+	} else {
+		scissor = dev->pathrect;
+	}
+	LIST_APPEND_DROP(dev->scissors, JM_py_from_rect(scissor));
+	return scissor;
+}
+
+
+/*
+--------------------------------------------------------------------------
+Check whether the last 4 lines represent a quad.
+Because of how we count, the lines are a polyline already, i.e. last point
+of a line equals 1st point of next line.
+So we check for a polygon (last line's end point equals start point).
+If not true we return 0.
+--------------------------------------------------------------------------
+*/
+static int
+jm_checkquad(jm_lineart_device* dev)
+{
+	PyObject *items = PyDict_GetItem(dev->pathdict, dictkey_items);
+	Py_ssize_t i, len = PyList_Size(items);
+	float f[8]; // coordinates of the 4 corners
+	mupdf::FzPoint temp, lp; // line = (temp, lp)
+	PyObject *rect;
+	PyObject *line;
+	// fill the 8 floats in f, start from items[-4:]
+	for (i = 0; i < 4; i++) {  // store line start points
+		line = PyList_GET_ITEM(items, len - 4 + i);
+		temp = JM_point_from_py(PyTuple_GET_ITEM(line, 1));
+		f[i * 2] = temp.x;
+		f[i * 2 + 1] = temp.y;
+		lp = JM_point_from_py(PyTuple_GET_ITEM(line, 2));
+	}
+	if (lp.x != f[0] || lp.y != f[1]) {
+		// not a polygon!
+		//dev_linecount -= 1;
+		return 0;
+	}
+
+	// we have detected a quad
+	dev->linecount = 0;  // reset this
+	// a quad item is ("qu", (ul, ur, ll, lr)), where the tuple items
+	// are pairs of floats representing a quad corner each.
+	rect = PyTuple_New(2);
+	PyTuple_SET_ITEM(rect, 0, PyUnicode_FromString("qu"));
+	/* ----------------------------------------------------
+	* relationship of float array to quad points:
+	* (0, 1) = ul, (2, 3) = ll, (6, 7) = ur, (4, 5) = lr
+	---------------------------------------------------- */
+	fz_quad q = fz_make_quad(f[0], f[1], f[6], f[7], f[2], f[3], f[4], f[5]);
+	PyTuple_SET_ITEM(rect, 1, JM_py_from_quad(q));
+	PyList_SetItem(items, len - 4, rect); // replace item -4 by rect
+	PyList_SetSlice(items, len - 3, len, NULL); // delete remaining 3 items
+	return 1;
+}
+
+
+/*
+--------------------------------------------------------------------------
+Check whether the last 3 path items represent a rectangle.
+Line 1 and 3 must be horizontal, line 2 must be vertical.
+Returns 1 if we have modified the path, otherwise 0.
+--------------------------------------------------------------------------
+*/
+static int
+jm_checkrect(jm_lineart_device* dev)
+{
+	dev->linecount = 0; // reset line count
+	long orientation = 0; // area orientation of rectangle
+	mupdf::FzPoint ll, lr, ur, ul;
+	mupdf::FzRect r;
+	PyObject *rect;
+	PyObject *line0, *line2;
+	PyObject *items = PyDict_GetItem(dev->pathdict, dictkey_items);
+	Py_ssize_t len = PyList_Size(items);
+
+	line0 = PyList_GET_ITEM(items, len - 3);
+	ll = JM_point_from_py(PyTuple_GET_ITEM(line0, 1));
+	lr = JM_point_from_py(PyTuple_GET_ITEM(line0, 2));
+	// no need to extract "line1"!
+	line2 = PyList_GET_ITEM(items, len - 1);
+	ur = JM_point_from_py(PyTuple_GET_ITEM(line2, 1));
+	ul = JM_point_from_py(PyTuple_GET_ITEM(line2, 2));
+
+	/*
+	---------------------------------------------------------------------
+	Assumption:
+	When decomposing rects, MuPDF always starts with a horizontal line,
+	followed by a vertical line, followed by a horizontal line.
+	First line: (ll, lr), third line: (ul, ur).
+	If 1st line is below 3rd line, we record anti-clockwise (+1), else
+	clockwise (-1) orientation.
+	---------------------------------------------------------------------
+	*/
+	if (ll.y != lr.y ||
+		ll.x != ul.x ||
+		ur.y != ul.y ||
+		ur.x != lr.x) {
+		goto drop_out;  // not a rectangle
+	}
+
+	// we have a rect, replace last 3 "l" items by one "re" item.
+	if (ul.y < lr.y) {
+		r = fz_make_rect(ul.x, ul.y, lr.x, lr.y);
+		orientation = 1;
+	} else {
+		r = fz_make_rect(ll.x, ll.y, ur.x, ur.y);
+		orientation = -1;
+	}
+	rect = PyTuple_New(3);
+	PyTuple_SET_ITEM(rect, 0, PyUnicode_FromString("re"));
+	PyTuple_SET_ITEM(rect, 1, JM_py_from_rect(r));
+	PyTuple_SET_ITEM(rect, 2, PyLong_FromLong(orientation));
+	PyList_SetItem(items, len - 3, rect); // replace item -3 by rect
+	PyList_SetSlice(items, len - 2, len, NULL); // delete remaining 2 items
+	return 1;
+	drop_out:;
+	return 0;
+}
+
+static PyObject *
+jm_lineart_color(fz_colorspace *colorspace, const float *color)
+{
+	float rgb[3];
+	if (colorspace) {
+		mupdf::ll_fz_convert_color(colorspace, color, mupdf::ll_fz_device_rgb(),
+		                 rgb, NULL, fz_default_color_params);
+		return Py_BuildValue("fff", rgb[0], rgb[1], rgb[2]);
+	}
+	return PyTuple_New(0);
+}
+
+static void
+trace_moveto(fz_context *ctx, void *dev_, float x, float y)
+{
+    jm_lineart_device* dev = (jm_lineart_device*) dev_;
+	dev->lastpoint = mupdf::ll_fz_transform_point(fz_make_point(x, y), dev->ctm);
+	if (mupdf::ll_fz_is_infinite_rect(dev->pathrect))
+    {
+		dev->pathrect = mupdf::ll_fz_make_rect(
+                dev->lastpoint.x,
+                dev->lastpoint.y,
+                dev->lastpoint.x,
+                dev->lastpoint.y
+                );
+	}
+	dev->linecount = 0;  // reset # of consec. lines
+}
+
+static void
+trace_lineto(fz_context *ctx, void *dev_, float x, float y)
+{
+    jm_lineart_device* dev = (jm_lineart_device*) dev_;
+	fz_point p1 = fz_transform_point(fz_make_point(x, y), dev->ctm);
+	dev->pathrect = fz_include_point_in_rect(dev->pathrect, p1);
+    PyObject *list = PyTuple_New(3);
+	PyTuple_SET_ITEM(list, 0, PyUnicode_FromString("l"));
+	PyTuple_SET_ITEM(list, 1, JM_py_from_point(dev->lastpoint));
+	PyTuple_SET_ITEM(list, 2, JM_py_from_point(p1));
+	dev->lastpoint = p1;
+	PyObject *items = PyDict_GetItem(dev->pathdict, dictkey_items);
+	LIST_APPEND_DROP(items, list);
+	dev->linecount += 1;  // counts consecutive lines
+	if (dev->linecount == 4 && dev->path_type != FILL_PATH) {  // shrink to "re" or "qu" item
+		jm_checkquad(dev);
+	}
+}
+
+static void
+trace_curveto(fz_context *ctx, void *dev_, float x1, float y1, float x2, float y2, float x3, float y3)
+{
+    jm_lineart_device* dev = (jm_lineart_device*) dev_;
+	dev->linecount = 0;  // reset # of consec. lines
+	fz_point p1 = fz_make_point(x1, y1);
+	fz_point p2 = fz_make_point(x2, y2);
+	fz_point p3 = fz_make_point(x3, y3);
+	p1 = fz_transform_point(p1, dev->ctm);
+	p2 = fz_transform_point(p2, dev->ctm);
+	p3 = fz_transform_point(p3, dev->ctm);
+	dev->pathrect = fz_include_point_in_rect(dev->pathrect, p1);
+	dev->pathrect = fz_include_point_in_rect(dev->pathrect, p2);
+	dev->pathrect = fz_include_point_in_rect(dev->pathrect, p3);
+
+	PyObject *list = PyTuple_New(5);
+	PyTuple_SET_ITEM(list, 0, PyUnicode_FromString("c"));
+	PyTuple_SET_ITEM(list, 1, JM_py_from_point(dev->lastpoint));
+	PyTuple_SET_ITEM(list, 2, JM_py_from_point(p1));
+	PyTuple_SET_ITEM(list, 3, JM_py_from_point(p2));
+	PyTuple_SET_ITEM(list, 4, JM_py_from_point(p3));
+	dev->lastpoint = p3;
+	PyObject *items = PyDict_GetItem(dev->pathdict, dictkey_items);
+	LIST_APPEND_DROP(items, list);
+}
+
+static void
+trace_close(fz_context *ctx, void *dev_)
+{
+    jm_lineart_device* dev = (jm_lineart_device*) dev_;
+	if (dev->linecount == 3) {
+		if (jm_checkrect(dev)) {
+			return;
+		}
+	}
+	DICT_SETITEMSTR_DROP(dev->pathdict, "closePath", JM_BOOL(1));
+	dev->linecount = 0;  // reset # of consec. lines
+}
+
+static const fz_path_walker trace_path_walker =
+	{
+		trace_moveto,
+		trace_lineto,
+		trace_curveto,
+		trace_close
+	};
+
+/*
+---------------------------------------------------------------------
+Create the "items" list of the path dictionary
+* either create or empty the path dictionary
+* reset the end point of the path
+* reset count of consecutive lines
+* invoke fz_walk_path(), which create the single items
+* if no items detected, empty path dict again
+---------------------------------------------------------------------
+*/
+static void
+jm_lineart_path(jm_lineart_device *dev, const fz_path *path)
+{
+	dev->pathrect = fz_infinite_rect;
+	dev->linecount = 0;
+	dev->lastpoint = fz_make_point(0, 0);
+	if (dev->pathdict) {
+		Py_CLEAR(dev->pathdict);
+	}
+	dev->pathdict = PyDict_New();
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_items, PyList_New(0));
+	mupdf::ll_fz_walk_path(path, &trace_path_walker, dev);
+	// Check if any items were added ...
+	if (!PyList_Size(PyDict_GetItem(dev->pathdict, dictkey_items)))
+    {
+		Py_CLEAR(dev->pathdict);
+	}
+}
+
+//---------------------------------------------------------------------------
+// Append current path to list or merge into last path of the list.
+// (1) Append if first path, different item lists or not a 'stroke' version
+//     of previous path
+// (2) If new path has the same items, merge its content into previous path
+//     and change path["type"] to "fs".
+// (3) If "out" is callable, skip the previous and pass dictionary to it.
+//---------------------------------------------------------------------------
+static void
+// todo: remove `method` arg - it is dev->method.
+jm_append_merge(jm_lineart_device *dev)
+{
+    Py_ssize_t len;
+    int rc;
+    PyObject *prev;
+    PyObject *previtems;
+    PyObject *thisitems;
+    const char *thistype;
+    const char *prevtype;
+	if (PyCallable_Check(dev->out) || dev->method != Py_None) {  // function or method
+		goto callback;
+	}
+	len = PyList_Size(dev->out);  // len of output list so far
+	if (len == 0) {  // always append first path 
+		goto append;
+	}
+	thistype = PyUnicode_AsUTF8(PyDict_GetItem(dev->pathdict, dictkey_type));
+	if (strcmp(thistype, "s") != 0) {  // if not stroke, then append
+		goto append;
+	}
+	prev = PyList_GET_ITEM(dev->out, len - 1);  // get prev path
+	prevtype = PyUnicode_AsUTF8(PyDict_GetItem(prev, dictkey_type));
+	if (strcmp(prevtype, "f") != 0) {  // if previous not fill, append
+		goto append;
+	}
+	// last check: there must be the same list of items for "f" and "s".
+	previtems = PyDict_GetItem(prev, dictkey_items);
+	thisitems = PyDict_GetItem(dev->pathdict, dictkey_items);
+	if (PyObject_RichCompareBool(previtems, thisitems, Py_NE)) {
+		goto append;
+	}
+	rc = PyDict_Merge(dev->pathdict, prev, 0);  // merge, do not override
+	if (rc == 0) {
+		DICT_SETITEM_DROP(dev->pathdict, dictkey_type, PyUnicode_FromString("fs"));
+		Py_XINCREF(dev->pathdict);  // PyList_SetItem() does not increment refcount.
+		PyList_SetItem(dev->out, len - 1, dev->pathdict);
+		return;
+	} else {
+		PySys_WriteStderr("could not merge stroke and fill path");
+		goto append;
+	}
+	append:;
+    //printf("Appending to dev->out. len(dev->out)=%zi\n", PyList_Size(dev->out));
+	PyList_Append(dev->out, dev->pathdict);
+	Py_CLEAR(dev->pathdict);
+	return;
+
+	callback:;  // callback function or method
+	PyObject *resp = NULL;
+	if (dev->method == Py_None) {
+		resp = PyObject_CallFunctionObjArgs(dev->out, dev->pathdict, NULL);
+	} else {
+		resp = PyObject_CallMethodObjArgs(dev->out, dev->method, dev->pathdict, NULL);
+	}
+	if (resp) {
+		Py_DECREF(resp);
+	} else {
+		PySys_WriteStderr("calling cdrawings callback function/method failed!");
+		PyErr_Clear();
+	}
+	Py_CLEAR(dev->pathdict);
+	return;
+}
+
+static void
+jm_lineart_fill_path(fz_context *ctx, fz_device *dev_, const fz_path *path,
+				int even_odd, fz_matrix ctm, fz_colorspace *colorspace,
+				const float *color, float alpha, fz_color_params color_params)
+{
+	jm_lineart_device *dev = (jm_lineart_device *) dev_;
+	dev->ctm = ctm; //fz_concat(ctm, trace_device_ptm);
+	dev->path_type = FILL_PATH;
+	jm_lineart_path(dev, path);
+	if (!dev->pathdict) {
+		return;
+	}
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_type, PyUnicode_FromString("f"));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "even_odd", JM_BOOL(even_odd));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "fill_opacity", Py_BuildValue("f", alpha));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "fill", jm_lineart_color(colorspace, color));
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_rect, JM_py_from_rect(dev->pathrect));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "seqno", PyLong_FromSize_t(dev->seqno));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "layer", Py_BuildValue("s", dev->layer_name));
+	if (dev->clips)	{
+		DICT_SETITEMSTR_DROP(dev->pathdict, "level", PyLong_FromLong(dev->depth));
+	}
+	jm_append_merge(dev);
+	dev->seqno += 1;
+}
+
+static void
+jm_lineart_stroke_path(fz_context *ctx, fz_device *dev_, const fz_path *path,
+				const fz_stroke_state *stroke, fz_matrix ctm,
+				fz_colorspace *colorspace, const float *color, float alpha,
+				fz_color_params color_params)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	int i;
+	dev->pathfactor = 1;
+	if (fz_abs(ctm.a) == fz_abs(ctm.d)) {
+		dev->pathfactor = fz_abs(ctm.a);
+	}
+	dev->ctm = ctm; // fz_concat(ctm, trace_device_ptm);
+	dev->path_type = STROKE_PATH;
+
+	jm_lineart_path(dev, path);
+	if (!dev->pathdict) {
+		return;
+	}
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_type, PyUnicode_FromString("s"));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "stroke_opacity", Py_BuildValue("f", alpha));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "color", jm_lineart_color(colorspace, color));
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_width, Py_BuildValue("f", dev->pathfactor * stroke->linewidth));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "lineCap", Py_BuildValue("iii", stroke->start_cap, stroke->dash_cap, stroke->end_cap));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "lineJoin", Py_BuildValue("f", dev->pathfactor * stroke->linejoin));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "fill", Py_BuildValue("s", NULL));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "fill_opacity", Py_BuildValue("s", NULL));
+	if (!PyDict_GetItemString(dev->pathdict, "closePath")) {
+		DICT_SETITEMSTR_DROP(dev->pathdict, "closePath", JM_BOOL(0));
+	}
+
+	// output the "dashes" string
+	if (stroke->dash_len) {
+		mupdf::FzBuffer buff(256);
+		mupdf::fz_append_string(buff, "[ ");  // left bracket
+		for (i = 0; i < stroke->dash_len; i++) {
+			fz_append_printf(ctx, buff.m_internal, "%g ", dev->pathfactor * stroke->dash_list[i]);
+		}
+		fz_append_printf(ctx, buff.m_internal, "] %g", dev->pathfactor * stroke->dash_phase);
+		DICT_SETITEMSTR_DROP(dev->pathdict, "dashes", JM_EscapeStrFromBuffer(buff));
+	} else {
+		DICT_SETITEMSTR_DROP(dev->pathdict, "dashes", PyUnicode_FromString("[] 0"));
+	}
+
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_rect, JM_py_from_rect(dev->pathrect));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "layer", Py_BuildValue("s", dev->layer_name));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "seqno", PyLong_FromSize_t(dev->seqno));
+	if (dev->clips) {
+		DICT_SETITEMSTR_DROP(dev->pathdict, "level", PyLong_FromLong(dev->depth));
+	}
+	// output the dict - potentially merging it with a previous fill_path twin
+	jm_append_merge(dev);
+	dev->seqno += 1;
+}
+
+static void
+jm_lineart_clip_path(fz_context *ctx, fz_device *dev_, const fz_path *path, int even_odd, fz_matrix ctm, fz_rect scissor)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	if (!dev->clips) return;
+	dev->ctm = ctm; //fz_concat(ctm, trace_device_ptm);
+	dev->path_type = CLIP_PATH;
+	jm_lineart_path(dev, path);
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_type, PyUnicode_FromString("clip"));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "even_odd", JM_BOOL(even_odd));
+	if (!PyDict_GetItemString(dev->pathdict, "closePath")) {
+		DICT_SETITEMSTR_DROP(dev->pathdict, "closePath", JM_BOOL(0));
+	}
+	DICT_SETITEMSTR_DROP(dev->pathdict, "scissor", JM_py_from_rect(compute_scissor(dev)));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "level", PyLong_FromLong(dev->depth));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "layer", Py_BuildValue("s", dev->layer_name));
+	jm_append_merge(dev);
+	dev->depth++;
+}
+
+static void
+jm_lineart_clip_stroke_path(fz_context *ctx, fz_device *dev_, const fz_path *path, const fz_stroke_state *stroke, fz_matrix ctm, fz_rect scissor)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	if (!dev->clips) return;
+	dev->ctm = ctm; //fz_concat(ctm, trace_device_ptm);
+	dev->path_type = CLIP_STROKE_PATH;
+	jm_lineart_path(dev, path);
+	DICT_SETITEM_DROP(dev->pathdict, dictkey_type, PyUnicode_FromString("clip"));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "even_odd", Py_BuildValue("s", NULL));
+	if (!PyDict_GetItemString(dev->pathdict, "closePath")) {
+		DICT_SETITEMSTR_DROP(dev->pathdict, "closePath", JM_BOOL(0));
+	}
+	DICT_SETITEMSTR_DROP(dev->pathdict, "scissor", JM_py_from_rect(compute_scissor(dev)));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "level", PyLong_FromLong(dev->depth));
+	DICT_SETITEMSTR_DROP(dev->pathdict, "layer", Py_BuildValue("s", dev->layer_name));
+	jm_append_merge(dev);
+	dev->depth++;
+}
+
+
+static void
+jm_lineart_pop_clip(fz_context *ctx, fz_device *dev_)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	if (!dev->clips) return;
+	Py_ssize_t len = PyList_Size(dev->scissors);
+	PyList_SetSlice(dev->scissors, len - 1, len, NULL);
+	dev->depth--;
+}
+
+
+static void
+jm_lineart_begin_group(fz_context *ctx, fz_device *dev_, fz_rect bbox, fz_colorspace *cs, int isolated, int knockout, int blendmode, float alpha)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	if (!dev->clips) return;
+	dev->pathdict = Py_BuildValue("{s:s,s:N,s:N,s:N,s:s,s:f,s:i,s:s}",
+						"type", "group",
+						"rect", JM_py_from_rect(bbox),
+						"isolated", JM_BOOL(isolated),
+						"knockout", JM_BOOL(knockout),
+						"blendmode", fz_blendmode_name(blendmode),
+						"opacity", alpha,
+						"level", dev->depth,
+						"layer", dev->layer_name
+					);
+	jm_append_merge(dev);
+	dev->depth++;
+}
+
+static void
+jm_lineart_end_group(fz_context *ctx, fz_device *dev_)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	if (!dev->clips) return;
+	dev->depth--;
+}
+
+static void jm_lineart_drop_device(fz_context *ctx, fz_device *dev_)
+{
+	jm_lineart_device *dev = (jm_lineart_device *)dev_;
+	if (PyList_Check(dev->out)) {
+		Py_CLEAR(dev->out);
+	}
+	Py_CLEAR(dev->method);
+	Py_CLEAR(dev->scissors);
+    mupdf::ll_fz_free(dev->layer_name);
+    dev->layer_name = nullptr;
+}
+
+static void jm_lineart_fill_text(fz_context *ctx, fz_device *dev, const fz_text *, fz_matrix, fz_colorspace *, const float *color, float alpha, fz_color_params)
+{
+    jm_increase_seqno(ctx, dev);
+}
+
+static void jm_lineart_stroke_text(fz_context *ctx, fz_device *dev, const fz_text *, const fz_stroke_state *, fz_matrix, fz_colorspace *, const float *color, float alpha, fz_color_params)
+{
+    jm_increase_seqno(ctx, dev);
+}
+
+static void jm_lineart_fill_shade(fz_context *ctx, fz_device *dev, fz_shade *shd, fz_matrix ctm, float alpha, fz_color_params color_params)
+{
+    jm_increase_seqno(ctx, dev);
+}
+
+static void jm_lineart_fill_image(fz_context *ctx, fz_device *dev, fz_image *img, fz_matrix ctm, float alpha, fz_color_params color_params)
+{
+    jm_increase_seqno(ctx, dev);
+}
+
+static void jm_lineart_fill_image_mask(fz_context *ctx, fz_device *dev, fz_image *img, fz_matrix ctm, fz_colorspace *, const float *color, float alpha, fz_color_params color_params)
+{
+    jm_increase_seqno(ctx, dev);
+}
+
+static void jm_lineart_ignore_text(fz_context *ctx, fz_device *dev, const fz_text *, fz_matrix)
+{
+    jm_increase_seqno(ctx, dev);
+}
+
+
+//-------------------------------------------------------------------
+// LINEART device for Python method Page.get_cdrawings()
+//-------------------------------------------------------------------
+mupdf::FzDevice JM_new_lineart_device(PyObject *out, int clips, PyObject *method)
+{
+	jm_lineart_device* dev = (jm_lineart_device*) mupdf::ll_fz_new_device_of_size(sizeof(jm_lineart_device));
+
+	dev->super.close_device = NULL;
+	dev->super.drop_device = jm_lineart_drop_device;
+	dev->super.fill_path = jm_lineart_fill_path;
+	dev->super.stroke_path = jm_lineart_stroke_path;
+	dev->super.clip_path = jm_lineart_clip_path;
+	dev->super.clip_stroke_path = jm_lineart_clip_stroke_path;
+
+	dev->super.fill_text = jm_lineart_fill_text;
+	dev->super.stroke_text = jm_lineart_stroke_text;
+	dev->super.clip_text = NULL;
+	dev->super.clip_stroke_text = NULL;
+	dev->super.ignore_text = jm_lineart_ignore_text;
+
+	dev->super.fill_shade = jm_lineart_fill_shade;
+	dev->super.fill_image = jm_lineart_fill_image;
+	dev->super.fill_image_mask = jm_lineart_fill_image_mask;
+	dev->super.clip_image_mask = NULL;
+
+	dev->super.pop_clip = jm_lineart_pop_clip;
+
+	dev->super.begin_mask = NULL;
+	dev->super.end_mask = NULL;
+	dev->super.begin_group = jm_lineart_begin_group;
+	dev->super.end_group = jm_lineart_end_group;
+
+	dev->super.begin_tile = NULL;
+	dev->super.end_tile = NULL;
+
+	dev->super.begin_layer = jm_lineart_begin_layer;
+	dev->super.end_layer = jm_lineart_end_layer;
+
+	dev->super.render_flags = NULL;
+	dev->super.set_default_colorspaces = NULL;
+
+	if (PyList_Check(out)) {
+		Py_INCREF(out);
+	}
+	Py_INCREF(method);
+	dev->out = out;
+	dev->seqno = 0;
+	dev->depth = 0;
+	dev->clips = clips;
+	dev->method = method;
+    dev->pathdict = nullptr;
+
+	return mupdf::FzDevice(&dev->super);
+}
+
+PyObject* get_cdrawings(mupdf::FzPage& page, PyObject *extended=NULL, PyObject *callback=NULL, PyObject *method=NULL)
+{
+    //fz_page *page = (fz_page *) $self;
+    //fz_device *dev = NULL;
+    PyObject *rc = NULL;
+    int clips = PyObject_IsTrue(extended);
+
+    mupdf::FzRect prect = mupdf::fz_bound_page(page);
+    mupdf::FzDevice dev;
+    if (PyCallable_Check(callback) || method != Py_None) {
+        dev = JM_new_lineart_device(callback, clips, method);
+    } else {
+        rc = PyList_New(0);
+        dev = JM_new_lineart_device(rc, clips, method);
+    }
+    mupdf::FzCookie cookie;
+    mupdf::fz_run_page( page, dev, fz_identity, cookie);
+    mupdf::fz_close_device( dev);
+    if (PyCallable_Check(callback) || method != Py_None)
+    {
+        Py_RETURN_NONE;
+    }
+    return rc;
 }
 
 
@@ -2380,7 +3113,7 @@ mupdf::PdfAnnot _add_caret_annot(mupdf::PdfPage& self, mupdf::FzPoint& point);
 mupdf::PdfAnnot _add_caret_annot(mupdf::FzPage& self, mupdf::FzPoint& point);
 const char* Tools_parse_da(mupdf::PdfAnnot& this_annot);
 PyObject* Annot_getAP(mupdf::PdfAnnot& annot);
-void Tools_update_da(struct mupdf::PdfAnnot& this_annot, const char* da_str);
+void Tools_update_da(mupdf::PdfAnnot& this_annot, const char* da_str);
 mupdf::FzPoint JM_point_from_py(PyObject* p);
 mupdf::FzRect Annot_rect(mupdf::PdfAnnot& annot);
 PyObject* util_transform_rect(PyObject* rect, PyObject* matrix);
@@ -2472,3 +3205,5 @@ static fz_quad JM_char_quad( fz_stext_line *line, fz_stext_char *ch);
 void JM_print_stext_page_as_text(mupdf::FzOutput& out, mupdf::FzStextPage& page);
 
 void set_small_glyph_heights(int on);
+mupdf::FzRect JM_cropbox(mupdf::PdfObj& page_obj);
+PyObject* get_cdrawings(mupdf::FzPage& page, PyObject *extended=NULL, PyObject *callback=NULL, PyObject *method=NULL);
