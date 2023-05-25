@@ -20449,9 +20449,36 @@ class TOOLS:
     """PyMuPDF configuration parameters."""
 
     @staticmethod
+    def mupdf_display_errors(on=None):
+        '''
+        Set MuPDF error display to True or False.
+        '''
+        global JM_mupdf_show_errors
+        if on is not None:
+            JM_mupdf_show_errors = bool(on)
+        return JM_mupdf_show_errors
+
+    @staticmethod
+    def mupdf_display_warnings(on=None):
+        '''
+        Set MuPDF warnings display to True or False.
+        '''
+        global JM_mupdf_show_warnings
+        if on is not None:
+            JM_mupdf_show_warnings = bool(on)
+        return JM_mupdf_show_warnings
+
+    @staticmethod
     def mupdf_warnings(reset=1):
-        # fixme: not implemented.
-        pass
+        if reset:
+            Tools.reset_mupdf_warnings()
+        return JM_mupdf_warnings_store
+
+    @staticmethod
+    def reset_mupdf_warnings():
+        global JM_mupdf_warnings_store
+        JM_mupdf_warnings_store = list()
+        
 
     @staticmethod
     def set_annot_stem( stem=None):
@@ -20475,6 +20502,12 @@ class TOOLS:
         elif FZ_ENABLE_ICC:
             fz_disable_icc()
  
+    def _derotate_matrix(page):
+        if isinstance(page, mupdf.PdfPage):
+            return JM_py_from_matrix(JM_derotate_page_matrix(page))
+        else:
+            return JM_py_from_matrix(fz_identity)
+
     @staticmethod
     def _fill_widget(annot, widget):
         #val = _fitz.Tools__fill_widget(self, annot, widget)
@@ -20800,6 +20833,13 @@ class TOOLS:
         return val
 
     @staticmethod
+    def _reset_widget(annot):
+        this_annot = annot
+        this_annot_obj = mupdf.pdf_annot_obj(this_annot)
+        pdf = mupdf.pdf_get_bound_document(this_annot_obj)
+        mupdf.pdf_field_reset(pdf, this_annot_obj)
+
+    @staticmethod
     def _rotate_matrix(page):
         #return _fitz.Tools__rotate_matrix(self, page)
         pdfpage = page._pdf_page()
@@ -20829,10 +20869,36 @@ class TOOLS:
             return
 
     @staticmethod
+    def glyph_cache_empty():
+        '''
+        Empty the glyph cache.
+        '''
+        mupdf.fz_purge_glyph_cache()
+
+    @staticmethod
+    def fitz_config_():
+        '''
+        Was previously hidden by Tools.fitz_config list?
+        '''
+        return JM_fitz_config()
+    
+    @staticmethod
     def gen_id():
         global TOOLS_JM_UNIQUE_ID
         TOOLS_JM_UNIQUE_ID += 1
         return TOOLS_JM_UNIQUE_ID
+
+    @staticmethod
+    def image_profile(stream, keep_image=0):
+        '''
+        Metadata of an image binary stream.
+        '''
+        return JM_image_profile(stream, keep_image)
+    
+    @staticmethod
+    def mupdf_version():
+        '''Get version of MuPDF binary build.'''
+        return mupdf.FZ_VERSION
 
     @staticmethod
     def set_font_width(doc, xref, width):
@@ -20858,12 +20924,8 @@ class TOOLS:
         """Set / unset MuPDF device caching."""
         #return _fitz.Tools_set_low_memory(self, on)
         global g_no_device_caching
-        if on is None:
-            return g_no_device_caching
-        if on:
-            g_no_device_caching = 1
-        else:
-            g_no_device_caching = 0
+        if on is not None:
+            g_no_device_caching = bool(on)
         return g_no_device_caching
 
     @staticmethod
@@ -20871,14 +20933,83 @@ class TOOLS:
         """Set / unset small glyph heights."""
         #return _fitz.Tools_set_small_glyph_heights(self, on)
         global g_small_glyph_heights
-        if on is None:
-            return g_small_glyph_heights
-        if on:
-            g_small_glyph_heights = 1
-        else:
-            g_small_glyph_heights = 0
-        extra.set_small_glyph_heights( g_small_glyph_heights)
+        if on is not None:
+            g_small_glyph_heights = bool(on)
+            extra.set_small_glyph_heights( g_small_glyph_heights)
         return g_small_glyph_heights
+    
+    @staticmethod
+    def set_subset_fontnames(on=None):
+        '''
+        Set / unset returning fontnames with their subset prefix.
+        '''
+        global g_subset_fontnames
+        if on is not None:
+            g_subset_fontnames = bool(on)
+        return g_subset_fontnames
+    
+    @staticmethod
+    def set_aa_level(level):
+        '''
+        Set anti-aliasing level.
+        '''
+        mupdf.fz_set_aa_level(level)
+    
+    @staticmethod
+    def set_graphics_min_line_width(min_line_width):
+        '''
+        Set the graphics minimum line width.
+        '''
+        mupdf.fz_set_graphics_min_line_width(min_line_width)
+
+    @staticmethod
+    def show_aa_level():
+        '''
+        Show anti-aliasing values.
+        '''
+        return dict(
+                graphics = mupdf.fz_graphics_aa_level(),
+                text = mupdf.fz_text_aa_level(),
+                graphics_min_line_width = mupdf.fz_graphics_min_line_width(),
+                )
+
+    @staticmethod
+    def store_maxsize():
+        '''
+        MuPDF store size limit.
+        '''
+        # fixme: return gctx->store->max.
+        return None
+
+    @staticmethod
+    def store_shrink(percent):
+        '''
+        Free 'percent' of current store size.
+        '''
+        if percent >= 100:
+            mupdf.fz_empty_store()
+            return 0
+        if percent > 0:
+            mupdf.fz_shrink_store( 100 - percent)
+        # fixme: return gctx->store->size.
+    
+    @staticmethod
+    def store_size():
+        '''
+        MuPDF current store size.
+        '''
+        # fixme: return gctx->store->size.
+        return None
+    
+    @staticmethod
+    def unset_quad_corrections(on=None):
+        '''
+        Set ascender / descender corrections on or off.
+        '''
+        global g_skip_quad_corrections
+        if on is not None:
+            g_skip_quad_corrections = bool(on)
+        return g_skip_quad_corrections
 
 
 # We cannot import utils earlier because it imports this fitz.py file itself
