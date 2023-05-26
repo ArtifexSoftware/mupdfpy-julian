@@ -1053,8 +1053,10 @@ mupdf::FzRect JM_cropbox(mupdf::PdfObj& page_obj)
     {
         cropbox = mediabox;
     }
-    cropbox.y0 = mediabox.y1 - cropbox.y1;
-    cropbox.y1 = mediabox.y1 - cropbox.y0;
+    float y0 = mediabox.y1 - cropbox.y1;
+    float y1 = mediabox.y1 - cropbox.y0;
+    cropbox.y0 = y0;
+    cropbox.y1 = y1;
     return cropbox;
 }
 
