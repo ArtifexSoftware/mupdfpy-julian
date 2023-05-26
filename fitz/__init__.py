@@ -171,6 +171,34 @@ quad_like = 'quad_like'
 rect_like = 'rect_like'
 
 
+def _as_fz_document(document):
+    '''
+    Returns document as a mupdf.FzDocument.
+    '''
+    if isinstance(document, Document):
+        return _as_fz_document(document.this)
+    elif isinstance(document, mupdf.FzDocument):
+        return document
+    elif isinstance(document, mupdf.PdfDocument):
+        return self.this.super()
+    else:
+        assert 0, f'Unrecognised type(self.this)={type(self.this)}'
+
+def _as_pdf_document(document):
+    '''
+    Returns self.this as a mupdf.PdfDocument, downcasting as required. If
+    we fail (i.e. self.this is a mupdf.FzDocument(), <ret>.m_internal will be
+    None.
+    '''
+    if isinstance(document, Document):
+        return _as_pdf_document(document.this)
+    elif isinstance(document, mupdf.PdfDocument):
+        return document
+    if isinstance(document, mupdf.FzDocument):
+        return mupdf.PdfDocument(document)
+        return None
+    assert 0, f'Unrecognised type(self.this)={type(self.this)}'
+
 # Fixme: we don't implement JM_MEMORY.
 
 # Classes
@@ -2642,7 +2670,7 @@ class Document:
                 if str(e) == MSG_BAD_FILETYPE:
                     raise ValueError( e_str)
                 else:
-                    raise FileDataError( MSG_BAD_DOCUMENT)
+                    raise FileDataError( MSG_BAD_DOCUMENT) from e
         else:
             w = width
             h = height
@@ -2750,8 +2778,8 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document__addFormFont(self, name, font)
-        pdf = mupdf.pdf_specifics(self.this)
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return
         fonts = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer( pdf),
@@ -2772,8 +2800,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document__deleteObject(self, xref)
-        doc = self.this
-        pdf = mupdf.pdf_specifics(doc)
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         if not _INRANGE(xref, 1, mupdf.pdf_xref_len(pdf)-1):
             raise ValueError( MSG_BAD_XREF)
@@ -2781,7 +2808,7 @@ class Document:
 
     def _delete_page(self, pno):
         #return _fitz.Document__delete_page(self, pno)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         mupdf.pdf_delete_page( pdf, pno)
         if pdf.m_internal.rev_page_map:
             mupdf.ll_pdf_drop_page_tree( pdf.m_internal)
@@ -2792,8 +2819,8 @@ class Document:
             raise ValueError("document closed or encrypted")
         #val = _fitz.Document__delToC(self)
         xrefs = []  # create Python list
-        pdf = mupdf.pdf_specifics(self.this)
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return xrefs    # not a pdf
         # get the main root
         root = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('Root'))
@@ -2853,7 +2880,7 @@ class Document:
 
     def _embfile_del(self, idx):
         #return _fitz.Document__embfile_del(self, idx)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         names = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
                 PDF_NAME('Root'),
@@ -2866,7 +2893,7 @@ class Document:
 
     def _embfile_info(self, idx, infodict):
         #return _fitz.Document__embfile_info(self, idx, infodict)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         xref = 0
         ci_xref=0
 
@@ -2914,7 +2941,7 @@ class Document:
 
     def _embfile_upd(self, idx, buffer_=None, filename=None, ufilename=None, desc=None):
         #return _fitz.Document__embfile_upd(self, idx, buffer, filename, ufilename, desc)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         xref = 0
         names = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
@@ -2951,7 +2978,7 @@ class Document:
 
     def _embeddedFileGet(self, idx):
         #return _fitz.Document__embeddedFileGet(self, idx)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         names = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
                 PDF_NAME('Root'),
@@ -2968,7 +2995,7 @@ class Document:
     def _embfile_add(self, name, buffer_, filename=None, ufilename=None, desc=None):
         #return _fitz.Document__embfile_add(self, name, buffer, filename, ufilename, desc)
         doc = self.this
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         data = JM_BufferFromBytes(buffer_)
         if not data.m_internal:
@@ -3006,7 +3033,7 @@ class Document:
             raise ValueError("document closed")
         #return _fitz.Document__embfile_names(self, namelist)
         doc = self.this
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         names = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
@@ -3032,7 +3059,7 @@ class Document:
         if g_use_extra:
             return extra.Document_extend_toc_items( self.this, items)
         #return _fitz.Document__extend_toc_items(self, items)
-        pdf = mupdf.pdf_specifics(self.this)
+        pdf = _as_pdf_document(self)
         zoom = "zoom"
         bold = "bold"
         italic = "italic"
@@ -3104,7 +3131,7 @@ class Document:
             del self._page_refs[pid]
 
     def _get_char_widths(self, xref: int, bfname: str, ext: str, ordering: int, limit: int, idx: int = 0):
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         mylimit = limit;
         if mylimit < 256:
             mylimit = 256
@@ -3136,7 +3163,7 @@ class Document:
 
     def _get_page_labels(self):
         #return _fitz.Document__get_page_labels(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
 
         ASSERT_PDF(pdf);
         rc = []
@@ -3184,7 +3211,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document__getOLRootNumber(self)
-        pdf = mupdf.pdf_specifics(self.this)
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         # get main root
         root = mupdf.pdf_dict_get( mupdf.pdf_trailer( pdf), PDF_NAME('Root'))
@@ -3204,14 +3231,14 @@ class Document:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document__getPageInfo(self, pno, what)
         doc = self.this
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         pageCount = doc.pdf_count_pages() if isinstance(doc, mupdf.PdfDocument) else doc.fz_count_pages()
         n = pno;  # pno < 0 is allowed
         while n < 0:
             n += pageCount  # make it non-negative
         if n >= pageCount:
             raise ValueError( MSG_BAD_PAGENO)
-        pageref = pdf.pdf_lookup_page_obj(n)
+        pageref = mupdf.pdf_lookup_page_obj(pdf, n)
         rsrc = pageref.pdf_dict_get_inheritable(mupdf.PDF_ENUM_NAME_Resources)
         liste = []
         tracer = []
@@ -3224,9 +3251,8 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document__getPDFfileid(self)
-        doc = self.this
-        pdf = mupdf.pdf_specifics(doc)
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(this)
+        if not pdf:
             return
         idlist = []
         identity = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('ID'));
@@ -3243,7 +3269,7 @@ class Document:
         '''
         Utility: insert font from file or binary.
         '''
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
 
         ASSERT_PDF(pdf);
         if not fontfile and not fontbuffer:
@@ -3274,7 +3300,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #val = _fitz.Document__move_copy_page(self, pno, nb, before, copy)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         same = 0
         ASSERT_PDF(pdf);
         # get the two page objects -----------------------------------
@@ -3331,13 +3357,13 @@ class Document:
 
     def _remove_links_to(self, numbers):
         #return _fitz.Document__remove_links_to(self, first, last)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         _remove_dest_range(pdf, numbers)
 
     def _remove_toc_item(self, xref):
         #return _fitz.Document__remove_toc_item(self, xref)
         # "remove" bookmark by letting it point to nowhere
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         item = mupdf.pdf_new_indirect(pdf, xref, 0)
         mupdf.pdf_dict_del( item, PDF_NAME('Dest'))
         mupdf.pdf_dict_del( item, PDF_NAME('A'))
@@ -3354,7 +3380,7 @@ class Document:
 
     def _set_page_labels(self, labels):
         #val = _fitz.Document__set_page_labels(self, labels)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         pagelabels = mupdf.pdf_new_name("PageLabels")
         root = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('Root'))
@@ -3392,7 +3418,7 @@ class Document:
         '''
         "update" bookmark by letting it point to nowhere
         '''
-        pdf = mupdf.pdf_specifics( self.this)
+        pdf = _as_pdf_document(self)
         item = mupdf.pdf_new_indirect( pdf, xref, 0)
         if title:
             mupdf.pdf_dict_put_text_string( item, PDF_NAME('Title'), title)
@@ -3421,15 +3447,31 @@ class Document:
         """Get list of field font resource names."""
         if self.is_closed:
             raise ValueError("document closed")
-        # fixme: not translated to python yet.
-        return _fitz.Document_FormFonts(self)
+        pdf = _as_pdf_document(self)
+        if not pdf:
+            return
+        fonts = mupdf.pdf_dict_getl(
+                mupdf.pdf_trailer(pdf),
+                PDF_NAME('Root'),
+                PDF_NAME('AcroForm'),
+                PDF_NAME('DR'),
+                PDF_NAME('Font'),
+                )
+        liste = list()
+        if fonts.m_internal and mupdf.pdf_is_dict(fonts):   # fonts exist
+            n = mupdf.pdf_dict_len(fonts)
+            for i in range(n):
+                f = mupdf.pdf_dict_get_key(fonts, i)
+                liste.append(JM_UnicodeFromStr(mupdf.pdf_to_name(f)))
+        return liste
+        
 
     def add_layer(self, name, creator=None, on=None):
         """Add a new OC layer."""
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_add_layer(self, name, creator, on)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         JM_add_layer_config( pdf, name, creator, on)
         mupdf.ll_pdf_read_ocg( pdf.m_internal)
@@ -3440,7 +3482,7 @@ class Document:
             raise ValueError("document closed")
         #return _fitz.Document_add_ocg(self, name, config, on, intent, usage)
         xref = 0
-        pdf = self._this_as_pdf_document();
+        pdf = _as_pdf_document(self);
         ASSERT_PDF(pdf);
 
         # make the OCG
@@ -3525,8 +3567,8 @@ class Document:
         """Check whether incremental saves are possible."""
         if self.is_closed:
             raise ValueError("document closed")
-        pdf = self.this.pdf_document_from_fz_document()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return False
         return pdf.pdf_can_be_saved_incrementally()
 
@@ -3624,7 +3666,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_del_xml_metadata(self)
-        pdf = mupdf.pdf_specifics(self.this)
+        pdf = _as_pdf_document(self)
         root = mupdf.pdf_dict_get( mupdf.pdf_trailer( pdf), PDF_NAME('Root'))
         if root.m_internal:
             mupdf.pdf_dict_del( root, PDF_NAME('Metadata'))
@@ -3853,7 +3895,7 @@ class Document:
         Get a font by xref.
         '''
         #log( '{=xref info_only}')
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         len_ = 0;
         obj = mupdf.pdf_load_object(pdf, xref)
@@ -3889,7 +3931,7 @@ class Document:
             raise ValueError("document closed or encrypted")
 
         #return _fitz.Document_extract_image(self, xref)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         img_type = 0
         smask = 0
         ASSERT_PDF(pdf);
@@ -4020,7 +4062,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #val = _fitz.Document_fullcopy_page(self, pno, to)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         page_count = mupdf.pdf_count_pages( pdf)
         try:
             ASSERT_PDF(pdf);
@@ -4081,7 +4123,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_get_layer(self, config)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         ocp = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer( pdf),
@@ -4107,7 +4149,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_get_layers(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         n = mupdf.pdf_count_layer_configs( pdf)
         if n == 1:
@@ -4136,7 +4178,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_get_new_xref(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         xref = 0
         ASSERT_PDF(pdf);
         ENSURE_OPERATION(pdf);
@@ -4149,7 +4191,7 @@ class Document:
             raise ValueError("document closed")
         #return _fitz.Document_get_ocgs(self)
         ci = mupdf.pdf_new_name( "CreatorInfo")
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         ocgs = mupdf.pdf_dict_getl(
                 mupdf.pdf_dict_get( mupdf.pdf_trailer( pdf), PDF_NAME('Root')),
@@ -4196,8 +4238,8 @@ class Document:
             raise ValueError("document closed")
         #return _fitz.Document_get_outline_xrefs(self)
         xrefs = []
-        pdf = mupdf.pdf_specifics(self.this)
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return xrefs
         root = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('Root'))
         if not root.m_internal:
@@ -4256,8 +4298,8 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_get_sigflags(self)
-        pdf = self._this_as_pdf_document()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return -1   # not a PDF
         sigflags = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
@@ -4276,7 +4318,7 @@ class Document:
             raise ValueError("document closed")
         #return _fitz.Document_get_xml_metadata(self)
         xml = None
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         if pdf.m_internal:
             xml = mupdf.pdf_dict_getl(
                     mupdf.pdf_trailer(pdf),
@@ -4299,7 +4341,7 @@ class Document:
             if self.is_closed:
                 raise ValueError("document closed")
             #return _fitz.Document_has_old_style_xrefs(self)
-            pdf = self._this_as_pdf_document()
+            pdf = _as_pdf_document(self)
             if pdf.m_internal and pdf.m_internal.has_old_style_xrefs:
                 return True
             return False
@@ -4312,7 +4354,7 @@ class Document:
             if self.is_closed:
                 raise ValueError("document closed")
             #return _fitz.Document_has_xref_streams(self)
-            pdf = self._this_as_pdf_document()
+            pdf = _as_pdf_document(self)
             if pdf.m_internal and pdf.m_internal.has_xref_streams:
                 return True
             return False
@@ -4455,9 +4497,8 @@ class Document:
                     _gmap,
                     );
         else:
-            doc = self.this
-            pdfout = mupdf.pdf_specifics(doc)
-            pdfsrc = mupdf.pdf_specifics(docsrc.this)
+            pdfout = _as_pdf_document(self)
+            pdfsrc = docsrc._this_as_pdf_document()
             outCount = mupdf.fz_count_pages(doc)
             srcCount = mupdf.fz_count_pages(docsrc.this)
 
@@ -4493,8 +4534,8 @@ class Document:
 
     @property
     def is_dirty(self):
-        pdf = self.this.pdf_specifics()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return False
         r = pdf.pdf_has_unsaved_changes()
         return True if r else False
@@ -4504,7 +4545,7 @@ class Document:
         '''
         Check whether we have a linearized PDF.
         '''
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         if pdf.m_internal:
             return mupdf.pdf_doc_was_linearized(pdf)
         return False    # gracefully handle non-PDF
@@ -4512,8 +4553,8 @@ class Document:
     @property
     def is_form_pdf(self):
         """Either False or PDF field count."""
-        pdf = self.this.pdf_specifics()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return False
         count = -1;
         try:
@@ -4558,8 +4599,8 @@ class Document:
     @property
     def is_repaired(self):
         """Check whether PDF was repaired."""
-        pdf = self.this.pdf_document_from_fz_document()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return False
         r = pdf.pdf_was_repaired()
         if r:
@@ -4573,7 +4614,7 @@ class Document:
         #return _fitz.Document_journal_can_do(self)
         undo=0
         redo=0
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         undo = mupdf.pdf_can_undo(pdf)
         redo = mupdf.pdf_can_redo(pdf)
@@ -4584,7 +4625,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_enable(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         mupdf.pdf_enable_journal(pdf)
 
@@ -4593,7 +4634,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_is_enabled(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         enabled = pdf.m_internal and pdf.m_internal.journal
         return enabled
 
@@ -4602,7 +4643,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_load(self, filename)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         if isinstance(filename, str):
             mupdf.pdf_load_journal(pdf, filename)
@@ -4618,7 +4659,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_op_name(self, step)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         name = mupdf.pdf_undoredo_step(pdf, step)
         return name
@@ -4629,7 +4670,7 @@ class Document:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_position(self)
         steps=0
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         rc, steps = mupdf.pdf_undoredo_state(pdf);
         return rc, steps
@@ -4639,7 +4680,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_redo(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         mupdf.pdf_redo(pdf)
         return True
@@ -4649,7 +4690,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_save(self, filename)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         if isinstance(filename, str):
             mupdf.pdf_save_journal(pdf, filename)
@@ -4662,7 +4703,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_start_op(self, name)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         if not pdf.m_internal.journal:
             raise RuntimeError( "Journalling not enabled")
@@ -4676,7 +4717,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_stop_op(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         mupdf.pdf_end_operation(pdf)
 
@@ -4685,7 +4726,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_journal_undo(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         mupdf.pdf_undo(pdf)
         return True
@@ -4696,8 +4737,8 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_language(self)
-        pdf = mupdf.pdf_specifics(self.this)
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return
         lang = mupdf.pdf_document_language(pdf)
         if lang == mupdf.FZ_LANG_UNSET:
@@ -4720,7 +4761,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_layer_ui_configs(self)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         info = mupdf.PdfLayerConfigUi()
         n = mupdf.pdf_count_layer_config_ui( pdf)
@@ -4881,6 +4922,25 @@ class Document:
             return None
         # fixme: not translated to python yet.
         return _fitz.Document_need_appearances(self, value)
+        
+        pdf = _as_pdf_document(self)
+        oldval = -1
+        appkey = "NeedAppearances"
+        
+        form = mupdf.pdf_dict_getp(
+                mupdf.pdf_trailer(pdf),
+                "Root/AcroForm",
+                )
+        app = mupdf.pdf_dict_gets(form, appkey)
+        if mupdf.pdf_is_bool(app):
+            oldval = mupdf.pdf_to_bool(app)
+        if value:
+            mupdf.pdf_dict_puts(form, appkey, PDF_TRUE)
+        else:
+            mupdf.pdf_dict_puts(form, appkey, PDF_FALSE)
+        if value is None:
+            return oldval >= 0
+        return value
 
     @property
     def needs_pass(self):
@@ -4900,10 +4960,7 @@ class Document:
         if g_use_extra:
             extra._newPage( self.this, pno, width, height)
         else:
-            if isinstance(self.this, mupdf.PdfDocument):
-                pdf = self.this
-            else:
-                pdf = mupdf.pdf_specifics( self)
+            pdf = _as_pdf_document(self)
             assert isinstance(pdf, mupdf.PdfDocument)
             mediabox = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
             mediabox.x1 = width
@@ -4932,7 +4989,7 @@ class Document:
         if tuple(page_id)  == self.last_location:
             return ()
         #return _fitz.Document_nextLocation(self, page_id)
-        this_doc = self._this_as_document()
+        this_doc = _as_fz_document(self)
         page_n = -1;
         val = page_id[ 0]
         if not isinstance(val, int):
@@ -4953,7 +5010,7 @@ class Document:
             pdf_document = self.this
         else:
             page_count = self.this.fz_count_pages()
-            pdf_document = self.this.pdf_specifics()
+            pdf_document = _as_pdf_document(self)
         while n < 0:
             n += page_count
         if n > page_count:
@@ -4983,7 +5040,7 @@ class Document:
         n = pno
         while n < 0:
             n += page_count
-        pdf = mupdf.pdf_specifics( this_doc)
+        pdf = _as_pdf_document(self)
         if n >= page_count:
             raise ValueError( MSG_BAD_PAGENO)
         ASSERT_PDF(pdf)
@@ -5024,7 +5081,7 @@ class Document:
         n = pno;
         while n < 0:
             n += page_count
-        pdf = mupdf.pdf_specifics(this_doc)
+        pdf = this_doc._this_as_pdf_document()
         xref = 0
         if n >= page_count:
             raise ValueError( MSG_BAD_PAGENO)
@@ -5092,10 +5149,9 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_pdf_catalog(self)
-        doc = self.this
-        pdf = mupdf.pdf_specifics(doc)
+        pdf = _as_pdf_document(self)
         xref = 0
-        if not pdf.m_internal:
+        if not pdf:
             return xref
         root = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('Root'))
         xref = mupdf.pdf_to_num(root)
@@ -5103,10 +5159,7 @@ class Document:
 
     def pdf_trailer(self, compressed=0, ascii=0):
         """Get PDF trailer as a string."""
-        if self.is_closed:
-            raise ValueError("document closed")
-        # fixme: not translated to python yet.
-        return _fitz.Document_pdf_trailer(self, compressed, ascii)
+        return self.xref_object(-1, compressed=compressed, ascii=ascii)
 
     @property
     def permissions(self):
@@ -5263,7 +5316,7 @@ class Document:
                     user_pw,
                     )
         
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         opts = mupdf.PdfWriteOptions()
         opts.do_incremental     = incremental
         opts.do_ascii           = ascii
@@ -5316,7 +5369,7 @@ class Document:
         if filename == self.name:
             raise ValueError("cannot snapshot to original")
         #return _fitz.Document_save_snapshot(self, filename)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         mupdf.pdf_save_snapshot(pdf, filename)
 
@@ -5338,7 +5391,7 @@ class Document:
         # preparatory stuff:
         # (1) get underlying pdf document,
         # (2) transform Python list into integer array
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         # call retainpages (code copy of fz_clean_file.c)
         retainpages(pdf, pyliste);
         if pdf.m_internal.rev_page_map:
@@ -5384,7 +5437,7 @@ class Document:
             if basestate not in ("ON", "OFF", "Unchanged"):
                 raise ValueError("bad 'basestate'")
         #return _fitz.Document_set_layer(self, config, basestate, on, off, rbgroups)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         ocp = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer( pdf),
@@ -5407,10 +5460,15 @@ class Document:
 
     def set_layer_ui_config(self, number, action=0):
         """Set / unset OC intent configuration."""
-        if self.is_closed:
-            raise ValueError("document closed")
-        # fixme: not translated to python yet.
-        return _fitz.Document_set_layer_ui_config(self, number, action)
+        pdf = _as_pdf_document(self)
+        assert pdf
+        if action == 1:
+            mupdf.pdf_toggle_layer_config_ui(pdf, number)
+        elif action == 2:
+            mupdf.pdf_deselect_layer_config_ui(pdf, number)
+        else:
+            mupdf.pdf_select_layer_config_ui(pdf, number)
+        
 
     def set_markinfo(self, markinfo: dict) -> bool:
         """Set the PDF MarkInfo values."""
@@ -5472,7 +5530,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_set_xml_metadata(self, metadata)
-        pdf = mupdf.pdf_specifics( self.this)
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         root = mupdf.pdf_dict_get( mupdf.pdf_trailer( pdf), PDF_NAME('Root'))
         if not root.m_internal:
@@ -5490,7 +5548,7 @@ class Document:
 
     def set_language(self, language=None):
         #return _fitz.Document_set_language(self, language)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         if not language:
             lang = mupdf.FZ_LANG_UNSET
@@ -5504,7 +5562,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_switch_layer(self, config, as_default)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         cfgs = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer( pdf),
@@ -5528,7 +5586,7 @@ class Document:
         if self.is_closed or self.is_encrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_update_stream(self, xref, stream, new)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         xreflen = mupdf.pdf_xref_len(pdf)
         if not _INRANGE(xref, 1, xreflen-1):
@@ -5545,12 +5603,13 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_update_stream(self, xref, stream, new)
-        pdf = self._this_as_pdf_document()
-        xreflen = pdf.pdf_xref_len()
+        pdf = _as_pdf_document(self)
+        xreflen = mupdf.pdf_xref_len(pdf)
         if xref < 1 or xref > xreflen:
             raise ValueError( MSG_BAD_XREF)
-        obj = pdf.pdf_new_indirect(xref, 0)
-        if not new and not obj.pdf_is_stream():
+        # get the object
+        obj = mupdf.pdf_new_indirect(pdf, xref, 0)
+        if not mupdf.pdf_is_dict(obj):
             raise ValueError( MSG_IS_NO_DICT)
         res = JM_BufferFromBytes(stream)
         if not res:
@@ -5563,7 +5622,7 @@ class Document:
         '''
         Count versions of PDF document.
         '''
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         if pdf.m_internal:
             return mupdf.pdf_count_versions(pdf)
         return 0
@@ -5624,7 +5683,7 @@ class Document:
             raise ValueError("document closed")
 
         #return _fitz.Document_xref_get_key(self, xref, key)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len(pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
@@ -5678,7 +5737,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_xref_get_keys(self, xref)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len( pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
@@ -5717,8 +5776,8 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_xref_is_stream(self, xref)
-        pdf = self._this_as_pdf_document()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(self)
+        if not pdf:
             return False    # not a PDF
         return bool(mupdf.pdf_obj_num_is_stream(pdf, xref))
 
@@ -5738,7 +5797,7 @@ class Document:
             raise ValueError("document closed")
         #return _fitz.Document_xref_length(self)
         xreflen = 0
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         if pdf:
             xreflen = mupdf.pdf_xref_len(pdf)
         return xreflen
@@ -5752,7 +5811,7 @@ class Document:
             ret = extra.xref_object( self.this, xref, compressed, ascii)
             return ret
         #return _fitz.Document_xref_object(self, xref, compressed, ascii)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len(pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
@@ -5770,7 +5829,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_xref_set_key(self, xref, key, value)
-        pdf = self._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         if not key:
             raise ValueError( "bad 'key'")
@@ -5808,7 +5867,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_xref_stream(self, xref)
-        pdf = mupdf.pdf_specifics( self.this)
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         xreflen = mupdf.pdf_xref_len( pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
@@ -5828,7 +5887,7 @@ class Document:
         if self.is_closed or self.isEncrypted:
             raise ValueError("document closed or encrypted")
         #return _fitz.Document_xref_stream_raw(self, xref)
-        pdf = mupdf.pdf_specifics( self.this)
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf);
         xreflen = mupdf.pdf_xref_len( pdf)
         if not _INRANGE(xref, 1, xreflen-1) and xref != -1:
@@ -5849,7 +5908,7 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_xref_xml_metadata(self)
-        pdf = mupdf.pdf_specifics( self.this)
+        pdf = _as_pdf_document(self)
         ASSERT_PDF(pdf)
         root = mupdf.pdf_dict_get( mupdf.pdf_trailer( pdf), PDF_NAME('Root'))
         if not root.m_internal:
@@ -5999,22 +6058,19 @@ class Font:
     def __repr__(self):
         return "Font('%s')" % self.name
 
-    def _valid_unicodes(self, arr): # Not implemented because implementation calls FT_Get_First_Char() etc.
-        # fixme: not translated to python yet.
-        return _fitz.Font__valid_unicodes(self, arr)
+    def _valid_unicodes(self, arr):
+        # fixme
+        assert 0, 'Not implemented because implementation requires FT_Get_First_Char() etc.'
+        font = self.this
+        temp = arr[0]
+        ptr = temp
+        JM_valid_chars(font, ptr)
 
     @property
     def ascender(self):
         """Return the glyph ascender value."""
         #return _fitz.Font_ascender(self)
         return mupdf.fz_font_ascender(self.this)
-
-    @property
-    def bbox(self):
-        # fixme: not translated to python yet.
-        val = _fitz.Font_bbox(self)
-        val = Rect(val)
-        return val
 
     @property
     def buffer(self):
@@ -6123,8 +6179,15 @@ class Font:
 
     def has_glyph(self, chr, language=None, script=0, fallback=0):
         """Check whether font has a glyph for this unicode."""
-        # fixme: not translated to python yet.
-        return _fitz.Font_has_glyph(self, chr, language, script, fallback)
+        if fallback:
+            lang = mupdf.fz_text_language_from_string(language)
+            gid, font = mupdf.fz_encode_character_with_fallback(self.this, chr, script, lang)
+        else:
+            if small_caps:
+                gid = mupdf.fz_encode_character_sc(thisfont, chr)
+            else:
+                gid = mupdf.fz_encode_character(thisfont, chr)
+        return gid
 
     @property
     def is_bold(self):
@@ -6202,17 +6265,14 @@ class Font:
         '''
         list of valid unicodes of a fz_font
         '''
-        # fixme: not currently implemented. Only use cases within
-        # PyMuPDF are in PyMuPDF/tests/test_font.py:test_font1() and
-        # _fitz.py:repair_mono_font().  The latter can be implemented using
-        # fz_glyph_count().
         return []
-        #from array import array
-        #gc = self.glyph_count
-        #cp = array("l", (0,) * gc)
-        #arr = cp.buffer_info()
-        #self._valid_unicodes(arr)
-        #return array("l", sorted(set(cp))[1:])
+        # fixme: uses _valid_unicodes() which is not implemented.
+        from array import array
+        gc = self.glyph_count
+        cp = array("l", (0,) * gc)
+        arr = cp.buffer_info()
+        self._valid_unicodes(arr)
+        return array("l", sorted(set(cp))[1:]) 
 
 
 class Graftmap:
@@ -6224,7 +6284,7 @@ class Graftmap:
 
     def __init__(self, doc):
         #this = _fitz.new_Graftmap(doc)
-        dst = mupdf.pdf_specifics(doc.this)
+        dst = doc._this_as_pdf_document()
         ASSERT_PDF(dst)
         map_ = mupdf.pdf_new_graft_map(dst)
         self.this = map_
@@ -6249,12 +6309,18 @@ class Link:
         return "link on " + str(self.parent)
 
     def _border(self, doc, xref):
-        # fixme: not translated to python yet.
-        return _fitz.Link__border(self, doc, xref)
+        pdf = _as_pdf_document(doc)
+        if not pdf:
+            return
+        link_obj = mupdf.pdf_new_indirect(pdf, xref, 0)
+        if not link_obj.m_internal:
+            return
+        b = JM_annot_border(link_obj)
+        return b
 
     def _colors(self, doc, xref):
-        pdf = mupdf.pdf_specifics( doc.this)
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(doc)
+        if not pdf:
            return
         link_obj = mupdf.pdf_new_indirect( pdf, xref, 0)
         if not link_obj.m_internal:
@@ -6266,14 +6332,16 @@ class Link:
         self.parent = None
         self.thisown = False
 
-    def _setColors(self, colors, doc, xref):
-        # fixme: not translated to python yet.
-        return _fitz.Link__setColors(self, colors, doc, xref)
-
     def _setBorder(self, border, doc, xref):
-        # fixme: not translated to python yet.
-        return _fitz.Link__setBorder(self, border, doc, xref)
-
+        pdf = _as_pdf_document(doc)
+        if not pdf:
+            return
+        link_obj = mupdf.pdf_new_indirect(pdf, xref, 0)
+        if not link_obj.m_internal:
+            return
+        b = JM_annot_set_border(border, pdf, link_obj)
+        return b;
+        
     @property
     def border(self):
         return self._border(self.parent.parent.this, self.xref)
@@ -6354,9 +6422,6 @@ class Link:
     def rect(self):
         """Rectangle ('hot area')."""
         CheckParent(self)
-        # fixme: not translated to python yet.
-        #val = _fitz.Link_rect(self)
-        
         # utils.py:getLinkDict() appears to expect exceptions from us, so we
         # ensure that we raise on error.
         if not self.this or not self.this.m_internal:
@@ -7552,24 +7617,12 @@ class Page:
     #----------------------------------------------------------------
     def _get_resource_properties(self):
         #return _fitz.Page__get_resource_properties(self)
-        if 1:
-            page = self._pdf_page()
-            ASSERT_PDF(page);
-            rc = JM_get_resource_properties(page.obj())
-            return rc
-
-    def _getDrawings(self):
-        # fixme: not translated to python yet.
-        return _fitz.Page__getDrawings(self)
-
-    def _get_text_page(self, clip=None, flags=0):
-        # fixme: not translated to python yet.
-        val = _fitz.Page__get_text_page(self, clip, flags)
-        val.thisown = True
-        return val
+        page = self._pdf_page()
+        ASSERT_PDF(page);
+        rc = JM_get_resource_properties(page.obj())
+        return rc
 
     def _get_textpage(self, clip=None, flags=0, matrix=None):
-        #return _fitz.Page__get_textpage(self, clip, flags, matrix)
         page = self.this
         options = mupdf.FzStextOptions(flags)
         rect = JM_rect_from_py(clip)
@@ -7579,14 +7632,14 @@ class Page:
         tpage = mupdf.FzStextPage(rect)
         dev = mupdf.fz_new_stext_device(tpage, options)
         if g_no_device_caching:
-            mupdf.fz_enable_device_hints( dev, mupdf.FZ_NO_CACHE);
+            mupdf.fz_enable_device_hints( dev, mupdf.FZ_NO_CACHE)
         if isinstance(page, mupdf.FzPage):
             pass
         elif isinstance(page, mupdf.PdfPage):
             page = page.super()
         else:
             assert 0, f'Unrecognised type(page)={type(page)}'
-        mupdf.fz_run_page(page, dev, ctm, mupdf.FzCookie());
+        mupdf.fz_run_page(page, dev, ctm, mupdf.FzCookie())
         mupdf.fz_close_device(dev)
         return tpage
 
@@ -7792,8 +7845,8 @@ class Page:
         return Annot(annot) if annot else None
 
     def _makePixmap(self, doc, ctm, cs, alpha=0, annots=1, clip=None):
-        # fixme: not translated to python yet.
-        return _fitz.Page__makePixmap(self, doc, ctm, cs, alpha, annots, clip)
+        pix = JM_pixmap_from_page(doc, self.this, ctm, cs, alpha, annots, clip)
+        return Pixmap(pix)
 
     def _pdf_page(self):
         '''
@@ -9539,9 +9592,7 @@ class Pixmap:
         elif args_match(args, (Document, mupdf.FzDocument), int):
             # Create pixmap from PDF image identified by XREF number
             doc, xref = args
-            if isinstance(doc, Document):
-                doc = doc.this
-            pdf = mupdf.pdf_specifics(doc)
+            pdf = _as_pdf_document(doc)
             ASSERT_PDF(pdf)
             xreflen = mupdf.pdf_xref_len(pdf)
             if not _INRANGE(xref, 1, xreflen-1):
@@ -9579,10 +9630,6 @@ class Pixmap:
             return "Pixmap(%s, %s, %s)" % (self.colorspace.this.m_internal.name, self.irect, self.alpha)
         else:
             return "Pixmap(%s, %s, %s)" % ('None', self.irect, self.alpha)
-
-    def _getImageData(self, format):
-        # fixme: not translated to python yet.
-        return _fitz.Pixmap__getImageData(self, format)
 
     @property
     def samples_mv(self):
@@ -9866,6 +9913,15 @@ class Pixmap:
         Last item is the alpha if Pixmap.alpha is true."""
         # fixme: not translated to python yet.
         #return _fitz.Pixmap_pixel(self, x, y)
+        
+        if (0
+                or x < 0
+                or x >= self.this.m_internal.w
+                or y < 0
+                or y >= self.this.m_internal.h
+                ):
+            RAISEPY(MSG_PIXEL_OUTSIDE, PyExc_ValueError)
+        
         stride = self.this.m_internal.stride
         n = self.this.m_internal.n
         i = stride * y + n * x
@@ -12176,8 +12232,12 @@ class TextPage:
         return val
 
     def extractSelection(self, pointa, pointb):
-        # fixme: not translated to python yet.
-        return _fitz.TextPage_extractSelection(self, pointa, pointb)
+        a = JM_point_from_py(pointa)
+        b = JM_point_from_py(pointb)
+        found = mupdf.fz_copy_selection(self.this, a, b, 0)
+        if found:
+            return PyUnicode_FromString(found)
+        return ''        
 
     def extractText(self, sort=False) -> str:
         """Return simple, bare text on the page."""
@@ -13792,6 +13852,75 @@ def JM_INT_ITEM(obj, idx):
         if isinstance(temp, (int, float)):
             return 0, temp
     return 1, None
+
+def JM_pixmap_from_page(doc, page, ctm, cs, alpha, annots, clip):
+    '''
+    Pixmap creation directly using a short-lived displaylist, so we can support
+    separations.
+    '''
+    SPOTS_NONE = 0
+    SPOTS_OVERPRINT_SIM = 1
+    SPOTS_FULL = 2
+    
+    FZ_ENABLE_SPOT_RENDERING = True # fixme: this is a build-time setting in MuPDF's config.h.
+    if FZ_ENABLE_SPOT_RENDERING:
+        spots = SPOTS_OVERPRINT_SIM
+    else:
+        spots = SPOTS_NONE
+
+    seps = None
+    colorspace = cs
+    
+    matrix = JM_matrix_from_py(ctm)
+    rect = mupdf.fz_bound_page(page)
+    rclip = JM_rect_from_py(clip)
+    rect = mupdf.fz_intersect_rect(rect, rclip) # no-op if clip is not given
+    rect = mupdf.fz_transform_rect(rect, matrix)
+    bbox = mupdf.fz_round_rect(rect)
+
+    # Pixmap of the document's /OutputIntents ("output intents")
+    oi = mupdf.fz_document_output_intent(doc)
+    # if present and compatible, use it instead of the parameter
+    if oi.m_internal:
+        if mupdf.fz_colorspace_n(oi) == mupdf.fz_colorspace_n(cs):
+            colorspace = mupdf.fz_keep_colorspace(oi)
+
+    # check if spots rendering is available and if so use separations
+    if spots != SPOTS_NONE:
+        seps = mupdf.fz_page_separations(page)
+        if seps.m_internal:
+            n = mupdf.fz_count_separations(seps)
+            if spots == SPOTS_FULL:
+                for i in range(n):
+                    mupdf.fz_set_separation_behavior(seps, i, FZ_SEPARATION_SPOT)
+            else:
+                for i in range(n):
+                    mupdf.fz_set_separation_behavior(seps, i, FZ_SEPARATION_COMPOSITE)
+        elif mupdf.fz_page_uses_overprint(page):
+            # This page uses overprint, so we need an empty
+            # sep object to force the overprint simulation on.
+            seps = mupdf.fz_new_separations(0)
+        elif oi.m_internal and mupdf.fz_colorspace_n(oi) != mupdf.fz_colorspace_n(colorspace):
+            # We have an output intent, and it's incompatible
+            # with the colorspace our device needs. Force the
+            # overprint simulation on, because this ensures that
+            # we 'simulate' the output intent too. 
+            seps = mupdf.fz_new_separations(0)
+
+    pix = mupdf.fz_new_pixmap_with_bbox(colorspace, bbox, seps, alpha)
+
+    if alpha:
+        mupdf.fz_clear_pixmap(pix)
+    else:
+        mupdf.fz_clear_pixmap_with_value(pix, 0xFF)
+
+    dev = mupdf.fz_new_draw_device(matrix, pix)
+    if annots:
+        mupdf.fz_run_page(page, dev, fz_identity, NULL);
+    else:
+        fz_run_page_contents(ctx, page, dev, fz_identity, mupdf.FzCookie())
+    mupdf.fz_close_device(dev)
+    return pix
 
 def JM_StrAsChar(x):
     # fixme: should encode, but swig doesn't pass bytes to C as const char*.
@@ -20471,7 +20600,7 @@ class TOOLS:
     @staticmethod
     def mupdf_warnings(reset=1):
         if reset:
-            Tools.reset_mupdf_warnings()
+            TOOLS.reset_mupdf_warnings()
         return JM_mupdf_warnings_store
 
     @staticmethod
@@ -20903,8 +21032,8 @@ class TOOLS:
     @staticmethod
     def set_font_width(doc, xref, width):
         #return _fitz.Tools_set_font_width(self, doc, xref, width)
-        pdf = doc._this_as_pdf_document()
-        if not pdf.m_internal:
+        pdf = _as_pdf_document(doc)
+        if not pdf:
             return False
         font = mupdf.pdf_load_object(pdf, xref)
         dfonts = mupdf.pdf_dict_get(font, PDF_NAME('DescendantFonts'))
