@@ -64,8 +64,8 @@ Environmental variables:
                 checkout known to git into a local tar archive.
 
     PYMUPDF_SETUP_MUPDF_OVERWRITE_CONFIG
-        If '1' we overwrite MuPDF's include/mupdf/fitz/config.h with PyMuPDF's
-        own configuration file, before building MuPDF.
+        If '0' we do not overwrite MuPDF's include/mupdf/fitz/config.h with
+        PyMuPDF's own configuration file, before building MuPDF.
     
     PYMUPDF_SETUP_REBUILD
         If 0 we do not rebuild mupdfpy. If 1 we always rebuild mupdfpy. If
@@ -451,13 +451,15 @@ def build():
     if mupdf_local:
         from_ = f'{g_root}/mupdf_config.h'
         to_ =f'{mupdf_local}/include/mupdf/fitz/config.h'
-        if os.environ.get('PYMUPDF_SETUP_MUPDF_OVERWRITE_CONFIG') == '1':
+        if os.environ.get('PYMUPDF_SETUP_MUPDF_OVERWRITE_CONFIG') == '0':
+            # Use MuPDF default config.
+            log( f'Not copying {from_} to {to_}.')
+        else:
+            # Use our special config in MuPDF.
             log( f'Copying {from_} to {to_}.')
             shutil.copy2( from_, to_)
-        else:
-            log( f'Not copying {from_} to {to_}.')
-            s = os.stat( f'{to_}')
-            log( f'{to_}: {s} mtime={time.strftime("%F-%T", time.gmtime(s.st_mtime))}')
+        s = os.stat( f'{to_}')
+        log( f'{to_}: {s} mtime={time.strftime("%F-%T", time.gmtime(s.st_mtime))}')
     
     if windows:
         build_dir = build_mupdf_windows( mupdf_local)
