@@ -2668,7 +2668,7 @@ class Document:
             except Exception as e:
                 e_str = str(e)
                 if str(e) == MSG_BAD_FILETYPE:
-                    raise ValueError( e_str)
+                    raise ValueError( e_str) from e
                 else:
                     raise FileDataError( MSG_BAD_DOCUMENT) from e
         else:
@@ -2752,8 +2752,8 @@ class Document:
             if filename and filename.lower().endswith("svg") or filetype and "svg" in filetype.lower():
                 try:
                     _ = self.convert_to_pdf()  # this seems to always work
-                except Exception:
-                    raise FileDataError("cannot open broken document") from None
+                except Exception as e:
+                    raise FileDataError("cannot open broken document") from e
 
         if g_use_extra:
             self.this_is_pdf = isinstance( self.this, mupdf.PdfDocument)
@@ -5076,12 +5076,11 @@ class Document:
         if self.is_closed:
             raise ValueError("document closed")
         #return _fitz.Document_page_xref(self, pno)
-        this_doc = self.this
-        page_count = mupdf.fz_count_pages(this_doc)
+        page_count = mupdf.fz_count_pages(self.this)
         n = pno;
         while n < 0:
             n += page_count
-        pdf = this_doc._this_as_pdf_document()
+        pdf = _as_pdf_document(self)
         xref = 0
         if n >= page_count:
             raise ValueError( MSG_BAD_PAGENO)
@@ -12045,7 +12044,7 @@ class Story:
                 try:
                     position_to = id_to_position[ target_id]
                 except Exception as e:
-                    raise RuntimeError(f"No destination with id={target_id}, required by position_from: {position_from}")
+                    raise RuntimeError(f"No destination with id={target_id}, required by position_from: {position_from}") from e
                 # Make link from `position_from`'s rect to top-left of
                 # `position_to`'s rect.
                 if 0:
