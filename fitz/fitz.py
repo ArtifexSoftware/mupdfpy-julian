@@ -1,1 +1,1 @@
-from fitz import *
+from . import *

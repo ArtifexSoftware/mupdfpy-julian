@@ -21144,7 +21144,8 @@ class TOOLS:
 # and uses some fitz.* types in function typing.
 #
 #g_timings.mid()
-import fitz.utils
+#import fitz.utils
+from . import utils
 #g_timings.mid()
 
 pdfcolor = dict(

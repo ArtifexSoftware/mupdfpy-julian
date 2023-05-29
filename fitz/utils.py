@@ -11,9 +11,14 @@ import math
 import os
 import typing
 
-import fitz.fitz
+#import fitz.fitz as fitz
+from . import fitz
 
-mupdf = fitz.mupdf
+#print(f'utils.py: {dir(fitz)=}')
+#print(f'utils.py: {dir(fitz.fitz)=}')
+
+#mupdf = fitz.mupdf
+import mupdf
 
 g_exceptions_verbose = False
 #g_exceptions_verbose = True
