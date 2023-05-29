@@ -93,6 +93,7 @@ import shutil
 import stat
 import subprocess
 import sys
+import zipfile
 
 
 _log_prefix = None
@@ -785,7 +786,14 @@ p = pipcl.Package(
                 ],
         fn_build=build,
         fn_sdist=sdist,
+        
+        # 30MB: 9 ZIP_DEFLATED
+        # 28MB: 9 ZIP_BZIP2
+        # 23MB: 9 ZIP_LZMA
+        wheel_compression = zipfile.ZIP_LZMA,
+        wheel_compresslevel = 9,
         )
+
 
 build_wheel = p.build_wheel
 build_sdist = p.build_sdist
