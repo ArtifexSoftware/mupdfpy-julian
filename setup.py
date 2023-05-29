@@ -474,53 +474,77 @@ def build():
         log( f'{to_}: {s} mtime={time.strftime("%F-%T", time.gmtime(s.st_mtime))}')
     
     if windows:
-        build_dir = build_mupdf_windows( mupdf_local, env_extra)
+        mupdf_build_dir = build_mupdf_windows( mupdf_local, env_extra)
     else:
-        build_dir = build_mupdf_unix( mupdf_local, env_extra)
-    log( f'build(): {build_dir=}')
+        mupdf_build_dir = build_mupdf_unix( mupdf_local, env_extra)
+    log( f'build(): {mupdf_build_dir=}')
     
     # Build `extra` module.
     #
-    path_so, path_so_tail = _build_fitz_extra( mupdf_local, build_dir)
+    p = _build_fitz_extra( mupdf_local, mupdf_build_dir)
+    if g_compound:
+        to_dir = 'fitz_new'
+        path_so_leaf, path_so_leaf2 = p
+    else:
+        to_dir = 'fitz'
+        path_so_leaf = p
     
-    # Generate list of (to, from) items to return to pipcl.
+    # Generate list of (from. to) items to return to pipcl.
     #
+    
     ret = []
     for p in [
-            'fitz/__init__.py',
-            'fitz/__main__.py',
-            'fitz/extra.py',
-            'fitz/fitz.py',
-            'fitz/utils.py',
+            '__init__.py',
+            '__main__.py',
+            'extra.py',
+            'fitz.py',
+            'utils.py',
+            path_so_leaf,
             ]:
-        from_ = f'{g_root}/{p}'.replace( '/', os.sep)
-        to_ = p.replace( '/', os.sep)
+        from_ = f'{g_root}/fitz/{p}'
+        to_ = f'{to_dir}/{p}'
         ret.append( ( from_, to_))
-    ret.append( ( path_so, path_so_tail))
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
 
     if mupdf_local:
-        # Add MuPDF runtime files.
-        log( f'{build_dir=}')
+        # Add (from, to) items for MuPDF runtime files.
+        log( f'{mupdf_build_dir=}')
         if windows:
-            for leaf in (
+            leafs = (
                     'mupdf.py',
                     '_mupdf.pyd',
                     'mupdfcpp64.dll',
-                    ):
-                from_ = f'{build_dir}/{leaf}'
-                to_ = f'fitz/{leaf}'
-                ret.append( ( from_, to_))
+                    )
         else:
-            for leaf in (
+            leafs = (
                     'mupdf.py',
                     '_mupdf.so',
                     'libmupdfcpp.so',
-                    'libmupdf.so'
-                    ):
-                from_ = f'{build_dir}/{leaf}'
-                to_ = f'fitz/{leaf}'
-                ret.append( ( from_, to_))
+                    'libmupdf.so',
+                    )
+        for leaf in leafs:
+            from_ = f'{mupdf_build_dir}/{leaf}'
+            to_ = f'{to_dir}/{leaf}'
+            ret.append( ( from_, to_))
+
+    if g_compound:
+        # Add PyMuPDF files.
+        to_dir = 'fitz'
+        for p in [
+                '__init__.py',
+                '__main__.py',
+                'fitz.py',
+                'utils.py',
+                path_so_leaf,
+                ]:
+            from_ = f'{g_compound}/fitz/{p}'
+            to_ = f'{to_dir}/{p}'
+            ret.append( ( from_, to_))
+        # Add mupdf shared library next to `path_so_leaf` so it will be found
+        # at runtime. Would prefer to embed a softlink to mupdfpy's file but
+        # wheels do not seem to support them.
+        leaf = 'mupdfcpp64.dll' if windows else 'libmupdf.so'
+        ret.append( ( f'{mupdf_build_dir}/{leaf}', f'{to_dir}/{leaf}'))
 
     for f, t in ret:
         log( f'build(): {f} => {t}')
@@ -631,7 +655,7 @@ def build_mupdf_unix( mupdf_local, env):
     return unix_build_dir
 
 
-def _build_fitz_extra( mupdf_local, build_dir):
+def _build_fitz_extra( mupdf_local, mupdf_build_dir):
     '''
     Builds Python extension module `extra`.
     '''
@@ -641,7 +665,7 @@ def _build_fitz_extra( mupdf_local, build_dir):
         includes = None
     if windows:
         defines = ('FZ_DLL_CLIENT',)
-        python_version = ''.join(platform.python_version_tuple()[:2])
+        #python_version = ''.join(platform.python_version_tuple()[:2])
         libpaths = (
                 f'{mupdf_local}\\platform\\win32\\x64\\Release',
                 f'{mupdf_local}\\platform\\win32\\x64\\ReleaseTesseract',
@@ -652,20 +676,20 @@ def _build_fitz_extra( mupdf_local, build_dir):
         optimise = True
         debug = False
     else:
-        build_dir_flags = os.path.basename( build_dir).split( '-')
+        mupdf_build_dir_flags = os.path.basename( mupdf_build_dir).split( '-')
         defines = None,
-        libpaths = (build_dir,)
+        libpaths = (mupdf_build_dir,)
         libs = ('mupdfcpp', 'mupdf')
         compiler_extra = '-Wall -Wno-deprecated-declarations -Wno-unused-const-variable'
         linker_extra = ''
-        optimise = 'release' in build_dir_flags
-        debug = 'debug' in build_dir_flags
+        optimise = 'release' in mupdf_build_dir_flags
+        debug = 'debug' in mupdf_build_dir_flags
     force = os.environ.get('PYMUPDF_SETUP_REBUILD')
     
     path_so_leaf = pipcl.build_extension(
-            'extra',
-            f'{g_root}/extra.i',
-            f'{g_root}/fitz',
+            name = 'extra',
+            path_i = f'{g_root}/extra.i',
+            outdir = f'{g_root}/fitz',
             includes = includes,
             defines = defines,
             libpaths = libpaths,
@@ -676,10 +700,39 @@ def _build_fitz_extra( mupdf_local, build_dir):
             optimise = optimise,
             debug = debug,
             )
-    path_so_tail = f'fitz/{path_so_leaf}'
-    path_so = f'{g_root}/{path_so_tail}'
+    #path_so_tail = f'fitz/{path_so_leaf}'
+    #path_so = f'{g_root}/{path_so_tail}'
+    
+    if not g_compound:
+        return path_so_leaf
+    
+    # Build PyMuPDF.
+    if mupdf_local:
+        includes = f'{mupdf_local}/include',
+    else:
+        includes = None
+    defines = None
+    libs = 'mupdfcpp64.lib' if windows else ('mupdf',)
+    path_so_leaf2 = pipcl.build_extension(
+            name = 'fitz',
+            path_i = f'{g_compound}/fitz/fitz.i',
+            outdir = f'{g_compound}/fitz',
+            includes = includes,
+            defines = defines,
+            libpaths = libpaths,
+            libs = libs,
+            compiler_extra = compiler_extra,
+            linker_extra = linker_extra,
+            force = force,
+            optimise = optimise,
+            debug = debug,
+            )
+        #path_so_tail = f'fitz/{path_so_leaf}'
+        #path_so = f'{g_root}/{path_so_tail}'
+        #return 
 
-    return path_so, path_so_tail
+    #return path_so, path_so_tail
+    return path_so_leaf, path_so_leaf2
     
 
 def sdist():
