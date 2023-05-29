@@ -535,12 +535,12 @@ def build():
                 '__main__.py',
                 'fitz.py',
                 'utils.py',
-                path_so_leaf,
+                path_so_leaf2,
                 ]:
             from_ = f'{g_compound}/fitz/{p}'
             to_ = f'{to_dir}/{p}'
             ret.append( ( from_, to_))
-        # Add mupdf shared library next to `path_so_leaf` so it will be found
+        # Add mupdf shared library next to `path_so_leaf2` so it will be found
         # at runtime. Would prefer to embed a softlink to mupdfpy's file but
         # wheels do not seem to support them.
         leaf = 'mupdfcpp64.dll' if windows else 'libmupdf.so'
@@ -708,7 +708,11 @@ def _build_fitz_extra( mupdf_local, mupdf_build_dir):
     
     # Build PyMuPDF.
     if mupdf_local:
-        includes = f'{mupdf_local}/include',
+        includes = (
+                f'{mupdf_local}/include',
+                f'{mupdf_local}/include/mupdf',
+                f'{mupdf_local}/thirdparty/freetype/include',
+                )
     else:
         includes = None
     defines = None
@@ -726,6 +730,7 @@ def _build_fitz_extra( mupdf_local, mupdf_build_dir):
             force = force,
             optimise = optimise,
             debug = debug,
+            cpp = False,
             )
         #path_so_tail = f'fitz/{path_so_leaf}'
         #path_so = f'{g_root}/{path_so_tail}'
