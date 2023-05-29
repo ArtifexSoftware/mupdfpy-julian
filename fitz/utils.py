@@ -18,7 +18,7 @@ from . import fitz
 #print(f'utils.py: {dir(fitz.fitz)=}')
 
 #mupdf = fitz.mupdf
-import mupdf
+from . import mupdf
 
 g_exceptions_verbose = False
 #g_exceptions_verbose = True
