@@ -1130,7 +1130,7 @@ def build_extension(
         swig:
             Base swig command.
     
-    Returns the leafname of the generated library file with `outdir`, e.g.
+    Returns the leafname of the generated library file within `outdir`, e.g.
     `_{name}.so` on Unix or `_{name}.cp311-win_amd64.pyd` on Windows.
     '''
     includes_text = _flags( includes, '-I')
