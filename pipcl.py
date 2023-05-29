@@ -1082,6 +1082,7 @@ def build_extension(
         compiler_extra='',
         linker_extra='',
         swig='swig',
+        cpp=True,
         ):
     '''
     Builds a C++ Python extension module using SWIG.
@@ -1093,7 +1094,7 @@ def build_extension(
             Name of generated extension module.
         path_i:
             Path of input SWIG .i file. Internally we use swig to generate a
-            corresponding .cpp file.
+            corresponding `.c` or `.cpp` file.
         outdir:
             Output directory for generated files:
                 {outdir}/{name}.py
@@ -1137,7 +1138,7 @@ def build_extension(
     defines_text = _flags( defines, '-D')
     libpaths_text = _flags( libpaths, '/LIBPATH:', '"') if windows() else _flags( libpaths, '-L')
     libs_text = _flags( libs, '-l')
-    path_cpp = f'{path_i}.cpp'
+    path_cpp = f'{path_i}.cpp' if cpp else f'{path_i}.c'
     if not os.path.exists( outdir):
         os.mkdir( outdir)
     # Run SWIG.
@@ -1146,7 +1147,7 @@ def build_extension(
         run( f'''
                 {swig}
                     -Wall
-                    -c++
+                    {"-c++" if cpp else ""}
                     -python
                     -module {name}
                     -outdir {outdir}
@@ -1165,7 +1166,7 @@ def build_extension(
         path_so         = f'{outdir}/{path_so_leaf}'
         path_obj        = f'{path_so}.obj'
         
-        command, flags = base_compiler(cpp=True)
+        command, flags = base_compiler(cpp=cpp)
         command = f'''
                 {command}
                     # General:
@@ -1197,7 +1198,7 @@ def build_extension(
         if _doit( force, _fs_mtime(path_cpp) >= _fs_mtime(path_obj)):
             run(command)
 
-        command, flags = base_linker()
+        command, flags = base_linker(cpp=cpp)
         command = f'''
                 {command}
                     /DLL                    # Builds a DLL.
@@ -1231,7 +1232,7 @@ def build_extension(
         #
         # We use compiler to compile and link in one command.
         #
-        command, flags = base_compiler(cpp=True)
+        command, flags = base_compiler(cpp=cpp)
         command = f'''
                 {command}
                     -fPIC
