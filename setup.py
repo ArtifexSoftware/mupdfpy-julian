@@ -20,6 +20,10 @@ Overview:
 
 Environmental variables:
 
+    PYMUPDF_SETUP_COMPOUND
+        If set, should be location of PyMuPDF checkout, and we include both
+        PyMuPDF and mupdfpy modules in the generated package.
+
     PYMUPDF_SETUP_MUPDF_BUILD
         If set, overrides location of mupdf when building PyMuPDF:
             Empty string:
@@ -84,6 +88,7 @@ import textwrap
 import time
 import pipcl
 import platform
+import shlex
 import shutil
 import stat
 import subprocess
@@ -103,6 +108,8 @@ def log( text):
 
 
 g_root = os.path.abspath( f'{__file__}/..')
+
+g_compound = os.environ.get('PYMUPDF_SETUP_COMPOUND')
 
 def _fs_find_in_paths( name, paths=None):
     '''
@@ -448,6 +455,8 @@ def build():
     #
     mupdf_local = get_mupdf()
 
+    env_extra = dict()
+    
     if mupdf_local:
         from_ = f'{g_root}/mupdf_config.h'
         to_ =f'{mupdf_local}/include/mupdf/fitz/config.h'
@@ -458,13 +467,16 @@ def build():
             # Use our special config in MuPDF.
             log( f'Copying {from_} to {to_}.')
             shutil.copy2( from_, to_)
+            # Tell the MuPDF build to exclude large unused font files such as
+            # resources/fonts/han/SourceHanSerif-Regular.ttc.
+            env_extra[ 'XCFLAGS'] ='-DTOFU_CJK_EXT'
         s = os.stat( f'{to_}')
         log( f'{to_}: {s} mtime={time.strftime("%F-%T", time.gmtime(s.st_mtime))}')
     
     if windows:
-        build_dir = build_mupdf_windows( mupdf_local)
+        build_dir = build_mupdf_windows( mupdf_local, env_extra)
     else:
-        build_dir = build_mupdf_unix( mupdf_local)
+        build_dir = build_mupdf_unix( mupdf_local, env_extra)
     log( f'build(): {build_dir=}')
     
     # Build `extra` module.
@@ -514,8 +526,11 @@ def build():
         log( f'build(): {f} => {t}')
     return ret
 
+def env_add(env, name, value, sep=' '):
+    v = env.get(name)
+    env[ name] =  f'{v}{sep}{value}' if v else value
 
-def build_mupdf_windows( mupdf_local):
+def build_mupdf_windows( mupdf_local, env):
     
     assert mupdf_local
     build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
@@ -530,24 +545,26 @@ def build_mupdf_windows( mupdf_local):
     if os.environ.get('PYMUPDF_SETUP_MUPDF_VS_UPGRADE') == '1':
         command += ' --vs-upgrade 1'
     command += f' -d {windows_build_tail} -b --refcheck-if "#if 1" --devenv "{vs.devenv}" all'
+    env2 = os.environ.copy()
+    env2.update(env)
     if os.environ.get( 'PYMUPDF_SETUP_MUPDF_REBUILD') == '0':
-        log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run: {command}')
+        log( f'PYMUPDF_SETUP_MUPDF_REBUILD is "0" so not building MuPDF; would have run with {env}={env2!r}: {command}')
     else:
-        log( f'Building MuPDF by running: {command}')
-        subprocess.run( command, shell=True, check=True)
+        log( f'Building MuPDF by running with {env}={env2!r}: {command}')
+        subprocess.run( command, shell=True, check=True, env=env2)
         log( f'Finished building mupdf.')
     
     return windows_build_dir
 
 
-def build_mupdf_unix( mupdf_local):
+def build_mupdf_unix( mupdf_local, env):
     '''
-    Builds MuPDF and returns `(mupdf_local, unix_build_dir)`:
+    Builds MuPDF and returns `unix_build_dir`, the absolute path of build
+    directory within MuPDF, e.g. `.../mupdf/build/mupdfpy-shared-release`.
+
+    Args:
         mupdf_local:
             Path of MuPDF directory.
-        unix_build_dir:
-            Absolute path of build directory within MuPDF, e.g.
-            ".../mupdf/build/mupdfpy-shared-release".
     
     If we are using the system MuPDF, returns `None`.
     '''    
@@ -560,9 +577,9 @@ def build_mupdf_unix( mupdf_local):
 
     flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
     flags += ' verbose=yes'
-    env = ''
+    env = env.copy()
     if openbsd or freebsd:
-        env += ' CXX=clang++'
+        env_add(env, 'CXX', 'clang++', ' ')
 
     unix_build_type = os.environ.get( 'PYMUPDF_SETUP_MUPDF_BUILD_TYPE', 'release')
     assert unix_build_type in ('debug', 'memento', 'release'), f'{unix_build_type=}'
@@ -572,7 +589,8 @@ def build_mupdf_unix( mupdf_local):
     #
     archflags = os.environ.get( 'ARCHFLAGS')
     if archflags:
-        flags += f' XCFLAGS="{archflags}" XLIBS="{archflags}"'
+        env_add(env, 'XCFLAGS', archflags)
+        env_add(env, 'XLIBS', archflags)
 
     # We specify a build directory path containing 'mupdfpy' so that we
     # coexist with non-mupdfpy builds (because mupdfpy builds have a
@@ -596,7 +614,10 @@ def build_mupdf_unix( mupdf_local):
     # Unlike PyMuPDF we need MuPDF's Python bindings, so we build MuPDF
     # with `mupdf/scripts/mupdfwrap.py` instead of running `make`.
     #
-    command = f'cd {mupdf_local} && {env} {sys.executable} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
+    env_string = ''
+    for n, v in env.items():
+        env_string += f' {n}={shlex.quote(v)}'
+    command = f'cd {mupdf_local} &&{env_string} {sys.executable} ./scripts/mupdfwrap.py -d build/{build_prefix}{unix_build_type} -b all'
     command += f' && echo {unix_build_dir}:'
     command += f' && ls -l {unix_build_dir}'
 
@@ -688,8 +709,8 @@ with open( f'{g_root}/README.md', encoding="utf-8") as f:
     readme = f.read()
 
 p = pipcl.Package(
-        'mupdfpy',
-        '1.22.0',
+        'PyMuPDF' if g_compound else 'mupdfpy',
+        '1.22.3',
         summary="Rebased PyMuPDF bindings for the PDF toolkit and renderer MuPDF",
         description=readme,
         description_content_type="text/markdown",
@@ -698,12 +719,12 @@ p = pipcl.Package(
         author_email="support@artifex.com",
         requires_python=">=3.7",
         license="GNU AFFERO GPL 3.0",
-        #project_url=[
-        #        ("Documentation", "https://pymupdf.readthedocs.io/"),
-        #        ("Source", "https://github.com/pymupdf/pymupdf"),
-        #        ("Tracker", "https://github.com/pymupdf/PyMuPDF/issues"),
-        #        ("Changelog", "https://pymupdf.readthedocs.io/en/latest/changes.html"),
-        #        ],
+        project_url=[
+                ("Documentation", "https://pymupdf.readthedocs.io/"),
+                ("Source", "https://github.com/pymupdf/pymupdf"),
+                ("Tracker", "https://github.com/pymupdf/PyMuPDF/issues"),
+                ("Changelog", "https://pymupdf.readthedocs.io/en/latest/changes.html"),
+                ],
         fn_build=build,
         fn_sdist=sdist,
         )
