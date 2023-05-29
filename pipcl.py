@@ -224,6 +224,9 @@ class Package:
             tag_python = None,
             tag_abi = None,
             tag_platform = None,
+            
+            wheel_compression = zipfile.ZIP_DEFLATED,
+            wheel_compresslevel = None,
             ):
         '''
         The initial args before `root` define the package
@@ -346,6 +349,12 @@ class Package:
                 `openbsd_7_0_amd64`.
 
                 For pure python packages use: `tag_platform=any`
+            
+            wheel_compression:
+                zipfile compression to use for wheels.
+            wheel_compresslevel:
+                zipfile compression level for wheels.
+            
         '''        
         assert name
         assert version
@@ -422,6 +431,9 @@ class Package:
         self.tag_python = tag_python
         self.tag_abi = tag_abi
         self.tag_platform = tag_platform
+        
+        self.wheel_compression = wheel_compression
+        self.wheel_compresslevel = wheel_compresslevel
 
 
     def build_wheel(self,
@@ -484,7 +496,7 @@ class Package:
         _log(f'Creating wheel: {path}')
         os.makedirs(wheel_directory, exist_ok=True)
         record = _Record()
-        with zipfile.ZipFile(path, 'w', zipfile.ZIP_DEFLATED) as z:
+        with zipfile.ZipFile(path, 'w', self.wheel_compression, self.wheel_compresslevel) as z:
 
             def add_file(from_, to_):
                 z.write(from_, to_)
