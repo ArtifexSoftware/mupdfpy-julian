@@ -701,13 +701,12 @@ def _build_fitz_extra( mupdf_local, mupdf_build_dir):
             optimise = optimise,
             debug = debug,
             )
-    #path_so_tail = f'fitz/{path_so_leaf}'
-    #path_so = f'{g_root}/{path_so_tail}'
     
     if not g_compound:
         return path_so_leaf
     
     # Build PyMuPDF.
+    log('Building PyMuPDF')
     if mupdf_local:
         includes = (
                 f'{mupdf_local}/include',
