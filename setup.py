@@ -480,7 +480,7 @@ def build():
         mupdf_build_dir = build_mupdf_unix( mupdf_local, env_extra)
     log( f'build(): {mupdf_build_dir=}')
     
-    # Build `extra` module.
+    # Build `extra` module and PyMuPDF `fitz` module.
     #
     p = _build_fitz_extra( mupdf_local, mupdf_build_dir)
     if g_compound:
@@ -715,7 +715,6 @@ def _build_fitz_extra( mupdf_local, mupdf_build_dir):
                 )
     else:
         includes = None
-    defines = None
     libs = 'mupdfcpp64.lib' if windows else ('mupdf',)
     path_so_leaf2 = pipcl.build_extension(
             name = 'fitz',
