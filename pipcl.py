@@ -1178,16 +1178,21 @@ def build_extension(
         path_so         = f'{outdir}/{path_so_leaf}'
         path_obj        = f'{path_so}.obj'
         
+        permissive = '/permissive-'
+        EHsc = '/EHsc'
+        T = '/Tp' if cpp else '/Tc'
+        optimise2 = '/DNDEBUG /O2' if optimise else ''
+        
         command, flags = base_compiler(cpp=cpp)
         command = f'''
                 {command}
                     # General:
                     /c                          # Compiles without linking.
-                    /EHsc                       # Enable "Standard C++ exception handling".
+                    {EHsc}                      # Enable "Standard C++ exception handling".
                     /MD                         # Creates a multithreaded DLL using MSVCRT.lib.
 
                     # Input/output files:
-                    /Tp{path_cpp}               # /Tp specifies C++ source file.
+                    {T}{path_cpp}               # /Tp specifies C++ source file.
                     /Fo{path_obj}               # Output file.
 
                     # Include paths:
@@ -1195,8 +1200,8 @@ def build_extension(
                     {flags.includes}            # Include path for Python headers.
 
                     # Code generation:
-                    {'/O2' if optimise else ''} # Optimisation.
-                    /permissive-                # Set standard-conformance mode.
+                    {optimise2}
+                    {permissive}                # Set standard-conformance mode.
 
                     # Diagnostics:
                     #/FC                         # Display full path of source code files passed to cl.exe in diagnostic text.
