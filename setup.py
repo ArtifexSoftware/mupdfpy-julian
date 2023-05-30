@@ -470,7 +470,7 @@ def build():
             shutil.copy2( from_, to_)
             # Tell the MuPDF build to exclude large unused font files such as
             # resources/fonts/han/SourceHanSerif-Regular.ttc.
-            env_extra[ 'XCFLAGS'] ='-DTOFU_CJK_EXT'
+            env_extra[ 'XCFLAGS'] ='-DTOFU_CJK_EXT='
         s = os.stat( f'{to_}')
         log( f'{to_}: {s} mtime={time.strftime("%F-%T", time.gmtime(s.st_mtime))}')
     
