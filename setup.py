@@ -459,7 +459,7 @@ def build():
     env_extra = dict()
     
     if mupdf_local:
-        from_ = f'{g_root}/mupdf_config.h'
+        from_ = f'{g_root}/src/mupdf_config.h'
         to_ =f'{mupdf_local}/include/mupdf/fitz/config.h'
         if os.environ.get('PYMUPDF_SETUP_MUPDF_OVERWRITE_CONFIG') == '0':
             # Use MuPDF default config.
@@ -502,7 +502,7 @@ def build():
             'utils.py',
             path_so_leaf,
             ]:
-        from_ = f'{g_root}/fitz/{p}'
+        from_ = f'{g_root}/src/{p}'
         to_ = f'{to_dir}/{p}'
         ret.append( ( from_, to_))
     ret.append( ( f'{g_root}/README.md', '$dist-info/README.md'))
@@ -598,7 +598,7 @@ def build_mupdf_unix( mupdf_local, env):
         return None
 
     #log( f'Building mupdf.')
-    shutil.copy2( f'{g_root}/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
+    shutil.copy2( f'{g_root}/src/mupdf_config.h', f'{mupdf_local}/include/mupdf/fitz/config.h')
 
     flags = 'HAVE_X11=no HAVE_GLFW=no HAVE_GLUT=no HAVE_LEPTONICA=yes HAVE_TESSERACT=yes'
     flags += ' verbose=yes'
@@ -689,8 +689,8 @@ def _build_fitz_extra( mupdf_local, mupdf_build_dir):
     
     path_so_leaf = pipcl.build_extension(
             name = 'extra',
-            path_i = f'{g_root}/extra.i',
-            outdir = f'{g_root}/fitz',
+            path_i = f'{g_root}/src/extra.i',
+            outdir = f'{g_root}/src',
             includes = includes,
             defines = defines,
             libpaths = libpaths,
@@ -731,11 +731,7 @@ def _build_fitz_extra( mupdf_local, mupdf_build_dir):
             debug = debug,
             cpp = False,
             )
-        #path_so_tail = f'fitz/{path_so_leaf}'
-        #path_so = f'{g_root}/{path_so_tail}'
-        #return 
 
-    #return path_so, path_so_tail
     return path_so_leaf, path_so_leaf2
     
 
