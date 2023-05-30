@@ -1214,6 +1214,8 @@ def build_extension(
                 '''
         if _doit( force, _fs_mtime(path_cpp) >= _fs_mtime(path_obj)):
             run(command)
+        else:
+            _log(f'Not compiling because {path_cpp!r} older than {path_obj!r}.')
 
         command, flags = base_linker(cpp=cpp)
         command = f'''
@@ -1231,6 +1233,8 @@ def build_extension(
                 '''
         if _doit( force, _fs_mtime(path_obj) >= _fs_mtime(path_so)):
             run(command)
+        else:
+            _log(f'Not linking because {path_obj!r} older than {path_so!r}.')
     
     else:
     
@@ -1268,6 +1272,8 @@ def build_extension(
                 '''
         if _doit( force, lambda: _fs_mtime( path_cpp, 0) >= _fs_mtime( path_so, 0)):
             run(command)
+        else:
+            _log(f'Not compiling+linking because {path_cpp!r} older than {path_so!r}.')
     
     return path_so_leaf
 
@@ -1479,7 +1485,7 @@ def _cpu_name():
 
 def _doit( force, default):
     '''
-    Returns true/false for wether to run a command.
+    Returns true/false for whether to run a command.
     '''
     if force in (None, ''):
         return default() if callable(default) else default
