@@ -1,5 +1,5 @@
 '''
-PyMuPDF implemented on top of auto-generated MuPDF python bindings.]
+PyMuPDF implemented on top of auto-generated MuPDF python bindings.
 
 License:
 
@@ -14,25 +14,25 @@ import tarfile
 import zipfile
 
 
+def log( text):
+    print( f'mupdfpy: {text}', file=sys.stdout)
+
 # Try to detect if we are being used with current directory set to a mupdfpy/
 # checkout.
 #
 if os.path.exists( 'fitz/__init__.py'):
     if not glob.glob( 'fitz/_extra*') or not glob.glob( 'fitz/_mupdf*'):
-        print( '#' * 40)
-        print( '# Warning: current directory appears to contain an incomplete')
-        print( '# fitz/ installation directory so "import fitz" may fail.')
-        print( '# This can happen if current directory is a mupdfpy source tree.')
-        print( '# Suggest changing to a different current directory.')
-        print( '#' * 40)
+        log( '#' * 40)
+        log( '# Warning: current directory appears to contain an incomplete')
+        log( '# fitz/ installation directory so "import fitz" may fail.')
+        log( '# This can happen if current directory is a mupdfpy source tree.')
+        log( '# Suggest changing to a different current directory.')
+        log( '#' * 40)
 
     
-def log( text):
-    print( f'mupdfpy: {text}', file=sys.stderr)
-
 def exception_info():
     import traceback
-    print(f'exception_info:')
+    log(f'exception_info:')
     traceback.print_exc(file=sys.stdout)
 
 
@@ -56,7 +56,6 @@ from . import extra
 
 # All our `except ...` blocks output diagnostics if `g_exceptions_verbose` is
 # true.
-g_exceptions_verbose = False
 g_exceptions_verbose = True
 
 # $MUPDFPY_USE_EXTRA overrides whether to use optimised C fns in `extra`.
@@ -721,7 +720,6 @@ class Annot:
             return None
         val.thisown = True
         assert val.parent.this.m_internal_value() == self.parent.this.m_internal_value()
-        #val.parent = self.parent  # copy owning page object from previous annot
         val.parent._annot_refs[id(val)] = val
 
         if val.type[0] == mupdf.PDF_ANNOT_WIDGET:
@@ -2696,10 +2694,6 @@ class Document:
         self.init_doc()
         return val
 
-    def _dropOutline(self, ol):
-        assert 0, 'Unnecessary'
-        return _fitz.Document__dropOutline(self, ol)
-
     def _embeddedFileGet(self, idx):
         doc = self.this
         pdf = mupdf.pdf_document_from_fz_document(doc)
@@ -3128,8 +3122,7 @@ class Document:
         """Make an array page number -> page object."""
         if self.is_closed:
             raise ValueError("document closed")
-        # fixme: not translated to python yet.
-        return _fitz.Document__make_page_map(self)
+        assert 0, f'_make_page_map() is no-op'
 
     def _move_copy_page(self, pno, nb, before, copy):
         """Move or copy a PDF page reference."""
@@ -4155,7 +4148,6 @@ class Document:
             '''
             if self.is_closed:
                 raise ValueError("document closed")
-            #return _fitz.Document_has_old_style_xrefs(self)
             pdf = _as_pdf_document(self)
             if pdf.m_internal and pdf.m_internal.has_old_style_xrefs:
                 return True
@@ -4168,7 +4160,6 @@ class Document:
             '''
             if self.is_closed:
                 raise ValueError("document closed")
-            #return _fitz.Document_has_xref_streams(self)
             pdf = _as_pdf_document(self)
             if pdf.m_internal and pdf.m_internal.has_xref_streams:
                 return True
@@ -4337,8 +4328,6 @@ class Document:
                 raise TypeError( "source or target not a PDF")
             ENSURE_OPERATION(pdfout)
             JM_merge_range(pdfout, pdfsrc, fp, tp, sa, rotate, links, annots, show_progress, _gmap)
-
-        # End of _fitz.Document_insert_pdf().
         
         self._reset_page_refs()
         if links:
@@ -4714,8 +4703,6 @@ class Document:
             raise ValueError("document closed")
         if not self.isFormPDF:
             return None
-        # fixme: not translated to python yet.
-        return _fitz.Document_need_appearances(self, value)
         
         pdf = _as_pdf_document(self)
         oldval = -1
@@ -7548,7 +7535,6 @@ class Page:
             tca = 99
         gstate = "fitzca%02i%02i" % (tCA, tca)
 
-        #return _fitz.Page__set_opacity(self, gstate, CA, ca)
         if not gstate:
             return
         page = mupdf.pdf_page_from_fz_page(self.this)
@@ -7920,7 +7906,6 @@ class Page:
     def annot_names(self):
         """List of names of annotations, fields and links."""
         CheckParent(self)
-        #return _fitz.Page_annot_names(self)
         page = self._pdf_page()
         if not page.m_internal:
             return []
@@ -7929,7 +7914,6 @@ class Page:
     def annot_xrefs(self):
         """List of xref numbers of annotations, fields and links."""
         CheckParent(self)
-        #return _fitz.Page_annot_xrefs(self)
         if 0 and g_use_extra:
             ret = extra.JM_get_annot_xref_list2( self.this)
             return ret
@@ -9530,9 +9514,6 @@ class Pixmap:
     def pixel(self, x, y):
         """Get color tuple of pixel (x, y).
         Last item is the alpha if Pixmap.alpha is true."""
-        # fixme: not translated to python yet.
-        #return _fitz.Pixmap_pixel(self, x, y)
-        
         if (0
                 or x < 0
                 or x >= self.this.m_internal.w
@@ -9540,9 +9521,8 @@ class Pixmap:
                 or y >= self.this.m_internal.h
                 ):
             RAISEPY(MSG_PIXEL_OUTSIDE, PyExc_ValueError)
-        
-        stride = self.this.m_internal.stride
         n = self.this.m_internal.n
+        stride = self.this.m_internal.stride
         i = stride * y + n * x
         ret = tuple( self.samples_mv[ i: i+n])
         return ret
@@ -11837,7 +11817,6 @@ class TextPage:
         return "".join([b[4] for b in blocks])
 
     def extractTextbox(self, rect):
-        #return _fitz.TextPage_extractTextbox(self, rect)
         this_tpage = self.this
         assert isinstance(this_tpage, mupdf.FzStextPage)
         area = JM_rect_from_py(rect)
@@ -20145,7 +20124,6 @@ class TOOLS:
 
     @staticmethod
     def _fill_widget(annot, widget):
-        #val = _fitz.Tools__fill_widget(self, annot, widget)
         val = JM_get_widget_properties(annot, widget)
 
         widget.rect = Rect(annot.rect)
