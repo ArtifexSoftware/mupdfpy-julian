@@ -8635,17 +8635,9 @@ class Page:
         page = self.this
         rc = []
         if g_use_extra:
-            dev = extra.JM_new_texttrace_device(
-                    rc,
-                    #rot=mupdf.FzMatrix().internal(),
-                    #ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1).internal(),
-                    )
+            dev = extra.JM_new_texttrace_device(rc)
         else:
-            dev = JM_new_texttrace_device(
-                    rc,
-                    #rot=mupdf.FzMatrix(),
-                    #ptm=mupdf.fz_make_matrix(1, 0, 0, -1, 0, prect.y1),
-                    )
+            dev = JM_new_texttrace_device(rc)
         prect = mupdf.fz_bound_page(page)
         mupdf.fz_run_page(page, dev, mupdf.FzMatrix(), mupdf.FzCookie())
         mupdf.fz_close_device(dev)
@@ -8692,7 +8684,7 @@ class Page:
         try:
             CJK_number = CJK_list_n.index(fontname)
             serif = 0
-        except:
+        except Exception:
             # Verbose in PyMuPDF/tests.
             #exception_info()
             pass
@@ -8701,7 +8693,7 @@ class Page:
             try:
                 CJK_number = CJK_list_s.index(fontname)
                 serif = 1
-            except:
+            except Exception:
                 # Verbose in PyMuPDF/tests.
                 #exception_info()
                 pass
@@ -8712,8 +8704,6 @@ class Page:
             del pymupdf_fonts
 
         # install the font for the page
-        #val = self._insertFont(fontname, bfname, fontfile, fontbuffer, set_simple, idx,
-        #                       wmode, serif, encoding, CJK_number)
         if fontfile != None:
             if type(fontfile) is str:
                 fontfile_str = fontfile
@@ -8758,7 +8748,6 @@ class Page:
     @property
     def language(self):
         """Page language."""
-        #return _fitz.Page_language(self)
         pdfpage = mupdf.pdf_page_from_fz_page(self.this)
         if not pdfpage.m_internal:
             return
@@ -8807,8 +8796,6 @@ class Page:
     def load_links(self):
         """Get first Link."""
         CheckParent(self)
-        #val = _fitz.Page_load_links(self)
-
         val = mupdf.fz_load_links( self.this)
         if not val.m_internal:
             return
@@ -8856,14 +8843,11 @@ class Page:
     def mediabox(self):
         """The MediaBox."""
         CheckParent(self)
-        #val = _fitz.Page_mediabox(self)
-        
         page = self._pdf_page()
         if not page.m_internal:
             rect = mupdf.fz_bound_page( self.this)
         else:
             rect = JM_mediabox( page.obj())
-        #return JM_py_from_rect(rect)
         return rect
 
     @property
@@ -8883,7 +8867,6 @@ class Page:
     def refresh(self):
         """Refresh page after link/annot/widget updates."""
         CheckParent(self)
-        #return _fitz.Page_refresh(self)
         doc = self.parent
         page = doc.reload_page(self)
         # fixme this looks wrong.
@@ -8893,7 +8876,6 @@ class Page:
     def rotation(self):
         """Page rotation."""
         CheckParent(self)
-        #return _fitz.Page_rotation(self)
         page = self.this if isinstance(self.this, mupdf.PdfPage) else self.this.pdf_page_from_fz_page()
         if not page:
             return 0
@@ -8909,7 +8891,6 @@ class Page:
         dw: DeviceWrapper
         """
         CheckParent(self)
-        #return _fitz.Page_run(self, dw, m)
         mupdf.fz_run_page(self.this, dw.device, JM_matrix_from_py(m), mupdf.FzCookie());
 
     def set_contents(self, xref):
@@ -8930,7 +8911,6 @@ class Page:
     def set_language(self, language=None):
         """Set PDF page default language."""
         CheckParent(self)
-        #return _fitz.Page_set_language(self, language)
         pdfpage = mupdf.pdf_page_from_fz_page(self.this)
         ASSERT_PDF(pdfpage)
         if not language:
@@ -8946,7 +8926,6 @@ class Page:
     def set_mediabox(self, rect):
         """Set the MediaBox."""
         CheckParent(self)
-        #return _fitz.Page_set_mediabox(self, rect)
         page = self._pdf_page()
         ASSERT_PDF(page)
         mediabox = JM_rect_from_py(rect)
@@ -8963,7 +8942,6 @@ class Page:
     def set_rotation(self, rotation):
         """Set page rotation."""
         CheckParent(self)
-        #return _fitz.Page_set_rotation(self, rotation)
         page = mupdf.pdf_page_from_fz_page( self.this)
         ASSERT_PDF(page)
         rot = JM_norm_rotation(rotation)
@@ -8974,7 +8952,6 @@ class Page:
         """Page transformation matrix."""
         CheckParent(self)
 
-        #val = _fitz.Page_transformationMatrix(self)
         ctm = mupdf.FzMatrix()
         page = self._pdf_page()
         if not page.m_internal:
@@ -9293,19 +9270,16 @@ class Pixmap:
         '''
         Pixmap samples memoryview.
         '''
-        #return _fitz.Pixmap__samples_mv(self)
         return self.this.fz_pixmap_samples_memoryview()
 
     @property
     def samples_ptr(self):
-        #return _fitz.Pixmap__samples_ptr(self)
         return self.this.fz_pixmap_samples_int()
 
     def _tobytes(self, format_, jpg_quality):
         '''
         Pixmap._tobytes
         '''
-        #return _fitz.Pixmap__tobytes(self, format)
         pm = self.this
         size = mupdf.fz_pixmap_stride(pm) * pm.h();
         res = mupdf.fz_new_buffer(size)
@@ -9322,7 +9296,6 @@ class Pixmap:
         return barray
 
     def _writeIMG(self, filename, format_, jpg_quality):
-        #return _fitz.Pixmap__writeIMG(self, filename, format)
         pm = self.this
         if   format_ == 1:  mupdf.fz_save_pixmap_as_png(pm, filename)
         elif format_ == 2:  mupdf.fz_save_pixmap_as_pnm(pm, filename)
@@ -9335,7 +9308,6 @@ class Pixmap:
     @property
     def alpha(self):
         """Indicates presence of alpha channel."""
-        #return _fitz.Pixmap_alpha(self)
         return mupdf.fz_pixmap_alpha(self.this)
 
     def clear_with(self, value=None, bbox=None):
@@ -9379,12 +9351,10 @@ class Pixmap:
     @property
     def colorspace(self):
         """Pixmap Colorspace."""
-        #return _fitz.Pixmap_colorspace(self)
         return Colorspace(mupdf.fz_pixmap_colorspace(self.this))
 
     def copy(self, src, bbox):
         """Copy bbox from another Pixmap."""
-        #return _fitz.Pixmap_copy(self, src, bbox)
         pm = self.this
         src_pix = src.this
         if not mupdf.fz_pixmap_colorspace(src_pix):
@@ -9396,14 +9366,12 @@ class Pixmap:
     @property
     def digest(self):
         """MD5 digest of pixmap (bytes)."""
-        #return _fitz.Pixmap_digest(self)
         ret = self.this.fz_md5_pixmap()
         return bytes(ret)
 
     def gamma_with(self, gamma):
         """Apply correction with some float.
         gamma=1 is a no-op."""
-        #return _fitz.Pixmap_gamma_with(self, gamma)
         if not mupdf.fz_pixmap_colorspace( self.this):
             JM_Warning("colorspace invalid for function");
             return
@@ -9442,12 +9410,10 @@ class Pixmap:
     @property
     def h(self):
         """The height."""
-        #return _fitz.Pixmap_h(self)
         return mupdf.fz_pixmap_height(self.this)
 
     def invert_irect(self, bbox=None):
         """Invert the colors inside a bbox."""
-        #return _fitz.Pixmap_invert_irect(self, bbox)
         pm = self.this
         if not mupdf.fz_pixmap_colorspace(pm):
             JM_Warning("ignored for stencil pixmap")
@@ -9460,14 +9426,12 @@ class Pixmap:
     @property
     def irect(self):
         """Pixmap bbox - an IRect object."""
-        #val = _fitz.Pixmap_irect(self)
         val = mupdf.fz_pixmap_bbox(self.this)
         return JM_py_from_irect( val)
 
     @property
     def is_monochrome(self):
         """Check if pixmap is monochrome."""
-        #return _fitz.Pixmap_is_monochrome(self)
         return mupdf.fz_is_pixmap_monochrome( self.this)
 
     @property
@@ -9488,14 +9452,12 @@ class Pixmap:
     @property
     def n(self):
         """The size of one pixel."""
-        #return _fitz.Pixmap_n(self)
         return mupdf.fz_pixmap_components(self.this)
 
     def pdfocr_save(self, filename, compress=1, language=None):
         '''
         Save pixmap as an OCR-ed PDF page.
         '''
-        #return _fitz.Pixmap_pdfocr_save(self, filename, compress, language)
         opts = mupdf.PdfocrOptions()
         opts.compress = compress;
         if language:
@@ -9641,7 +9603,6 @@ class Pixmap:
             opaque: (tuple, length colorspace.n) this color receives opacity 0.
             matte: (tuple, length colorspace.n)) preblending background color.
         """
-        #return _fitz.Pixmap_set_alpha(self, alphavalues, premultiply, opaque)
         pix = self.this
         alpha = 0
         m = 0
@@ -9734,21 +9695,18 @@ class Pixmap:
 
     def set_dpi(self, xres, yres):
         """Set resolution in both dimensions."""
-        #return _fitz.Pixmap_set_dpi(self, xres, yres)
         pm = self.this
         pm.m_internal.xres = xres
         pm.m_internal.yres = yres
 
     def set_origin(self, x, y):
         """Set top-left coordinates."""
-        #return _fitz.Pixmap_set_origin(self, x, y)
         pm = self.this
         pm.m_internal.x = x
         pm.m_internal.y = y
 
     def set_pixel(self, x, y, color):
         """Set color of pixel (x, y)."""
-        #return _fitz.Pixmap_set_pixel(self, x, y, color)
         pm = self.this
         if not _INRANGE(x, 0, pm.w() - 1) or not _INRANGE(y, 0, pm.h() - 1):
             raise ValueError( MSG_PIXEL_OUTSIDE)
@@ -9766,14 +9724,11 @@ class Pixmap:
 
     def set_rect(self, bbox, color):
         """Set color of all pixels in bbox."""
-        #return _fitz.Pixmap_set_rect(self, bbox, color)
         pm = self.this
         n = pm.n()
         c = []
         for j in range(n):
             i = color[j]
-            #if isinstance( i, str):
-            #    i = ord( i)
             if not _INRANGE(i, 0, 255):
                 raise ValueError( MSG_BAD_COLOR_SEQ)
             c.append(i)
@@ -9785,7 +9740,6 @@ class Pixmap:
     def shrink(self, factor):
         """Divide width and height by 2**factor.
         E.g. factor=1 shrinks to 25% of original size (in place)."""
-        #return _fitz.Pixmap_shrink(self, factor)
         if factor < 1:
             JM_Warning("ignoring shrink factor < 1")
             return
@@ -9794,7 +9748,6 @@ class Pixmap:
     @property
     def size(self):
         """Pixmap size."""
-        #return _fitz.Pixmap_size(self)
         # fz_pixmap_size() is not publically visible, so we implement it
         # ourselves. fixme: we don't add on sizeof(fz_pixmap).
         #
@@ -9805,7 +9758,6 @@ class Pixmap:
     @property
     def stride(self):
         """Length of one image line (width * n)."""
-        #return _fitz.Pixmap_stride(self)
         return self.this.stride()
 
     def tint_with(self, black, white):
@@ -9813,20 +9765,17 @@ class Pixmap:
         if not self.colorspace or self.colorspace.n > 3:
             print("warning: colorspace invalid for function")
             return
-        #return _fitz.Pixmap_tint_with(self, black, white)
         return mupdf.fz_tint_pixmap( self.this, black, white)
 
     @property
     def w(self):
         """The width."""
-        #return _fitz.Pixmap_w(self)
         return mupdf.fz_pixmap_width(self.this)
     
     def warp(self, quad, width, height):
         """Return pixmap from a warped quad."""
         EnsureOwnership(self)
         if not quad.is_convex: raise ValueError("quad must be convex")
-        #return _fitz.Pixmap_warp(self, quad, width, height)
         q = JM_quad_from_py(quad)
         points = [ q.ul, q.ur, q.lr, q.ll]
         dst = mupdf.fz_warp_pixmap( self.this, points, width, height)
@@ -9835,25 +9784,21 @@ class Pixmap:
     @property
     def x(self):
         """x component of Pixmap origin."""
-        #return _fitz.Pixmap_x(self)
         return mupdf.fz_pixmap_x(self.this)
 
     @property
     def xres(self):
         """Resolution in x direction."""
-        #return _fitz.Pixmap_xres(self)
         return self.this.xres()
 
     @property
     def y(self):
         """y component of Pixmap origin."""
-        #return _fitz.Pixmap_y(self)
         return mupdf.fz_pixmap_y(self.this)
 
     @property
     def yres(self):
         """Resolution in y direction."""
-        #return _fitz.Pixmap_yres(self)
         return mupdf.fz_pixmap_width(self.this)
 
     width  = w
@@ -11483,11 +11428,8 @@ class Story:
         return more, JM_py_from_rect( filled)
 
     def draw( self, device, matrix=None):
-        #print( f'{device=} {matrix=}')
         ctm2 = JM_matrix_from_py( matrix)
-        #print( f'{ctm2=} {str(ctm2)=}')
         dev = device.this if device else mupdf.FzDevice( None)
-        #print( f'{dev=}')
         sys.stdout.flush()
         mupdf.fz_draw_story( self.this, dev, ctm2)
 
@@ -11538,13 +11480,11 @@ class Story:
                 # new page.
                 page_num += 1
             more, filled = self.place( rect)
-            #print(f"write(): positionfn={positionfn}")
             if positionfn:
                 def positionfn2(position):
                     # We add a `.page_num` member to the
                     # `ElementPosition` instance.
                     position.page_num = page_num
-                    #print(f"write(): position={position}")
                     positionfn(position)
                 self.element_positions(positionfn2)
             if writer:
@@ -11586,7 +11526,7 @@ class Story:
 
             positions = list()
             def positionfn2(position):
-                #print(f"write_stabilized(): stable={stable} positionfn={positionfn} position={position}")
+                #log(f"write_stabilized(): stable={stable} positionfn={positionfn} position={position}")
                 positions.append(position)
                 if stable and positionfn:
                     positionfn(position)
@@ -11619,12 +11559,12 @@ class Story:
             x = x.find_next(None, None, None)
 
     def write_with_links(self, rectfn, positionfn=None, pagefn=None):
-        #print("write_with_links()")
+        #log("write_with_links()")
         stream = io.BytesIO()
         writer = DocumentWriter(stream)
         positions = []
         def positionfn2(position):
-            #print(f"write_with_links(): position={position}")
+            #log(f"write_with_links(): position={position}")
             positions.append(position)
             if positionfn:
                 positionfn(position)
@@ -11635,12 +11575,12 @@ class Story:
 
     @staticmethod
     def write_stabilized_with_links(contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
-        #print("write_stabilized_with_links()")
+        #log("write_stabilized_with_links()")
         stream = io.BytesIO()
         writer = DocumentWriter(stream)
         positions = []
         def positionfn2(position):
-            #print(f"write_stabilized_with_links(): position={position}")
+            #log(f"write_stabilized_with_links(): position={position}")
             positions.append(position)
             if positionfn:
                 positionfn(position)
@@ -11677,13 +11617,13 @@ class Story:
         # link destinations.
         #
         id_to_position = dict()
-        #print(f"positions: {positions}")
+        #log(f"positions: {positions}")
         for position in positions:
             #print(f"add_pdf_links(): position: {position}")
             if (position.open_close & 1) and position.id:
-                #print(f"add_pdf_links(): position with id: {position}")
+                #log(f"add_pdf_links(): position with id: {position}")
                 if position.id in id_to_position:
-                    #print(f"Ignoring duplicate positions with id={position.id!r}")
+                    #log(f"Ignoring duplicate positions with id={position.id!r}")
                     pass
                 else:
                     id_to_position[ position.id] = position
@@ -11697,7 +11637,7 @@ class Story:
                     and position_from.href.startswith("#")
                     ):
                 # This is a `<a href="#...">...</a>` internal link.
-                #print(f"add_pdf_links(): position with href: {position}")
+                #log(f"add_pdf_links(): position with href: {position}")
                 target_id = position_from.href[1:]
                 try:
                     position_to = id_to_position[ target_id]
@@ -11706,10 +11646,10 @@ class Story:
                 # Make link from `position_from`'s rect to top-left of
                 # `position_to`'s rect.
                 if 0:
-                    print(f"add_pdf_links(): making link from:")
-                    print(f"add_pdf_links():    {position_from}")
-                    print(f"add_pdf_links(): to:")
-                    print(f"add_pdf_links():    {position_to}")
+                    log(f"add_pdf_links(): making link from:")
+                    log(f"add_pdf_links():    {position_from}")
+                    log(f"add_pdf_links(): to:")
+                    log(f"add_pdf_links():    {position_to}")
                 link = dict()
                 link["kind"] = LINK_GOTO
                 link["from"] = Rect(position_from.rect)
@@ -11740,7 +11680,6 @@ class TextPage:
         self.thisown = True
 
     def _extractText(self, format_):
-        #return _fitz.TextPage__extractText(self, format)
         this_tpage = self.this
         res = mupdf.fz_new_buffer(1024)
         out = mupdf.FzOutput( res)
@@ -11761,7 +11700,6 @@ class TextPage:
         return text
 
     def _getNewBlockList(self, page_dict, raw):
-        #return _fitz.TextPage__getNewBlockList(self, page_dict, raw)
         JM_make_textpage_dict(self.this, page_dict, raw)
 
     def _textpage_dict(self, raw=False):
@@ -11826,10 +11764,6 @@ class TextPage:
     def extractDICT(self, cb=None, sort=False) -> dict:
         """Return page content as a Python dict of images and text spans."""
         val = self._textpage_dict(raw=False)
-        #raw=False
-        #page_dict = {"width": self.rect.width, "height": self.rect.height}
-        #self._getNewBlockList(page_dict, raw)
-        #val = page_dict
         if cb is not None:
             val["width"] = cb.width
             val["height"] = cb.height
@@ -11841,8 +11775,6 @@ class TextPage:
 
     def extractIMGINFO(self, hashes=0):
         """Return a list with image meta information."""
-
-        #return _fitz.TextPage_extractIMGINFO(self, hashes)
         block_n = -1
         this_tpage = self.this
         rc = []
@@ -11920,7 +11852,6 @@ class TextPage:
 
     def extractWORDS(self):
         """Return a list with text word information."""
-        #return _fitz.TextPage_extractWORDS(self)
         buflen = 0
         block_n = -1
         wbbox = mupdf.FzRect(mupdf.FzRect.Fixed_EMPTY)  # word bbox
@@ -12018,7 +11949,6 @@ class TextPage:
 
     def poolsize(self):
         """TextPage current poolsize."""
-        #return _fitz.TextPage_poolsize(self)
         tpage = self.this
         pool = mupdf.Pool(tpage.m_internal.pool)
         size = mupdf.fz_pool_size( pool)
@@ -12028,8 +11958,6 @@ class TextPage:
     @property
     def rect(self):
         """Page rectangle."""
-
-        #val = _fitz.TextPage_rect(self)
         this_tpage = self.this
         mediabox = this_tpage.m_internal.mediabox
         val = JM_py_from_rect(mediabox)
@@ -12039,7 +11967,6 @@ class TextPage:
 
     def search(self, needle, hit_max=0, quads=1):
         """Locate 'needle' returning rects or quads."""
-        #val = _fitz.TextPage_search(self, needle, hit_max, quads)
         val = JM_search_stext_page(self.this, needle)
         nl = '\n'
         if not val:
@@ -12070,8 +11997,6 @@ class TextWriter:
 
     def __init__(self, page_rect, opacity=1, color=None):
         """Stores text spans for later output on compatible PDF pages."""
-
-        #this = _fitz.new_TextWriter(page_rect, opacity, color)
         self.this = mupdf.fz_new_text()
 
         self.opacity = opacity
@@ -12089,7 +12014,6 @@ class TextWriter:
 
     @property
     def _bbox(self):
-        #val = _fitz.TextWriter__bbox(self)
         val = JM_py_from_rect( mupdf.fz_bound_text( self.this, mupdf.FzStrokeState(None), mupdf.FzMatrix()))
         val = Rect(val)
         return val
@@ -12120,7 +12044,6 @@ class TextWriter:
             text = "".join(reversed(text))
             right_to_left = 0
 
-        #val = _fitz.TextWriter_append(self, pos, text, font, fontsize, language, right_to_left, small_caps)
         lang = mupdf.fz_text_language_from_string(language)
         p = JM_point_from_py(pos)
         trm = mupdf.fz_make_matrix(fontsize, 0, 0, fontsize, p.x, p.y)
@@ -12222,7 +12145,6 @@ class TextWriter:
         if color is None:
             color = self.color
 
-        #val = _fitz.TextWriter_write_text(self, page, color, opacity, overlay, morph, matrix, render_mode, oc)
         if 1:
             pdfpage = page._pdf_page()
             alpha = 1
@@ -14788,7 +14710,6 @@ def JM_get_fontbuffer(doc, xref):
     '''
     if xref < 1:
         return
-    #pdf_obj *o, *obj = NULL, *desft, *stream = NULL;
     o = mupdf.pdf_load_object(doc, xref)
     desft = mupdf.pdf_dict_get(o, PDF_NAME('DescendantFonts'))
     if desft.m_internal:
@@ -15478,6 +15399,7 @@ def JM_irect_from_py(r):
 
 
 def JM_is_jbig2_image(dict_):
+    # fixme: should we remove this function?
     return 0
     #filter_ = pdf_dict_get(ctx, dict_, PDF_NAME(Filter));
     #if (pdf_name_eq(ctx, filter_, PDF_NAME(JBIG2Decode)))
@@ -16532,7 +16454,6 @@ def JM_set_object_value(obj, key, value):
 
 
 def JM_set_ocg_arrays(conf, basestate, on, off, rbgroups):
-    #pdf_obj *arr = NULL, *obj = NULL, *indobj = NULL;
     if basestate:
         mupdf.pdf_dict_put_name( conf, PDF_NAME('BaseState'), basestate)
 
@@ -18975,7 +18896,6 @@ def chartocanon(s):
     return n, c;
 
 
-#int dest_is_valid(fz_context *ctx, pdf_obj *o, int page_count, int *page_object_nums, pdf_obj *names_list)
 def dest_is_valid(o, page_count, page_object_nums, names_list):
     p = mupdf.pdf_dict_get( o, PDF_NAME('A'))
     if (
@@ -20247,7 +20167,6 @@ class TOOLS:
     @staticmethod
     def _insert_contents(page, newcont, overlay=1):
         """Add bytes as a new /Contents object for a page, and return its xref."""
-        #return _fitz.Tools__insert_contents(self, page, newcont, overlay)
         pdfpage = page._pdf_page()
         ASSERT_PDF(pdfpage)
         contbuf = JM_BufferFromBytes(newcont)
@@ -20556,7 +20475,6 @@ class TOOLS:
 
     @staticmethod
     def _rotate_matrix(page):
-        #return _fitz.Tools__rotate_matrix(self, page)
         pdfpage = page._pdf_page()
         if not pdf_page.m_internal:
             return JM_py_from_matrix(mupdf.FzMatrix())
@@ -20564,11 +20482,9 @@ class TOOLS:
 
     @staticmethod
     def _save_widget(annot, widget):
-        #return _fitz.Tools__save_widget(self, annot, widget)
         JM_set_widget_properties(annot, widget);
 
     def _update_da(annot, da_str):
-        #return _fitz.Tools__update_da(self, annot, da_str)
         if g_use_extra:
             extra.Tools_update_da( annot.this, da_str)
         else:
@@ -20617,7 +20533,6 @@ class TOOLS:
 
     @staticmethod
     def set_font_width(doc, xref, width):
-        #return _fitz.Tools_set_font_width(self, doc, xref, width)
         pdf = _as_pdf_document(doc)
         if not pdf:
             return False
@@ -20637,7 +20552,6 @@ class TOOLS:
     @staticmethod
     def set_low_memory( on=None):
         """Set / unset MuPDF device caching."""
-        #return _fitz.Tools_set_low_memory(self, on)
         global g_no_device_caching
         if on is not None:
             g_no_device_caching = bool(on)
@@ -20646,7 +20560,6 @@ class TOOLS:
     @staticmethod
     def set_small_glyph_heights(on=None):
         """Set / unset small glyph heights."""
-        #return _fitz.Tools_set_small_glyph_heights(self, on)
         global g_small_glyph_heights
         if on is not None:
             g_small_glyph_heights = bool(on)
