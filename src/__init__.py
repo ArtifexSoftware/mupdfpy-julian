@@ -1,5 +1,5 @@
 '''
-PyMuPDF implemented on top of auto-generated MuPDF python bindings.
+PyMuPDF implemented on top of MuPDF Python bindings.
 
 License:
 
@@ -36,7 +36,6 @@ def exception_info():
     traceback.print_exc(file=sys.stdout)
 
 
-
 # To reduce startup times, we don't import everything we require here.
 #
 import atexit
@@ -63,6 +62,7 @@ g_exceptions_verbose = True
 g_use_extra = True
 ue = os.environ.get( 'MUPDFPY_USE_EXTRA')
 if ue == '0':
+    log(f'Warning: not using optimised routines.')
     g_use_extra = False
 elif ue == '1':
     g_use_extra = True
@@ -156,7 +156,9 @@ def _as_pdf_document(document):
         return None
     assert 0, f'Unrecognised type(self.this)={type(self.this)}'
 
+
 # Fixme: we don't implement JM_MEMORY.
+
 
 # Classes
 #
@@ -1668,14 +1670,15 @@ class Archive:
     def read_entry( self, name):
         buff = mupdf.fz_read_archive_entry( arch, name)
         return JM_BinFromBuffer( buff)
-    
+
+
 class Xml:
+
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         pass
-            
 
     def __init__( self, rhs):
         if isinstance( rhs, mupdf.FzXml):
@@ -2285,7 +2288,9 @@ class Xml:
     add_samp = add_code
     add_kbd = add_code
 
+
 class Colorspace:
+
     def __init__(self, type_):
         """Supported are GRAY, RGB and CMYK."""
         if type_ == CS_GRAY:
@@ -2380,12 +2385,12 @@ class DisplayList:
                 mupdf.FzCookie(),
                 )
 
-
-mupdf_FzDocument = mupdf.FzDocument
 if g_use_extra:
     extra_FzDocument_insert_pdf = extra.FzDocument_insert_pdf
 
+
 class Document:
+
     def __contains__(self, loc) -> bool:
         page_count = self.this.fz_count_pages()
         if type(loc) is int:
@@ -2642,7 +2647,6 @@ class Document:
         k = mupdf.pdf_new_name( name)
         v = JM_pdf_obj_from_str( pdf, font)
         mupdf.pdf_dict_put( fonts, k, v)
-        
 
     def _delToC(self):
         """Delete the TOC."""
@@ -3523,7 +3527,6 @@ class Document:
         self._delete_page(pno)
         self._reset_page_refs()
 
-
     def delete_pages(self, *args, **kw):
         """Delete pages from a PDF.
 
@@ -3939,7 +3942,6 @@ class Document:
             mupdf.ll_pdf_drop_page_tree( pdf.m_internal);
 
         self._reset_page_refs()
-
 
     def get_layer(self, config=-1):
         """Content of ON, OFF, RBGroups of an OC layer."""
@@ -5198,7 +5200,6 @@ class Document:
             mupdf.pdf_deselect_layer_config_ui(pdf, number)
         else:
             mupdf.pdf_select_layer_config_ui(pdf, number)
-        
 
     def set_markinfo(self, markinfo: dict) -> bool:
         """Set the PDF MarkInfo values."""
@@ -5273,7 +5274,6 @@ class Document:
             mupdf.pdf_dict_put( xml, PDF_NAME('Type'), PDF_NAME('Metadata'))
             mupdf.pdf_dict_put( xml, PDF_NAME('Subtype'), PDF_NAME('XML'))
             mupdf.pdf_dict_put( root, PDF_NAME('Metadata'), xml)
-        
 
     def switch_layer(self, config, as_default=0):
         """Activate an OC layer."""
@@ -5604,7 +5604,6 @@ class Document:
             res = mupdf.pdf_load_raw_stream_number( pdf, xref)
             r = JM_BinFromBuffer( res)
         return r
-        
 
     def xref_xml_metadata(self):
         """Get xref of document XML metadata."""
@@ -5620,9 +5619,6 @@ class Document:
         if xml.m_internal:
             xref = mupdf.pdf_to_num( xml)
         return xref
-
-    
-    __slots__ = ('this', 'page_count2', 'this_is_pdf', '__dict__')
     
     if mupdf_version_tuple < (1, 22):
         @property
@@ -5649,10 +5645,11 @@ class Document:
                 return True
             return False
 
+    __slots__ = ('this', 'page_count2', 'this_is_pdf', '__dict__')
+    
     outline = property(lambda self: self._outline)
     tobytes = write
     is_stream = xref_is_stream
-
 
 open = Document
 
@@ -6414,7 +6411,6 @@ class IdentityMatrix(Matrix):
     def checkargs(*args):
         raise NotImplementedError("Identity is readonly")
 
-
 Identity = IdentityMatrix()
 
 
@@ -6490,6 +6486,7 @@ class Widget:
     '''
     Class describing a PDF form field ("widget")
     '''
+
     def __init__(self):
         self.border_color = None
         self.border_style = "S"
@@ -6711,7 +6708,6 @@ class Widget:
         print("warning: radio button has no 'On' value.")
         return True
 
-
     def reset(self):
         """Reset the field value to its default.
         """
@@ -6830,6 +6826,7 @@ def _make_PdfFilterOptions(recurse, instance_forms, ascii, sanitize, sopts=None)
     '''
     Returns a mupdf.PdfFilterOptions instance.
     '''
+
     filter_ = mupdf.PdfFilterOptions()
     filter_.recurse = recurse
     filter_.instance_forms = instance_forms
@@ -6884,6 +6881,7 @@ def _make_PdfFilterOptions(recurse, instance_forms, ascii, sanitize, sopts=None)
 
 
 class Page:
+
     def __init__(self, page, document):
         assert isinstance(page, (mupdf.FzPage, mupdf.PdfPage)), f'page is: {page}'
         self.this = page
@@ -6951,7 +6949,6 @@ class Page:
             annot.pdf_update_annot()
             JM_add_annot_id(annot, "A")
         return annot;
-
 
     def _add_file_annot(self, point, buffer_, filename, ufilename=None, desc=None, icon=None):
         page = self._pdf_page()
@@ -8748,7 +8745,6 @@ class Page:
         Args:
             ident: identifier, either name (str) or xref (int).
         """
-
         CheckParent(self)
         if type(ident) is str:
             xref = 0
@@ -9688,9 +9684,6 @@ class Pixmap:
         barray = self._tobytes(idx, jpg_quality)
         return barray
 
-
-#===========================
-
     def set_dpi(self, xres, yres):
         """Set resolution in both dimensions."""
         pm = self.this
@@ -9804,11 +9797,13 @@ class Pixmap:
 
 
 class Point:
-    """Point() - all zeros
+    """
+    Point() - all zeros
     Point(x, y)
     Point(Point) - new copy
     Point(sequence) - from 'sequence'
     """
+
     def __abs__(self):
         return math.sqrt(self.x * self.x + self.y * self.y)
 
@@ -10210,8 +10205,6 @@ class Quad:
     height = property(lambda self: max(abs(self.ul - self.ll), abs(self.ur - self.lr)))
 
 
-
-
 class Rect:
     """
     Rect() - all zeros
@@ -10510,7 +10503,10 @@ class Shape:
         self.rect = None
 
     def commit(self, overlay: bool = True) -> None:
-        """Update the page's /Contents object with Shape data. The argument controls whether data appear in foreground (default) or background."""
+        """
+        Update the page's /Contents object with Shape data. The argument
+        controls whether data appear in foreground (default) or background.
+        """
         CheckParent(self.page)  # doc may have died meanwhile
         self.totalcont += self.text_cont
 
@@ -11413,6 +11409,7 @@ class Shape:
 
 
 class Story:
+
     def __init__( self, html='', user_css=None, em=12, archive=None):
         buffer_ = mupdf.fz_new_buffer_from_copied_data( html.encode('utf-8'))
         arch = archive.this if archive else mupdf.FzArchive( None)
@@ -11671,6 +11668,7 @@ class Story:
 
 
 class TextPage:
+
     def __init__(self, *args):
         if args_match(args, mupdf.FzRect):
             mediabox = args[0]
@@ -12424,11 +12422,11 @@ class IRect:
     def width(self):
         return max(0, self.x1 - self.x0)
 
-
     br = bottom_right
     bl = bottom_left
     tl = top_left
     tr = top_right
+
 
 # Data
 #
@@ -12588,51 +12586,59 @@ TEXT_DEHYPHENATE = 16
 TEXT_PRESERVE_SPANS = 32
 TEXT_MEDIABOX_CLIP = 64
 
-TEXTFLAGS_WORDS = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-)
-TEXTFLAGS_BLOCKS = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-)
-TEXTFLAGS_DICT = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-    | TEXT_PRESERVE_IMAGES
-)
+TEXTFLAGS_WORDS = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        )
+
+TEXTFLAGS_BLOCKS = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        )
+
+TEXTFLAGS_DICT = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        | TEXT_PRESERVE_IMAGES
+        )
+
 TEXTFLAGS_RAWDICT = TEXTFLAGS_DICT
-TEXTFLAGS_SEARCH = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-    | TEXT_DEHYPHENATE
-)
-TEXTFLAGS_HTML = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-    | TEXT_PRESERVE_IMAGES
-)
-TEXTFLAGS_XHTML = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-    | TEXT_PRESERVE_IMAGES
-)
-TEXTFLAGS_XML = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-)
-TEXTFLAGS_TEXT = (
-    TEXT_PRESERVE_LIGATURES
-    | TEXT_PRESERVE_WHITESPACE
-    | TEXT_MEDIABOX_CLIP
-)
+
+TEXTFLAGS_SEARCH = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        | TEXT_DEHYPHENATE
+        )
+
+TEXTFLAGS_HTML = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        | TEXT_PRESERVE_IMAGES
+        )
+
+TEXTFLAGS_XHTML = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        | TEXT_PRESERVE_IMAGES
+        )
+
+TEXTFLAGS_XML = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        )
+
+TEXTFLAGS_TEXT = (0
+        | TEXT_PRESERVE_LIGATURES
+        | TEXT_PRESERVE_WHITESPACE
+        | TEXT_MEDIABOX_CLIP
+        )
 
 # Simple text encoding options
 TEXT_ENCODING_LATIN = 0
@@ -12664,7 +12670,6 @@ PDF_BM_Saturation = "Saturation"
 PDF_BM_Screen = "Screen"
 PDF_BM_SoftLight = "Softlight"
 
-
 # General text flags
 TEXT_FONT_SUPERSCRIPT = 1
 TEXT_FONT_ITALIC = 2
@@ -12674,14 +12679,14 @@ TEXT_FONT_BOLD = 16
 
 
 annot_skel = {
-    "goto1": "<</A<</S/GoTo/D[%i 0 R/XYZ %g %g %g]>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-    "goto2": "<</A<</S/GoTo/D%s>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-    "gotor1": "<</A<</S/GoToR/D[%i /XYZ %g %g %g]/F<</F(%s)/UF(%s)/Type/Filespec>>>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-    "gotor2": "<</A<</S/GoToR/D%s/F(%s)>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-    "launch": "<</A<</S/Launch/F<</F(%s)/UF(%s)/Type/Filespec>>>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-    "uri": "<</A<</S/URI/URI(%s)>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-    "named": "<</A<</S/Named/N/%s/Type/Action>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
-}
+        "goto1": "<</A<</S/GoTo/D[%i 0 R/XYZ %g %g %g]>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        "goto2": "<</A<</S/GoTo/D%s>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        "gotor1": "<</A<</S/GoToR/D[%i /XYZ %g %g %g]/F<</F(%s)/UF(%s)/Type/Filespec>>>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        "gotor2": "<</A<</S/GoToR/D%s/F(%s)>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        "launch": "<</A<</S/Launch/F<</F(%s)/UF(%s)/Type/Filespec>>>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        "uri": "<</A<</S/URI/URI(%s)>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        "named": "<</A<</S/Named/N/%s/Type/Action>>/Rect[%s]/BS<</W 0>>/Subtype/Link>>",
+        }
 
 class FileDataError(RuntimeError):
     """Raised for documents with file structure issues."""
@@ -12769,523 +12774,523 @@ except ImportError:
     fitz_fontdescriptors = {}
 
 symbol_glyphs = (   # Glyph list for the built-in font 'Symbol'
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (32, 0.25),
-    (33, 0.333),
-    (34, 0.713),
-    (35, 0.5),
-    (36, 0.549),
-    (37, 0.833),
-    (38, 0.778),
-    (39, 0.439),
-    (40, 0.333),
-    (41, 0.333),
-    (42, 0.5),
-    (43, 0.549),
-    (44, 0.25),
-    (45, 0.549),
-    (46, 0.25),
-    (47, 0.278),
-    (48, 0.5),
-    (49, 0.5),
-    (50, 0.5),
-    (51, 0.5),
-    (52, 0.5),
-    (53, 0.5),
-    (54, 0.5),
-    (55, 0.5),
-    (56, 0.5),
-    (57, 0.5),
-    (58, 0.278),
-    (59, 0.278),
-    (60, 0.549),
-    (61, 0.549),
-    (62, 0.549),
-    (63, 0.444),
-    (64, 0.549),
-    (65, 0.722),
-    (66, 0.667),
-    (67, 0.722),
-    (68, 0.612),
-    (69, 0.611),
-    (70, 0.763),
-    (71, 0.603),
-    (72, 0.722),
-    (73, 0.333),
-    (74, 0.631),
-    (75, 0.722),
-    (76, 0.686),
-    (77, 0.889),
-    (78, 0.722),
-    (79, 0.722),
-    (80, 0.768),
-    (81, 0.741),
-    (82, 0.556),
-    (83, 0.592),
-    (84, 0.611),
-    (85, 0.69),
-    (86, 0.439),
-    (87, 0.768),
-    (88, 0.645),
-    (89, 0.795),
-    (90, 0.611),
-    (91, 0.333),
-    (92, 0.863),
-    (93, 0.333),
-    (94, 0.658),
-    (95, 0.5),
-    (96, 0.5),
-    (97, 0.631),
-    (98, 0.549),
-    (99, 0.549),
-    (100, 0.494),
-    (101, 0.439),
-    (102, 0.521),
-    (103, 0.411),
-    (104, 0.603),
-    (105, 0.329),
-    (106, 0.603),
-    (107, 0.549),
-    (108, 0.549),
-    (109, 0.576),
-    (110, 0.521),
-    (111, 0.549),
-    (112, 0.549),
-    (113, 0.521),
-    (114, 0.549),
-    (115, 0.603),
-    (116, 0.439),
-    (117, 0.576),
-    (118, 0.713),
-    (119, 0.686),
-    (120, 0.493),
-    (121, 0.686),
-    (122, 0.494),
-    (123, 0.48),
-    (124, 0.2),
-    (125, 0.48),
-    (126, 0.549),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (183, 0.46),
-    (160, 0.25),
-    (161, 0.62),
-    (162, 0.247),
-    (163, 0.549),
-    (164, 0.167),
-    (165, 0.713),
-    (166, 0.5),
-    (167, 0.753),
-    (168, 0.753),
-    (169, 0.753),
-    (170, 0.753),
-    (171, 1.042),
-    (172, 0.713),
-    (173, 0.603),
-    (174, 0.987),
-    (175, 0.603),
-    (176, 0.4),
-    (177, 0.549),
-    (178, 0.411),
-    (179, 0.549),
-    (180, 0.549),
-    (181, 0.576),
-    (182, 0.494),
-    (183, 0.46),
-    (184, 0.549),
-    (185, 0.549),
-    (186, 0.549),
-    (187, 0.549),
-    (188, 1),
-    (189, 0.603),
-    (190, 1),
-    (191, 0.658),
-    (192, 0.823),
-    (193, 0.686),
-    (194, 0.795),
-    (195, 0.987),
-    (196, 0.768),
-    (197, 0.768),
-    (198, 0.823),
-    (199, 0.768),
-    (200, 0.768),
-    (201, 0.713),
-    (202, 0.713),
-    (203, 0.713),
-    (204, 0.713),
-    (205, 0.713),
-    (206, 0.713),
-    (207, 0.713),
-    (208, 0.768),
-    (209, 0.713),
-    (210, 0.79),
-    (211, 0.79),
-    (212, 0.89),
-    (213, 0.823),
-    (214, 0.549),
-    (215, 0.549),
-    (216, 0.713),
-    (217, 0.603),
-    (218, 0.603),
-    (219, 1.042),
-    (220, 0.987),
-    (221, 0.603),
-    (222, 0.987),
-    (223, 0.603),
-    (224, 0.494),
-    (225, 0.329),
-    (226, 0.79),
-    (227, 0.79),
-    (228, 0.786),
-    (229, 0.713),
-    (230, 0.384),
-    (231, 0.384),
-    (232, 0.384),
-    (233, 0.384),
-    (234, 0.384),
-    (235, 0.384),
-    (236, 0.494),
-    (237, 0.494),
-    (238, 0.494),
-    (239, 0.494),
-    (183, 0.46),
-    (241, 0.329),
-    (242, 0.274),
-    (243, 0.686),
-    (244, 0.686),
-    (245, 0.686),
-    (246, 0.384),
-    (247, 0.549),
-    (248, 0.384),
-    (249, 0.384),
-    (250, 0.384),
-    (251, 0.384),
-    (252, 0.494),
-    (253, 0.494),
-    (254, 0.494),
-    (183, 0.46),
-    )
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (32, 0.25),
+        (33, 0.333),
+        (34, 0.713),
+        (35, 0.5),
+        (36, 0.549),
+        (37, 0.833),
+        (38, 0.778),
+        (39, 0.439),
+        (40, 0.333),
+        (41, 0.333),
+        (42, 0.5),
+        (43, 0.549),
+        (44, 0.25),
+        (45, 0.549),
+        (46, 0.25),
+        (47, 0.278),
+        (48, 0.5),
+        (49, 0.5),
+        (50, 0.5),
+        (51, 0.5),
+        (52, 0.5),
+        (53, 0.5),
+        (54, 0.5),
+        (55, 0.5),
+        (56, 0.5),
+        (57, 0.5),
+        (58, 0.278),
+        (59, 0.278),
+        (60, 0.549),
+        (61, 0.549),
+        (62, 0.549),
+        (63, 0.444),
+        (64, 0.549),
+        (65, 0.722),
+        (66, 0.667),
+        (67, 0.722),
+        (68, 0.612),
+        (69, 0.611),
+        (70, 0.763),
+        (71, 0.603),
+        (72, 0.722),
+        (73, 0.333),
+        (74, 0.631),
+        (75, 0.722),
+        (76, 0.686),
+        (77, 0.889),
+        (78, 0.722),
+        (79, 0.722),
+        (80, 0.768),
+        (81, 0.741),
+        (82, 0.556),
+        (83, 0.592),
+        (84, 0.611),
+        (85, 0.69),
+        (86, 0.439),
+        (87, 0.768),
+        (88, 0.645),
+        (89, 0.795),
+        (90, 0.611),
+        (91, 0.333),
+        (92, 0.863),
+        (93, 0.333),
+        (94, 0.658),
+        (95, 0.5),
+        (96, 0.5),
+        (97, 0.631),
+        (98, 0.549),
+        (99, 0.549),
+        (100, 0.494),
+        (101, 0.439),
+        (102, 0.521),
+        (103, 0.411),
+        (104, 0.603),
+        (105, 0.329),
+        (106, 0.603),
+        (107, 0.549),
+        (108, 0.549),
+        (109, 0.576),
+        (110, 0.521),
+        (111, 0.549),
+        (112, 0.549),
+        (113, 0.521),
+        (114, 0.549),
+        (115, 0.603),
+        (116, 0.439),
+        (117, 0.576),
+        (118, 0.713),
+        (119, 0.686),
+        (120, 0.493),
+        (121, 0.686),
+        (122, 0.494),
+        (123, 0.48),
+        (124, 0.2),
+        (125, 0.48),
+        (126, 0.549),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (183, 0.46),
+        (160, 0.25),
+        (161, 0.62),
+        (162, 0.247),
+        (163, 0.549),
+        (164, 0.167),
+        (165, 0.713),
+        (166, 0.5),
+        (167, 0.753),
+        (168, 0.753),
+        (169, 0.753),
+        (170, 0.753),
+        (171, 1.042),
+        (172, 0.713),
+        (173, 0.603),
+        (174, 0.987),
+        (175, 0.603),
+        (176, 0.4),
+        (177, 0.549),
+        (178, 0.411),
+        (179, 0.549),
+        (180, 0.549),
+        (181, 0.576),
+        (182, 0.494),
+        (183, 0.46),
+        (184, 0.549),
+        (185, 0.549),
+        (186, 0.549),
+        (187, 0.549),
+        (188, 1),
+        (189, 0.603),
+        (190, 1),
+        (191, 0.658),
+        (192, 0.823),
+        (193, 0.686),
+        (194, 0.795),
+        (195, 0.987),
+        (196, 0.768),
+        (197, 0.768),
+        (198, 0.823),
+        (199, 0.768),
+        (200, 0.768),
+        (201, 0.713),
+        (202, 0.713),
+        (203, 0.713),
+        (204, 0.713),
+        (205, 0.713),
+        (206, 0.713),
+        (207, 0.713),
+        (208, 0.768),
+        (209, 0.713),
+        (210, 0.79),
+        (211, 0.79),
+        (212, 0.89),
+        (213, 0.823),
+        (214, 0.549),
+        (215, 0.549),
+        (216, 0.713),
+        (217, 0.603),
+        (218, 0.603),
+        (219, 1.042),
+        (220, 0.987),
+        (221, 0.603),
+        (222, 0.987),
+        (223, 0.603),
+        (224, 0.494),
+        (225, 0.329),
+        (226, 0.79),
+        (227, 0.79),
+        (228, 0.786),
+        (229, 0.713),
+        (230, 0.384),
+        (231, 0.384),
+        (232, 0.384),
+        (233, 0.384),
+        (234, 0.384),
+        (235, 0.384),
+        (236, 0.494),
+        (237, 0.494),
+        (238, 0.494),
+        (239, 0.494),
+        (183, 0.46),
+        (241, 0.329),
+        (242, 0.274),
+        (243, 0.686),
+        (244, 0.686),
+        (245, 0.686),
+        (246, 0.384),
+        (247, 0.549),
+        (248, 0.384),
+        (249, 0.384),
+        (250, 0.384),
+        (251, 0.384),
+        (252, 0.494),
+        (253, 0.494),
+        (254, 0.494),
+        (183, 0.46),
+        )
 
 
 zapf_glyphs = ( # Glyph list for the built-in font 'ZapfDingbats'
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (32, 0.278),
-    (33, 0.974),
-    (34, 0.961),
-    (35, 0.974),
-    (36, 0.98),
-    (37, 0.719),
-    (38, 0.789),
-    (39, 0.79),
-    (40, 0.791),
-    (41, 0.69),
-    (42, 0.96),
-    (43, 0.939),
-    (44, 0.549),
-    (45, 0.855),
-    (46, 0.911),
-    (47, 0.933),
-    (48, 0.911),
-    (49, 0.945),
-    (50, 0.974),
-    (51, 0.755),
-    (52, 0.846),
-    (53, 0.762),
-    (54, 0.761),
-    (55, 0.571),
-    (56, 0.677),
-    (57, 0.763),
-    (58, 0.76),
-    (59, 0.759),
-    (60, 0.754),
-    (61, 0.494),
-    (62, 0.552),
-    (63, 0.537),
-    (64, 0.577),
-    (65, 0.692),
-    (66, 0.786),
-    (67, 0.788),
-    (68, 0.788),
-    (69, 0.79),
-    (70, 0.793),
-    (71, 0.794),
-    (72, 0.816),
-    (73, 0.823),
-    (74, 0.789),
-    (75, 0.841),
-    (76, 0.823),
-    (77, 0.833),
-    (78, 0.816),
-    (79, 0.831),
-    (80, 0.923),
-    (81, 0.744),
-    (82, 0.723),
-    (83, 0.749),
-    (84, 0.79),
-    (85, 0.792),
-    (86, 0.695),
-    (87, 0.776),
-    (88, 0.768),
-    (89, 0.792),
-    (90, 0.759),
-    (91, 0.707),
-    (92, 0.708),
-    (93, 0.682),
-    (94, 0.701),
-    (95, 0.826),
-    (96, 0.815),
-    (97, 0.789),
-    (98, 0.789),
-    (99, 0.707),
-    (100, 0.687),
-    (101, 0.696),
-    (102, 0.689),
-    (103, 0.786),
-    (104, 0.787),
-    (105, 0.713),
-    (106, 0.791),
-    (107, 0.785),
-    (108, 0.791),
-    (109, 0.873),
-    (110, 0.761),
-    (111, 0.762),
-    (112, 0.762),
-    (113, 0.759),
-    (114, 0.759),
-    (115, 0.892),
-    (116, 0.892),
-    (117, 0.788),
-    (118, 0.784),
-    (119, 0.438),
-    (120, 0.138),
-    (121, 0.277),
-    (122, 0.415),
-    (123, 0.392),
-    (124, 0.392),
-    (125, 0.668),
-    (126, 0.668),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (183, 0.788),
-    (161, 0.732),
-    (162, 0.544),
-    (163, 0.544),
-    (164, 0.91),
-    (165, 0.667),
-    (166, 0.76),
-    (167, 0.76),
-    (168, 0.776),
-    (169, 0.595),
-    (170, 0.694),
-    (171, 0.626),
-    (172, 0.788),
-    (173, 0.788),
-    (174, 0.788),
-    (175, 0.788),
-    (176, 0.788),
-    (177, 0.788),
-    (178, 0.788),
-    (179, 0.788),
-    (180, 0.788),
-    (181, 0.788),
-    (182, 0.788),
-    (183, 0.788),
-    (184, 0.788),
-    (185, 0.788),
-    (186, 0.788),
-    (187, 0.788),
-    (188, 0.788),
-    (189, 0.788),
-    (190, 0.788),
-    (191, 0.788),
-    (192, 0.788),
-    (193, 0.788),
-    (194, 0.788),
-    (195, 0.788),
-    (196, 0.788),
-    (197, 0.788),
-    (198, 0.788),
-    (199, 0.788),
-    (200, 0.788),
-    (201, 0.788),
-    (202, 0.788),
-    (203, 0.788),
-    (204, 0.788),
-    (205, 0.788),
-    (206, 0.788),
-    (207, 0.788),
-    (208, 0.788),
-    (209, 0.788),
-    (210, 0.788),
-    (211, 0.788),
-    (212, 0.894),
-    (213, 0.838),
-    (214, 1.016),
-    (215, 0.458),
-    (216, 0.748),
-    (217, 0.924),
-    (218, 0.748),
-    (219, 0.918),
-    (220, 0.927),
-    (221, 0.928),
-    (222, 0.928),
-    (223, 0.834),
-    (224, 0.873),
-    (225, 0.828),
-    (226, 0.924),
-    (227, 0.924),
-    (228, 0.917),
-    (229, 0.93),
-    (230, 0.931),
-    (231, 0.463),
-    (232, 0.883),
-    (233, 0.836),
-    (234, 0.836),
-    (235, 0.867),
-    (236, 0.867),
-    (237, 0.696),
-    (238, 0.696),
-    (239, 0.874),
-    (183, 0.788),
-    (241, 0.874),
-    (242, 0.76),
-    (243, 0.946),
-    (244, 0.771),
-    (245, 0.865),
-    (246, 0.771),
-    (247, 0.888),
-    (248, 0.967),
-    (249, 0.888),
-    (250, 0.831),
-    (251, 0.873),
-    (252, 0.927),
-    (253, 0.97),
-    (183, 0.788),
-    (183, 0.788),
-    )
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (32, 0.278),
+        (33, 0.974),
+        (34, 0.961),
+        (35, 0.974),
+        (36, 0.98),
+        (37, 0.719),
+        (38, 0.789),
+        (39, 0.79),
+        (40, 0.791),
+        (41, 0.69),
+        (42, 0.96),
+        (43, 0.939),
+        (44, 0.549),
+        (45, 0.855),
+        (46, 0.911),
+        (47, 0.933),
+        (48, 0.911),
+        (49, 0.945),
+        (50, 0.974),
+        (51, 0.755),
+        (52, 0.846),
+        (53, 0.762),
+        (54, 0.761),
+        (55, 0.571),
+        (56, 0.677),
+        (57, 0.763),
+        (58, 0.76),
+        (59, 0.759),
+        (60, 0.754),
+        (61, 0.494),
+        (62, 0.552),
+        (63, 0.537),
+        (64, 0.577),
+        (65, 0.692),
+        (66, 0.786),
+        (67, 0.788),
+        (68, 0.788),
+        (69, 0.79),
+        (70, 0.793),
+        (71, 0.794),
+        (72, 0.816),
+        (73, 0.823),
+        (74, 0.789),
+        (75, 0.841),
+        (76, 0.823),
+        (77, 0.833),
+        (78, 0.816),
+        (79, 0.831),
+        (80, 0.923),
+        (81, 0.744),
+        (82, 0.723),
+        (83, 0.749),
+        (84, 0.79),
+        (85, 0.792),
+        (86, 0.695),
+        (87, 0.776),
+        (88, 0.768),
+        (89, 0.792),
+        (90, 0.759),
+        (91, 0.707),
+        (92, 0.708),
+        (93, 0.682),
+        (94, 0.701),
+        (95, 0.826),
+        (96, 0.815),
+        (97, 0.789),
+        (98, 0.789),
+        (99, 0.707),
+        (100, 0.687),
+        (101, 0.696),
+        (102, 0.689),
+        (103, 0.786),
+        (104, 0.787),
+        (105, 0.713),
+        (106, 0.791),
+        (107, 0.785),
+        (108, 0.791),
+        (109, 0.873),
+        (110, 0.761),
+        (111, 0.762),
+        (112, 0.762),
+        (113, 0.759),
+        (114, 0.759),
+        (115, 0.892),
+        (116, 0.892),
+        (117, 0.788),
+        (118, 0.784),
+        (119, 0.438),
+        (120, 0.138),
+        (121, 0.277),
+        (122, 0.415),
+        (123, 0.392),
+        (124, 0.392),
+        (125, 0.668),
+        (126, 0.668),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (183, 0.788),
+        (161, 0.732),
+        (162, 0.544),
+        (163, 0.544),
+        (164, 0.91),
+        (165, 0.667),
+        (166, 0.76),
+        (167, 0.76),
+        (168, 0.776),
+        (169, 0.595),
+        (170, 0.694),
+        (171, 0.626),
+        (172, 0.788),
+        (173, 0.788),
+        (174, 0.788),
+        (175, 0.788),
+        (176, 0.788),
+        (177, 0.788),
+        (178, 0.788),
+        (179, 0.788),
+        (180, 0.788),
+        (181, 0.788),
+        (182, 0.788),
+        (183, 0.788),
+        (184, 0.788),
+        (185, 0.788),
+        (186, 0.788),
+        (187, 0.788),
+        (188, 0.788),
+        (189, 0.788),
+        (190, 0.788),
+        (191, 0.788),
+        (192, 0.788),
+        (193, 0.788),
+        (194, 0.788),
+        (195, 0.788),
+        (196, 0.788),
+        (197, 0.788),
+        (198, 0.788),
+        (199, 0.788),
+        (200, 0.788),
+        (201, 0.788),
+        (202, 0.788),
+        (203, 0.788),
+        (204, 0.788),
+        (205, 0.788),
+        (206, 0.788),
+        (207, 0.788),
+        (208, 0.788),
+        (209, 0.788),
+        (210, 0.788),
+        (211, 0.788),
+        (212, 0.894),
+        (213, 0.838),
+        (214, 1.016),
+        (215, 0.458),
+        (216, 0.748),
+        (217, 0.924),
+        (218, 0.748),
+        (219, 0.918),
+        (220, 0.927),
+        (221, 0.928),
+        (222, 0.928),
+        (223, 0.834),
+        (224, 0.873),
+        (225, 0.828),
+        (226, 0.924),
+        (227, 0.924),
+        (228, 0.917),
+        (229, 0.93),
+        (230, 0.931),
+        (231, 0.463),
+        (232, 0.883),
+        (233, 0.836),
+        (234, 0.836),
+        (235, 0.867),
+        (236, 0.867),
+        (237, 0.696),
+        (238, 0.696),
+        (239, 0.874),
+        (183, 0.788),
+        (241, 0.874),
+        (242, 0.76),
+        (243, 0.946),
+        (244, 0.771),
+        (245, 0.865),
+        (246, 0.771),
+        (247, 0.888),
+        (248, 0.967),
+        (249, 0.888),
+        (250, 0.831),
+        (251, 0.873),
+        (252, 0.927),
+        (253, 0.97),
+        (183, 0.788),
+        (183, 0.788),
+        )
 
 
 # Functions
@@ -13302,6 +13307,7 @@ def _read_samples( pixmap, offset, n):
 
 def _INRANGE(v, low, high):
     return low <= v and v <= high
+
 
 def _remove_dest_range(pdf, numbers):
     pagecount = mupdf.pdf_count_pages(pdf)
@@ -13343,27 +13349,35 @@ def ASSERT_PDF(cond):
     if not cond.m_internal:
         raise Exception('not a PDF')
 
+
 def DUMMY(*args, **kw):
     return
+
 
 def EMPTY_IRECT():
     return IRect(FZ_MAX_INF_RECT, FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, FZ_MIN_INF_RECT)
 
+
 def EMPTY_QUAD():
     return EMPTY_RECT().quad
 
+
 def EMPTY_RECT():
     return Rect(FZ_MAX_INF_RECT, FZ_MAX_INF_RECT, FZ_MIN_INF_RECT, FZ_MIN_INF_RECT)
+
 
 def ENSURE_OPERATION(pdf):
      if not JM_have_operation(pdf):
         raise Exception("No journalling operation started")
 
+
 def INFINITE_IRECT():
     return IRect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT)
 
+
 def INFINITE_QUAD():
     return INFINITE_RECT().quad
+
 
 def INFINITE_RECT():
     return Rect(FZ_MIN_INF_RECT, FZ_MIN_INF_RECT, FZ_MAX_INF_RECT, FZ_MAX_INF_RECT)
@@ -13376,6 +13390,7 @@ def JM_BinFromBuffer(buffer_):
     assert isinstance(buffer_, mupdf.FzBuffer)
     ret = buffer_.fz_buffer_extract_copy()
     return ret
+
 
 def JM_EscapeStrFromStr(c):
     # `c` is typically from SWIG which will have converted a `const char*` from
@@ -13441,6 +13456,7 @@ def JM_INT_ITEM(obj, idx):
         if isinstance(temp, (int, float)):
             return 0, temp
     return 1, None
+
 
 def JM_pixmap_from_page(doc, page, ctm, cs, alpha, annots, clip):
     '''
@@ -13511,13 +13527,16 @@ def JM_pixmap_from_page(doc, page, ctm, cs, alpha, annots, clip):
     mupdf.fz_close_device(dev)
     return pix
 
+
 def JM_StrAsChar(x):
     # fixme: should encode, but swig doesn't pass bytes to C as const char*.
     return x
     #return x.encode('utf8')
 
+
 def JM_TUPLE(o: typing.Sequence) -> tuple:
     return tuple(map(lambda x: round(x, 5) if abs(x) >= 1e-4 else 0, o))
+
 
 def JM_TUPLE3(o: typing.Sequence) -> tuple:
     return tuple(map(lambda x: round(x, 3) if abs(x) >= 1e-3 else 0, o))
@@ -13564,6 +13583,7 @@ def JM_add_oc_object(pdf, ref, xref):
         mupdf.pdf_dict_put(ref, PDF_NAME('OC'), indobj)
     else:
         RAISEPY(ctx, MSG_BAD_OC_REF, PyExc_ValueError);
+
 
 def JM_annot_border(annot_obj):
     assert isinstance(annot_obj, mupdf.PdfObj), f'{annot_obj}'
@@ -15087,6 +15107,7 @@ def JM_have_operation(pdf):
         return 0
     return 1;
 
+
 def JM_image_extension(type_):
     '''
     return extension for fitz image type
@@ -15173,6 +15194,7 @@ def JM_image_profile( imagedata, keep_image):
         result[ dictkey_image] = image
     return result
 
+
 if mupdf_version_tuple >= (1, 22):
 
     def JM_image_reporter(page):
@@ -15209,6 +15231,7 @@ if mupdf_version_tuple >= (1, 22):
         return rc
 
 else:
+
     def JM_filter_content_stream(
             doc,
             in_stm,
@@ -15706,6 +15729,7 @@ def JM_mediabox(page_obj):
 
     return page_mediabox
 
+
 def JM_merge_range(
         doc_des,
         doc_src,
@@ -15884,12 +15908,14 @@ def JM_norm_rotation(rotate):
         return 0
     return rotate
 
+
 def JM_object_to_buffer(what, compress, ascii):
     res = mupdf.fz_new_buffer(512)
     out = mupdf.FzOutput(res)
     mupdf.pdf_print_obj(out, what, compress, ascii)
     mupdf.fz_terminate_buffer(res)
     return res
+
 
 def JM_outline_xrefs(obj, xrefs):
     '''
@@ -15940,6 +15966,7 @@ def JM_pdf_obj_from_str(doc, src):
     lexbuf = mupdf.PdfLexbuf(mupdf.PDF_LEXBUF_SMALL)
     result = mupdf.pdf_parse_stm_obj(doc, stream, lexbuf)
     return result
+
 
 def JM_pixmap_from_display_list(
         list_,
@@ -16110,6 +16137,7 @@ def JM_py_from_quad(q):
             (q.ll.x, q.ll.y),
             (q.lr.x, q.lr.y),
             )
+
 
 def JM_py_from_rect(r):
     return r.x0, r.y0, r.x1, r.y1
@@ -16790,6 +16818,7 @@ def PySequence_Check(s):
 def PySequence_Size(s):
     return len(s)
 
+
 # constants: error messages. These are also in extra.i.
 #
 MSG_BAD_ANNOT_TYPE = "bad annot type"
@@ -16820,19 +16849,21 @@ MSG_IS_NO_DICT = "object is no PDF dict"
 MSG_PIX_NOALPHA = "source pixmap has no alpha"
 MSG_PIXEL_OUTSIDE = "pixel(s) outside image"
 
+
 def RAISEPY( msg, exc):
     #JM_Exc_CurrentException=exc
     #fz_throw(context, FZ_ERROR_GENERIC, msg)
     raise Exception( msg)
 
+
 def ASSERT_PDF( cond):
     if not cond:
         raise RuntimeError( MSG_IS_NO_PDF)
 
+
 def ENSURE_OPERATION( pdf):
     if not JM_have_operation( pdf):
         raise RuntimeError( "No journalling operation started")
-
 
 
 def PyUnicode_DecodeRawUnicodeEscape(s, errors='strict'):
@@ -16842,6 +16873,7 @@ def PyUnicode_DecodeRawUnicodeEscape(s, errors='strict'):
     if z >= 0:
         ret = ret[:z]
     return ret
+
 
 def CheckColor(c: OptSeq):
     if c:
@@ -17232,8 +17264,6 @@ def css_for_pymupdf_font(
     return CSS
 
 
-
-
 def get_text_length(text: str, fontname: str ="helv", fontsize: float =11, encoding: int =0) -> float:
     """Calculate length of a string for a built-in font.
 
@@ -17434,6 +17464,7 @@ def jm_bbox_stroke_path( dev, ctx, path, stroke, ctm, colorspace, color, alpha, 
     except Exception:
         if g_exceptions_verbose:    exception_info()
         raise
+
 
 def jm_checkquad(dev):
     '''
@@ -17698,10 +17729,12 @@ def jm_lineart_color(colorspace, color):
         return rgb[:3]
     return ()
 
+
 def jm_lineart_drop_device(dev, ctx):
     if isinstance(dev.out, list):
         dev.out = []
     dev.scissors = []
+ 
  
 def jm_lineart_fill_path( dev, ctx, path, even_odd, ctm, colorspace, color, alpha, color_params):
     #log(f'{getattr(dev, "pathdict", None)=}')
@@ -17998,8 +18031,10 @@ def jm_lineart_pop_clip(dev, ctx):
 def jm_lineart_begin_layer(dev, ctx, name):
    dev.layer_name = name
 
+
 def jm_lineart_end_layer(dev, ctx):
    dev.layer_name = None
+
 
 def jm_lineart_begin_group(dev, ctx, bbox, cs, isolated, knockout, blendmode, alpha):
     #log(f'{dev.pathdict=} {dev.clips=}')
@@ -18018,6 +18053,7 @@ def jm_lineart_begin_group(dev, ctx, bbox, cs, isolated, knockout, blendmode, al
             }
     jm_append_merge(dev)
     dev.depth += 1
+
 
 def jm_lineart_end_group(dev, ctx):
     #log(f'{dev.pathdict=} {dev.clips=}')
@@ -18073,6 +18109,7 @@ class JM_image_reporter_Filter(mupdf.PdfFilterOptions2):
             # resulting in obscure 'python exception' exception.
             return 0
 
+
 class JM_new_bbox_device_Device(mupdf.FzDevice2):
     def __init__(self, result, layers):
         super().__init__()
@@ -18126,6 +18163,7 @@ class JM_new_output_fileptr_Output(mupdf.FzOutput2):
         data = mupdf.raw_to_python_bytes(data_raw, data_length)
         return self.bio.write(data)
 
+
 def compute_scissor(dev):
     '''
     Every scissor of a clip is a sub rectangle of the preceeding clip scissor
@@ -18142,6 +18180,7 @@ def compute_scissor(dev):
         scissor = dev.pathrect
     dev.scissors.append(JM_py_from_rect(scissor))
     return scissor
+
 
 class JM_new_lineart_device_Device(mupdf.FzDevice2):
     '''
@@ -18217,8 +18256,6 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
     begin_layer         = jm_lineart_begin_layer
     end_layer           = jm_lineart_end_layer
     
-
-
 
 class JM_new_texttrace_device(mupdf.FzDevice2):
     '''
@@ -19072,6 +19109,7 @@ class ElementPosition(object):
     def __init__(self):
         pass
 
+
 def make_story_elpos():
     return ElementPosition()
 
@@ -19309,6 +19347,7 @@ def util_make_rect( *args):
         return args[0], args[1], args[2], args[3]
     raise Exception( f'Unrecognised args: {args}')
 
+
 def util_make_irect( *args):
     a, b, c, d = util_make_rect( *args)
     def convert(x):
@@ -19321,13 +19360,16 @@ def util_make_irect( *args):
     d = convert(d)
     return a, b, c, d
 
+
 def util_round_rect( rect):
     return JM_py_from_irect(mupdf.fz_round_rect(JM_rect_from_py(rect)))
+
 
 def util_transform_rect( rect, matrix):
     if g_use_extra:
         return extra.util_transform_rect( rect, matrix)
     return JM_py_from_rect(mupdf.fz_transform_rect(JM_rect_from_py(rect), JM_matrix_from_py(matrix)))
+
 
 def util_intersect_rect( r1, r2):
     return JM_py_from_rect(
@@ -19336,6 +19378,7 @@ def util_intersect_rect( r1, r2):
                 JM_rect_from_py(r2),
                 )
             )
+
 
 def util_is_point_in_rect( p, r):
     return mupdf.fz_is_point_inside_rect(
@@ -19351,10 +19394,12 @@ def util_include_point_in_rect( r, p):
                 )
             )
 
+
 def util_point_in_quad( P, Q):
     p = JM_point_from_py(P)
     q = JM_quad_from_py(Q)
     return mupdf.fz_is_point_inside_quad(p, q)
+
 
 def util_transform_point( point, matrix):
     return JM_py_from_point(
@@ -19364,6 +19409,7 @@ def util_transform_point( point, matrix):
                 )
             )
 
+
 def util_union_rect( r1, r2):
     return JM_py_from_rect(
             mupdf.fz_union_rect(
@@ -19372,6 +19418,7 @@ def util_union_rect( r1, r2):
                 )
             )
 
+
 def util_concat_matrix( m1, m2):
     return JM_py_from_matrix(
             mupdf.fz_concat(
@@ -19379,6 +19426,7 @@ def util_concat_matrix( m1, m2):
                 JM_matrix_from_py(m2),
                 )
             )
+
 
 def util_invert_matrix(matrix):
     if 0:
@@ -19440,6 +19488,7 @@ def util_measure_string( text, fontname, fontsize, encoding):
     ret = w * fontsize
     return ret
 
+
 def util_sine_between(C, P, Q):
     # for points C, P, Q compute the sine between lines CP and QP
     c = JM_point_from_py(C)
@@ -19452,6 +19501,7 @@ def util_sine_between(C, P, Q):
     c = mupdf.fz_transform_point(c, m1)
     c = mupdf.fz_normalize_vector(c)
     return c.y
+
 
 def util_hor_matrix(C, P):
     '''
@@ -19593,6 +19643,7 @@ def page_merge(doc_des, doc_src, page_from, page_to, rotate, links, copy_annots,
 
     # Insert new page at specified location
     mupdf.pdf_insert_page( doc_des, page_to, ref)
+
 
 def paper_rect(s: str) -> Rect:
     """Return a Rect for the paper size indicated in string 's'. Must conform to the argument of method 'PaperSize', which will be invoked.
@@ -19848,6 +19899,7 @@ def repair_mono_font(page: "Page", font: "Font") -> None:
         if not TOOLS.set_font_width(doc, xref, width):
             log("Cannot set width for '%s' in xref %i" % (font.name, xref))
 
+
 def retainpage(doc, parent, kids, page):
     '''
     Recreate page tree to only retain specified pages.
@@ -20087,7 +20139,6 @@ def vdist(dir, a, b):
     dx = b.x - a.x
     dy = b.y - a.y
     return mupdf.fz_abs(dx * dir.y + dy * dir.x)
-
 
 
 class TOOLS:
@@ -20657,7 +20708,6 @@ class TOOLS:
             g_skip_quad_corrections = bool(on)
         return g_skip_quad_corrections
 
-
     # fixme: also defined at top-level.
     JM_annot_id_stem = 'fitz'
 
@@ -20689,22 +20739,26 @@ class TOOLS:
                 }
     """PyMuPDF configuration parameters."""
 
+
 # We cannot import utils earlier because it imports this fitz.py file itself
 # and uses some fitz.* types in function typing.
 #
 from . import utils
 
+
 pdfcolor = dict(
-    [
-        (k, (r / 255, g / 255, b / 255))
-        for k, (r, g, b) in utils.getColorInfoDict().items()
-    ]
-)
+        [
+            (k, (r / 255, g / 255, b / 255))
+            for k, (r, g, b) in utils.getColorInfoDict().items()
+        ]
+        )
+
 
 # Callbacks not yet supported with cppyy.
 if not mupdf_cppyy:
     mupdf.fz_set_warning_callback(JM_mupdf_warning)
     mupdf.fz_set_error_callback(JM_mupdf_error)
+
 
 # If there are pending warnings when we exit, we end up in this sequence:
 #
@@ -20730,6 +20784,7 @@ def _atexit():
     mupdf.fz_set_error_callback(None)
     #log( '_atexit() returning')
 atexit.register( _atexit)
+
 
 # Use utils.*() fns for some class methods.
 #
@@ -20809,8 +20864,10 @@ Rect.get_area               = utils.get_area
 
 TextWriter.fill_textbox     = utils.fill_textbox
 
+
 class FitzDeprecation(DeprecationWarning):
     pass
+
 
 VersionFitz = "1.22.0" # MuPDF version.
 VersionBind = "1.22.0" # PyMuPDF version.
@@ -20818,6 +20875,7 @@ VersionDate = "2022-02-01 00:00:01"
 version = (VersionBind, VersionFitz, "20220201000001")
 VersionDate2 = VersionDate.replace('-', '').replace(' ', '').replace(':', '')
 version = (VersionBind, VersionFitz, VersionDate2)
+
 
 def restore_aliases():
     warnings.filterwarnings( "once", category=FitzDeprecation)
