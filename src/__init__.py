@@ -560,6 +560,23 @@ class Annot:
             oc = mupdf.pdf_to_num(obj)
         return oc
 
+    # PyMuPDF doesn't seem to have this .parent member, but removing it breaks
+    # 11 tests...?
+    #@property
+    def get_parent(self):
+        try:
+            ret = getattr( self, 'parent')
+        except AttributeError:
+            page = self.this.pdf_annot_page()
+            assert isinstance( page, mupdf.PdfPage)
+            document = Document( page.doc()) if page.m_internal else None
+            ret = Page(page, document)
+            #self.parent = weakref.proxy( ret)
+            self.parent = ret
+            print(f'No attribute .parent: type(self)={type(self)} id(self)={id(self)}: have set id(self.parent)={id(self.parent)}.')
+            #print( f'Have set self.parent')
+        return ret
+
     def get_pixmap(self, matrix=None, dpi=None, colorspace=None, alpha=0):
         """annotation Pixmap"""
 
@@ -738,23 +755,6 @@ class Annot:
         if ca.pdf_is_number():
             opy = ca.pdf_to_real()
         return opy
-
-    # PyMuPDF doesn't seem to have this .parent member, but removing it breaks
-    # 11 tests...?
-    #@property
-    def get_parent(self):
-        try:
-            ret = getattr( self, 'parent')
-        except AttributeError:
-            page = self.this.pdf_annot_page()
-            assert isinstance( page, mupdf.PdfPage)
-            document = Document( page.doc()) if page.m_internal else None
-            ret = Page(page, document)
-            #self.parent = weakref.proxy( ret)
-            self.parent = ret
-            print(f'No attribute .parent: type(self)={type(self)} id(self)={id(self)}: have set id(self.parent)={id(self.parent)}.')
-            #print( f'Have set self.parent')
-        return ret
 
     @property
     def popup_rect(self):
@@ -1083,13 +1083,6 @@ class Annot:
         it = o.pdf_to_name()
         return (type_, c, it)
 
-    @staticmethod
-    def update_timing_test():
-        total = 0
-        for i in range( 30*1000):
-            total += i
-        return total
-    
     def update(self,
             blend_mode: OptStr =None,
             opacity: OptFloat =None,
@@ -1417,6 +1410,13 @@ class Annot:
             mupdf.pdf_dict_put_text_string(stream, PDF_NAME('Desc'), desc)
             mupdf.pdf_dict_put_text_string(fs, PDF_NAME('Desc'), desc)
 
+    @staticmethod
+    def update_timing_test():
+        total = 0
+        for i in range( 30*1000):
+            total += i
+        return total
+    
     @property
     def vertices(self):
         """annotation vertex points"""
@@ -1476,6 +1476,7 @@ class Annot:
         annot = self.this
         return mupdf.pdf_to_num(annot.pdf_annot_obj())
 
+
 class Archive:
     def __init__( self, *args):
         '''
@@ -1490,19 +1491,27 @@ class Archive:
         if args:
             self.add( *args)
     
-    def has_entry( self, name):
-        return mupdf.fz_has_archive_entry( self.this, name)
-    
-    def read_entry( self, name):
-        buff = mupdf.fz_read_archive_entry( arch, name)
-        return JM_BinFromBuffer( buff)
+    def __repr__( self):
+        return f'Archive, sub-archives: {len(self._subarchives)}'
+
+
+    def _add_arch( subarch, path=None):
+        mupdf.fz_mount_multi_archive( self.this, sub, path)
     
     def _add_dir( self, folder, path=None):
         sub = mupdf.fz_open_directory( folder)
         mupdf.fz_mount_multi_archive( self.this, sub, path)
     
-    def _add_arch( subarch, path=None):
-        mupdf.fz_mount_multi_archive( self.this, sub, path)
+    def _add_treeitem( self, memory, name, path=None):
+            drop_sub = False
+            buff = JM_BufferFromBytes( memory)
+            sub = JM_last_tree( self.this, path)
+            if not sub:
+                sub = mupdf.fz_new_tree_archive( None)
+                drop_sub = True
+            mupdf.fz_tree_archive_add_buffer( sub, name, buff)
+            if drop_sub:
+                mupdf.fz_mount_multi_archive( self.this, sub, path)
     
     def _add_ziptarfile( self, filepath, type_, path=None):
         if type_ == 1:
@@ -1519,17 +1528,6 @@ class Archive:
         else:
             sub = mupdf.fz_open_tar_archive_with_stream( stream)
         mupdf.fz_mount_multi_archive( self.this, sub, path)
-    
-    def _add_treeitem( self, memory, name, path=None):
-            drop_sub = False
-            buff = JM_BufferFromBytes( memory)
-            sub = JM_last_tree( self.this, path)
-            if not sub:
-                sub = mupdf.fz_new_tree_archive( None)
-                drop_sub = True
-            mupdf.fz_tree_archive_add_buffer( sub, name, buff)
-            if drop_sub:
-                mupdf.fz_mount_multi_archive( self.this, sub, path)
     
     def add( self, content, path=None):
         '''
@@ -1664,11 +1662,21 @@ class Archive:
         '''
         return self._subarchives
     
-    def __repr__( self):
-        return f'Archive, sub-archives: {len(self._subarchives)}'
-
-
+    def has_entry( self, name):
+        return mupdf.fz_has_archive_entry( self.this, name)
+    
+    def read_entry( self, name):
+        buff = mupdf.fz_read_archive_entry( arch, name)
+        return JM_BinFromBuffer( buff)
+    
 class Xml:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        pass
+            
+
     def __init__( self, rhs):
         if isinstance( rhs, mupdf.FzXml):
             self.this = rhs
@@ -1677,107 +1685,6 @@ class Xml:
             self.this = mupdf.fz_parse_xml_from_html5( buff)
         else:
             assert 0, f'Unsupported type for rhs: {type(rhs)}'
-    
-    @property
-    def root( self):
-        return Xml( mupdf.fz_xml_root( self.this))
-    
-    def bodytag( self):
-        return Xml( mupdf.fz_dom_body( self.this))
-    
-    def append_child( self, child):
-        mupdf.fz_dom_append_child( self.this, child.this)
-    
-    def create_text_node( self, text):
-        return Xml( mupdf.fz_dom_create_text_node( self.this, text))
-    
-    def create_element( self, tag):
-        return Xml( mupdf.fz_dom_create_element( self.this, tag))
-    
-    def find( self, tag, att, match):
-        ret = mupdf.fz_dom_find( self.this, tag, att, match)
-        if ret.m_internal:
-            return Xml( ret)
-    
-    def find_next( self, tag, att, match):
-        ret = mupdf.fz_dom_find_next( self.this, tag, att, match)
-        if ret.m_internal:
-            return Xml( ret)
-    
-    @property
-    def next( self):
-        ret = mupdf.fz_dom_next( self.this)
-        if ret.m_internal:
-            return Xml( ret)
-            
-    @property
-    def previous( self):
-        ret = mupdf.fz_dom_previous( self.this)
-        if ret.m_internal:
-            return Xml( ret)
-    
-    def set_attribute( self, key, value):
-        assert key
-        mupdf.fz_dom_add_attribute( self.this, key, value)
-    
-    def remove_attribute( self, key):
-        assert key
-        mupdf.fz_dom_remove_attribute( self.this, key)
-    
-    def get_attribute_value( self, key):
-        assert key
-        return mupdf.fz_dom_attribute( self.this, key)
-    
-    def get_attributes( self):
-        if mupdf.fz_xml_text( self.this):
-            # text node, has no attributes.
-            return
-        
-        result = dict()
-        i = 0
-        while 1:
-            val, key = mupdf.fz_dom_get_attribute( self.this, i)
-            if not val or not key:
-                break
-            ret[ key] = val
-            i += 1
-        return result
-    
-    def insert_before( self, node):
-        mupdf.fz_dom_insert_before( self.this, node.this)
-    
-    def insert_after( self, node):
-        mupdf.fz_dom_insert_after( self.this, node.this)
-    
-    def clone( self):
-        ret = mupdf.fz_dom_clone( self.this)
-        return Xml( ret)
-    
-    @property
-    def parent( self):
-        ret = mupdf.fz_dom_parent( self.this)
-        if ret.m_internal:
-            return Xml( ret)
-    
-    @property
-    def first_child( self):
-        if mupdf.fz_xml_text( self.this):
-            # text node, has no child.
-            return
-        ret = mupdf.fz_dom_first_child( self)
-        if ret.m_internal:
-            return Xml( ret)
-    
-    def remove( self):
-        mupdf.fz_dom_remove( self.this)
-    
-    @property
-    def text( self):
-        return mupdf.fz_xml_text( self.this)
-    
-    @property
-    def tagname( self):
-        return mupdf.fz_xml_tag( self.this)
     
     def _get_node_tree( self):
         def show_node(node, items, shift):
@@ -1801,52 +1708,71 @@ class Xml:
         items = show_node(self, items, shift)
         return items
     
-    def debug(self):
-        """Print a list of the node tree below self."""
-        items = self._get_node_tree()
-        for item in items:
-            print("  " * item[0] + item[1].replace("\n", "\\n"))
+    def add_bullet_list(self):
+        """Add bulleted list ("ul" tag)"""
+        child = self.create_element("ul")
+        self.append_child(child)
+        return child
 
-    @property
-    def is_text(self):
-        """Check if this is a text node."""
-        return self.text != None
+    def add_class(self, text):
+        """Set some class via CSS. Replaces complete class spec."""
+        cls = self.get_attribute_value("class")
+        if cls != None and text in cls:
+            return self
+        self.remove_attribute("class")
+        if cls == None:
+            cls = text
+        else:
+            cls += " " + text
+        self.set_attribute("class", cls)
+        return self
 
-    @property
-    def last_child(self):
-        """Return last child node."""
-        child = self.first_child
-        if child==None:
-            return None
-        while True:
-            next = child.next
-            if not next:
-                return child
-            child = next
+    def add_code(self, text=None):
+        """Add a "code" tag"""
+        child = self.create_element("code")
+        if type(text) is str:
+           child.append_child(self.create_text_node(text)) 
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(child)
+        return self
 
-    @staticmethod
-    def color_text(color):
-        if type(color) is str:
-            return color
-        if type(color) is int:
-            return f"rgb({sRGB_to_rgb(color)})"
-        if type(color) in (tuple, list):
-            return f"rgb{tuple(color)}"
-        return color
-
-    def add_number_list(self, start=1, numtype=None):
-        """Add numbered list ("ol" tag)"""
-        child = self.create_element("ol")
-        if start > 1:
-            child.set_attribute("start", str(start))
-        if numtype != None:
-            child.set_attribute("type", numtype)
+    def add_codeblock(self):
+        """Add monospaced lines ("pre" node)"""
+        child = self.create_element("pre")
         self.append_child(child)
         return child
 
     def add_description_list(self):
         """Add description list ("dl" tag)"""
         child = self.create_element("dl")
+        self.append_child(child)
+        return child
+
+    def add_division(self):
+        """Add "div" tag"""
+        child = self.create_element("div")
+        self.append_child(child)
+        return child
+
+    def add_header(self, level=1):
+        """Add header tag"""
+        if level not in range(1, 7):
+            raise ValueError("Header level must be in [1, 6]")
+        this_tag = self.tagname
+        new_tag = f"h{level}"
+        child = self.create_element(new_tag)
+        prev = self
+        if this_tag not in ("h1", "h2", "h3", "h4", "h5", "h6", "p"):
+            self.append_child(child)
+            return child
+        self.parent.append_child(child)
+        return child
+
+    def add_horizontal_line(self):
+        """Add horizontal line ("hr" tag)"""
+        child = self.create_element("hr")
         self.append_child(child)
         return child
 
@@ -1865,60 +1791,6 @@ class Xml:
         self.append_child(child)
         return child
 
-    def add_bullet_list(self):
-        """Add bulleted list ("ul" tag)"""
-        child = self.create_element("ul")
-        self.append_child(child)
-        return child
-
-    def add_list_item(self):
-        """Add item ("li" tag) under a (numbered or bulleted) list."""
-        if self.tagname not in ("ol", "ul"):
-            raise ValueError("cannot add list item to", self.tagname)
-        child = self.create_element("li")
-        self.append_child(child)
-        return child
-
-    def add_span(self):
-        child = self.create_element("span")
-        self.append_child(child)
-        return child
-
-    def add_paragraph(self):
-        """Add "p" tag"""
-        child = self.create_element("p")
-        if self.tagname != "p":
-            self.append_child(child)
-        else:
-            self.parent.append_child(child)
-        return child
-
-    def add_header(self, level=1):
-        """Add header tag"""
-        if level not in range(1, 7):
-            raise ValueError("Header level must be in [1, 6]")
-        this_tag = self.tagname
-        new_tag = f"h{level}"
-        child = self.create_element(new_tag)
-        prev = self
-        if this_tag not in ("h1", "h2", "h3", "h4", "h5", "h6", "p"):
-            self.append_child(child)
-            return child
-        self.parent.append_child(child)
-        return child
-
-    def add_division(self):
-        """Add "div" tag"""
-        child = self.create_element("div")
-        self.append_child(child)
-        return child
-
-    def add_horizontal_line(self):
-        """Add horizontal line ("hr" tag)"""
-        child = self.create_element("hr")
-        self.append_child(child)
-        return child
-
     def add_link(self, href, text=None):
         """Add a hyperlink ("a" tag)"""
         child = self.create_element("a")
@@ -1932,30 +1804,49 @@ class Xml:
         prev.append_child(child)
         return self
 
-    def add_code(self, text=None):
-        """Add a "code" tag"""
-        child = self.create_element("code")
-        if type(text) is str:
-           child.append_child(self.create_text_node(text)) 
-        prev = self.span_bottom()
-        if prev == None:
-            prev = self
-        prev.append_child(child)
-        return self
+    def add_list_item(self):
+        """Add item ("li" tag) under a (numbered or bulleted) list."""
+        if self.tagname not in ("ol", "ul"):
+            raise ValueError("cannot add list item to", self.tagname)
+        child = self.create_element("li")
+        self.append_child(child)
+        return child
 
-    add_var = add_code
-    add_samp = add_code
-    add_kbd = add_code
+    def add_number_list(self, start=1, numtype=None):
+        """Add numbered list ("ol" tag)"""
+        child = self.create_element("ol")
+        if start > 1:
+            child.set_attribute("start", str(start))
+        if numtype != None:
+            child.set_attribute("type", numtype)
+        self.append_child(child)
+        return child
 
-    def add_superscript(self, text=None):
-        """Add a superscript ("sup" tag)"""
-        child = self.create_element("sup")
-        if type(text) is str:
-           child.append_child(self.create_text_node(text)) 
-        prev = self.span_bottom()
-        if prev == None:
-            prev = self
-        prev.append_child(child)
+    def add_paragraph(self):
+        """Add "p" tag"""
+        child = self.create_element("p")
+        if self.tagname != "p":
+            self.append_child(child)
+        else:
+            self.parent.append_child(child)
+        return child
+
+    def add_span(self):
+        child = self.create_element("span")
+        self.append_child(child)
+        return child
+
+    def add_style(self, text):
+        """Set some style via CSS style. Replaces complete style spec."""
+        style = self.get_attribute_value("style")
+        if style != None and text in style:
+            return self
+        self.remove_attribute("style")
+        if style == None:
+            style = text
+        else:
+            style += ";" + text
+        self.set_attribute("style", style)
         return self
 
     def add_subscript(self, text=None):
@@ -1969,38 +1860,34 @@ class Xml:
         prev.append_child(child)
         return self
 
-    def add_codeblock(self):
-        """Add monospaced lines ("pre" node)"""
-        child = self.create_element("pre")
-        self.append_child(child)
-        return child
+    def add_superscript(self, text=None):
+        """Add a superscript ("sup" tag)"""
+        child = self.create_element("sup")
+        if type(text) is str:
+           child.append_child(self.create_text_node(text)) 
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
+        prev.append_child(child)
+        return self
 
-    def span_bottom(self):
-        """Find deepest level in stacked spans."""
-        sys.stdout = sys.stderr
-        parent = self
-        child = self.last_child
-        if child == None:
-            return None
-        while child.is_text:
-            child = child.previous
-            if child == None:
-                break
-        if child == None or child.tagname != "span":
-            return None
+    def add_text(self, text):
+        """Add text. Line breaks are honored."""
+        lines = text.splitlines()
+        line_count = len(lines)
+        prev = self.span_bottom()
+        if prev == None:
+            prev = self
 
-        while True:
-            if child == None:
-                return parent
-            if child.tagname in ("a", "sub","sup","body") or child.is_text:
-                child = child.next
-                continue
-            if child.tagname == "span":
-                parent = child
-                child = child.first_child
-            else:
-                return parent
+        for i, line in enumerate(lines):
+            prev.append_child(self.create_text_node(line))
+            if i < line_count - 1:
+                prev.append_child(self.create_element("br"))
+        return self
 
+    def append_child( self, child):
+        mupdf.fz_dom_append_child( self.this, child.this)
+    
     def append_styled_span(self, style):
         span = self.create_element("span")
         span.add_style(style)
@@ -2010,42 +1897,134 @@ class Xml:
         prev.append_child(span)
         return prev
 
-    def set_margins(self, val):
-        """Set margin values via CSS style"""
-        text = "margins: %s" % val
-        self.append_styled_span(text)
+    def bodytag( self):
+        return Xml( mupdf.fz_dom_body( self.this))
+    
+    def clone( self):
+        ret = mupdf.fz_dom_clone( self.this)
+        return Xml( ret)
+    
+    @staticmethod
+    def color_text(color):
+        if type(color) is str:
+            return color
+        if type(color) is int:
+            return f"rgb({sRGB_to_rgb(color)})"
+        if type(color) in (tuple, list):
+            return f"rgb{tuple(color)}"
+        return color
+
+    def create_element( self, tag):
+        return Xml( mupdf.fz_dom_create_element( self.this, tag))
+    
+    def create_text_node( self, text):
+        return Xml( mupdf.fz_dom_create_text_node( self.this, text))
+    
+    def debug(self):
+        """Print a list of the node tree below self."""
+        items = self._get_node_tree()
+        for item in items:
+            print("  " * item[0] + item[1].replace("\n", "\\n"))
+
+    def find( self, tag, att, match):
+        ret = mupdf.fz_dom_find( self.this, tag, att, match)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    def find_next( self, tag, att, match):
+        ret = mupdf.fz_dom_find_next( self.this, tag, att, match)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    @property
+    def first_child( self):
+        if mupdf.fz_xml_text( self.this):
+            # text node, has no child.
+            return
+        ret = mupdf.fz_dom_first_child( self)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    def get_attribute_value( self, key):
+        assert key
+        return mupdf.fz_dom_attribute( self.this, key)
+    
+    def get_attributes( self):
+        if mupdf.fz_xml_text( self.this):
+            # text node, has no attributes.
+            return
+        
+        result = dict()
+        i = 0
+        while 1:
+            val, key = mupdf.fz_dom_get_attribute( self.this, i)
+            if not val or not key:
+                break
+            ret[ key] = val
+            i += 1
+        return result
+    
+    def insert_after( self, node):
+        mupdf.fz_dom_insert_after( self.this, node.this)
+    
+    def insert_before( self, node):
+        mupdf.fz_dom_insert_before( self.this, node.this)
+    
+    def insert_text(self, text):
+        lines = text.splitlines()
+        line_count = len(lines)
+        for i, line in enumerate(lines):
+            self.append_child(self.create_text_node(line))
+            if i < line_count - 1:
+                self.append_child(self.create_element("br"))
         return self
 
-    def set_font(self, font):
-        """Set font-family name via CSS style"""
-        text = "font-family: %s" % font
-        self.append_styled_span(text)
-        return self
+    @property
+    def is_text(self):
+        """Check if this is a text node."""
+        return self.text != None
 
-    def set_color(self, color):
-        """Set text color via CSS style"""
-        text = f"color: %s" % self.color_text(color)
-        self.append_styled_span(text)
-        return self
+    @property
+    def last_child(self):
+        """Return last child node."""
+        child = self.first_child
+        if child==None:
+            return None
+        while True:
+            next = child.next
+            if not next:
+                return child
+            child = next
 
-    def set_columns(self, cols):
-        """Set number of text columns via CSS style"""
-        text = f"columns: {cols}"
-        self.append_styled_span(text)
-        return self
-
-    def set_bgcolor(self, color):
-        """Set background color via CSS style"""
-        text = f"background-color: %s" % self.color_text(color)
-        self.add_style(text)  # does not work on span level
-        return self
-
-    def set_opacity(self, opacity):
-        """Set opacity via CSS style"""
-        text = f"opacity: {opacity}"
-        self.append_styled_span(text)
-        return self
-
+    @property
+    def next( self):
+        ret = mupdf.fz_dom_next( self.this)
+        if ret.m_internal:
+            return Xml( ret)
+            
+    @property
+    def parent( self):
+        ret = mupdf.fz_dom_parent( self.this)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    @property
+    def previous( self):
+        ret = mupdf.fz_dom_previous( self.this)
+        if ret.m_internal:
+            return Xml( ret)
+    
+    def remove( self):
+        mupdf.fz_dom_remove( self.this)
+    
+    def remove_attribute( self, key):
+        assert key
+        mupdf.fz_dom_remove_attribute( self.this, key)
+    
+    @property
+    def root( self):
+        return Xml( mupdf.fz_xml_root( self.this))
+    
     def set_align(self, align):
         """Set text alignment via CSS style"""
         text = "text-align: %s"
@@ -2065,61 +2044,14 @@ class Xml:
         self.add_style(text)
         return self
 
-    def set_underline(self, val="underline"):
-        text = "text-decoration: %s" % val
-        self.append_styled_span(text)
-        return self
-
-    def set_pagebreak_before(self):
-        """Insert a page break before this node."""
-        text = "page-break-before: always"
-        self.add_style(text)
-        return self
-
-    def set_pagebreak_after(self):
-        """Insert a page break after this node."""
-        text = "page-break-after: always"
-        self.add_style(text)
-        return self
-
-    def set_fontsize(self, fontsize):
-        """Set font size name via CSS style"""
-        if type(fontsize) is str:
-            px=""
-        else:
-            px="px"
-        text = f"font-size: {fontsize}{px}"
-        self.append_styled_span(text)
-        return self
-
-    def set_lineheight(self, lineheight):
-        """Set line height name via CSS style - block-level only."""
-        text = f"line-height: {lineheight}"
-        self.add_style(text)
-        return self
-
-    def set_leading(self, leading):
-        """Set inter-line spacing value via CSS style - block-level only."""
-        text = f"-mupdf-leading: {leading}"
-        self.add_style(text)
-        return self
-
-    def set_word_spacing(self, spacing):
-        """Set inter-word spacing value via CSS style"""
-        text = f"word-spacing: {spacing}"
-        self.append_styled_span(text)
-        return self
-
-    def set_letter_spacing(self, spacing):
-        """Set inter-letter spacing value via CSS style"""
-        text = f"letter-spacing: {spacing}"
-        self.append_styled_span(text)
-        return self
-
-    def set_text_indent(self, indent):
-        """Set text indentation name via CSS style - block-level only."""
-        text = f"text-indent: {indent}"
-        self.add_style(text)
+    def set_attribute( self, key, value):
+        assert key
+        mupdf.fz_dom_add_attribute( self.this, key, value)
+    
+    def set_bgcolor(self, color):
+        """Set background color via CSS style"""
+        text = f"background-color: %s" % self.color_text(color)
+        self.add_style(text)  # does not work on span level
         return self
 
     def set_bold(self, val=True):
@@ -2132,6 +2064,44 @@ class Xml:
         self.append_styled_span(text)
         return self
 
+    def set_color(self, color):
+        """Set text color via CSS style"""
+        text = f"color: %s" % self.color_text(color)
+        self.append_styled_span(text)
+        return self
+
+    def set_columns(self, cols):
+        """Set number of text columns via CSS style"""
+        text = f"columns: {cols}"
+        self.append_styled_span(text)
+        return self
+
+    def set_font(self, font):
+        """Set font-family name via CSS style"""
+        text = "font-family: %s" % font
+        self.append_styled_span(text)
+        return self
+
+    def set_fontsize(self, fontsize):
+        """Set font size name via CSS style"""
+        if type(fontsize) is str:
+            px=""
+        else:
+            px="px"
+        text = f"font-size: {fontsize}{px}"
+        self.append_styled_span(text)
+        return self
+
+    def set_id(self, unique):
+        """Set a unique id."""
+        # check uniqueness
+        tagname = self.tagname
+        root = self.root
+        if root.find(None, "id", unique):
+            raise ValueError(f"id '{unique}' already exists")
+        self.set_attribute("id", unique)
+        return self
+
     def set_italic(self, val=True):
         """Set italic on / off via CSS style"""
         if val:
@@ -2140,6 +2110,48 @@ class Xml:
             val="normal"
         text = "font-style: %s" % val
         self.append_styled_span(text)
+        return self
+
+    def set_leading(self, leading):
+        """Set inter-line spacing value via CSS style - block-level only."""
+        text = f"-mupdf-leading: {leading}"
+        self.add_style(text)
+        return self
+
+    def set_letter_spacing(self, spacing):
+        """Set inter-letter spacing value via CSS style"""
+        text = f"letter-spacing: {spacing}"
+        self.append_styled_span(text)
+        return self
+
+    def set_lineheight(self, lineheight):
+        """Set line height name via CSS style - block-level only."""
+        text = f"line-height: {lineheight}"
+        self.add_style(text)
+        return self
+
+    def set_margins(self, val):
+        """Set margin values via CSS style"""
+        text = "margins: %s" % val
+        self.append_styled_span(text)
+        return self
+
+    def set_opacity(self, opacity):
+        """Set opacity via CSS style"""
+        text = f"opacity: {opacity}"
+        self.append_styled_span(text)
+        return self
+
+    def set_pagebreak_after(self):
+        """Insert a page break after this node."""
+        text = "page-break-after: always"
+        self.add_style(text)
+        return self
+
+    def set_pagebreak_before(self):
+        """Insert a page break before this node."""
+        text = "page-break-before: always"
+        self.add_style(text)
         return self
 
     def set_properties(
@@ -2162,7 +2174,7 @@ class Xml:
         word_spacing=None,
         unqid=None,
         cls=None,
-    ):
+        ):
         """Set any or all properties of a node.
 
         To be used for existing nodes preferrably.
@@ -2218,71 +2230,60 @@ class Xml:
         temp.remove()
         return self
 
-    def set_id(self, unique):
-        """Set a unique id."""
-        # check uniqueness
-        tagname = self.tagname
-        root = self.root
-        if root.find(None, "id", unique):
-            raise ValueError(f"id '{unique}' already exists")
-        self.set_attribute("id", unique)
+    def set_text_indent(self, indent):
+        """Set text indentation name via CSS style - block-level only."""
+        text = f"text-indent: {indent}"
+        self.add_style(text)
         return self
 
-    def add_text(self, text):
-        """Add text. Line breaks are honored."""
-        lines = text.splitlines()
-        line_count = len(lines)
-        prev = self.span_bottom()
-        if prev == None:
-            prev = self
-
-        for i, line in enumerate(lines):
-            prev.append_child(self.create_text_node(line))
-            if i < line_count - 1:
-                prev.append_child(self.create_element("br"))
+    def set_underline(self, val="underline"):
+        text = "text-decoration: %s" % val
+        self.append_styled_span(text)
         return self
 
-    def add_style(self, text):
-        """Set some style via CSS style. Replaces complete style spec."""
-        style = self.get_attribute_value("style")
-        if style != None and text in style:
-            return self
-        self.remove_attribute("style")
-        if style == None:
-            style = text
-        else:
-            style += ";" + text
-        self.set_attribute("style", style)
+    def set_word_spacing(self, spacing):
+        """Set inter-word spacing value via CSS style"""
+        text = f"word-spacing: {spacing}"
+        self.append_styled_span(text)
         return self
 
-    def add_class(self, text):
-        """Set some class via CSS. Replaces complete class spec."""
-        cls = self.get_attribute_value("class")
-        if cls != None and text in cls:
-            return self
-        self.remove_attribute("class")
-        if cls == None:
-            cls = text
-        else:
-            cls += " " + text
-        self.set_attribute("class", cls)
-        return self
+    def span_bottom(self):
+        """Find deepest level in stacked spans."""
+        sys.stdout = sys.stderr
+        parent = self
+        child = self.last_child
+        if child == None:
+            return None
+        while child.is_text:
+            child = child.previous
+            if child == None:
+                break
+        if child == None or child.tagname != "span":
+            return None
 
-    def insert_text(self, text):
-        lines = text.splitlines()
-        line_count = len(lines)
-        for i, line in enumerate(lines):
-            self.append_child(self.create_text_node(line))
-            if i < line_count - 1:
-                self.append_child(self.create_element("br"))
-        return self
+        while True:
+            if child == None:
+                return parent
+            if child.tagname in ("a", "sub","sup","body") or child.is_text:
+                child = child.next
+                continue
+            if child.tagname == "span":
+                parent = child
+                child = child.first_child
+            else:
+                return parent
 
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        pass
-            
+    @property
+    def tagname( self):
+        return mupdf.fz_xml_tag( self.this)
+    
+    @property
+    def text( self):
+        return mupdf.fz_xml_text( self.this)
+    
+    add_var = add_code
+    add_samp = add_code
+    add_kbd = add_code
 
 class Colorspace:
     def __init__(self, type_):
@@ -2338,7 +2339,6 @@ class DeviceWrapper:
 
 
 class DisplayList:
-
     def __del__(self):
         if not type(self) is DisplayList: return
         self.thisown = False
@@ -2380,14 +2380,12 @@ class DisplayList:
                 mupdf.FzCookie(),
                 )
 
+
 mupdf_FzDocument = mupdf.FzDocument
 if g_use_extra:
     extra_FzDocument_insert_pdf = extra.FzDocument_insert_pdf
 
 class Document:
-    
-    __slots__ = ('this', 'page_count2', 'this_is_pdf', '__dict__')
-    
     def __contains__(self, loc) -> bool:
         page_count = self.this.fz_count_pages()
         if type(loc) is int:
@@ -2646,22 +2644,6 @@ class Document:
         mupdf.pdf_dict_put( fonts, k, v)
         
 
-    def _deleteObject(self, xref):
-        """Delete object."""
-        if self.is_closed:
-            raise ValueError("document closed")
-        pdf = _as_pdf_document(self)
-        ASSERT_PDF(pdf)
-        if not _INRANGE(xref, 1, mupdf.pdf_xref_len(pdf)-1):
-            raise ValueError( MSG_BAD_XREF)
-        mupdf.pdf_delete_object(pdf, xref)
-
-    def _delete_page(self, pno):
-        pdf = _as_pdf_document(self)
-        mupdf.pdf_delete_page( pdf, pno)
-        if pdf.m_internal.rev_page_map:
-            mupdf.ll_pdf_drop_page_tree( pdf.m_internal)
-
     def _delToC(self):
         """Delete the TOC."""
         if self.is_closed or self.isEncrypted:
@@ -2694,6 +2676,22 @@ class Document:
         self.init_doc()
         return val
 
+    def _delete_page(self, pno):
+        pdf = _as_pdf_document(self)
+        mupdf.pdf_delete_page( pdf, pno)
+        if pdf.m_internal.rev_page_map:
+            mupdf.ll_pdf_drop_page_tree( pdf.m_internal)
+
+    def _deleteObject(self, xref):
+        """Delete object."""
+        if self.is_closed:
+            raise ValueError("document closed")
+        pdf = _as_pdf_document(self)
+        ASSERT_PDF(pdf)
+        if not _INRANGE(xref, 1, mupdf.pdf_xref_len(pdf)-1):
+            raise ValueError( MSG_BAD_XREF)
+        mupdf.pdf_delete_object(pdf, xref)
+
     def _embeddedFileGet(self, idx):
         doc = self.this
         pdf = mupdf.pdf_document_from_fz_document(doc)
@@ -2710,6 +2708,21 @@ class Document:
         cont = JM_BinFromBuffer(buf)
         return cont
 
+    def _embeddedFileGet(self, idx):
+        pdf = _as_pdf_document(self)
+        names = mupdf.pdf_dict_getl(
+                mupdf.pdf_trailer(pdf),
+                PDF_NAME('Root'),
+                PDF_NAME('Names'),
+                PDF_NAME('EmbeddedFiles'),
+                PDF_NAME('Names'),
+                )
+        entry = mupdf.pdf_array_get(names, 2*idx+1)
+        filespec = mupdf.pdf_dict_getl(entry, PDF_NAME('EF'), PDF_NAME('F'));
+        buf = mupdf.pdf_load_stream(filespec);
+        cont = JM_BinFromBuffer(buf)
+        return cont
+
     def _embeddedFileIndex(self, item: typing.Union[int, str]) -> int:
         filenames = self.embfile_names()
         msg = "'%s' not in EmbeddedFiles array." % str(item)
@@ -2720,6 +2733,39 @@ class Document:
         else:
             raise ValueError(msg)
         return idx
+
+    def _embfile_add(self, name, buffer_, filename=None, ufilename=None, desc=None):
+        doc = self.this
+        pdf = _as_pdf_document(self)
+        ASSERT_PDF(pdf);
+        data = JM_BufferFromBytes(buffer_)
+        if not data.m_internal:
+            raise TypeError( MSG_BAD_BUFFER)
+
+        names = mupdf.pdf_dict_getl(
+                mupdf.pdf_trailer(pdf),
+                PDF_NAME('Root'),
+                PDF_NAME('Names'),
+                PDF_NAME('EmbeddedFiles'),
+                PDF_NAME('Names'),
+                )
+        if not mupdf.pdf_is_array(names):
+            root = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('Root'))
+            names = mupdf.pdf_new_array(pdf, 6)    # an even number!
+            mupdf.pdf_dict_putl(
+                    root,
+                    names,
+                    PDF_NAME('Names'),
+                    PDF_NAME('EmbeddedFiles'),
+                    PDF_NAME('Names'),
+                    )
+        fileentry = JM_embed_file(pdf, data, filename, ufilename, desc, 1)
+        xref = mupdf.pdf_to_num(
+                mupdf.pdf_dict_getl(fileentry, PDF_NAME('EF'), PDF_NAME('F'))
+                )
+        mupdf.pdf_array_push(names, mupdf.pdf_new_text_string(name))
+        mupdf.pdf_array_push(names, fileentry)
+        return xref
 
     def _embfile_del(self, idx):
         pdf = _as_pdf_document(self)
@@ -2780,6 +2826,30 @@ class Document:
         infodict[dictkey_length] = len_
         return xref
 
+    def _embfile_names(self, namelist):
+        """Get list of embedded file names."""
+        if self.is_closed:
+            raise ValueError("document closed")
+        doc = self.this
+        pdf = _as_pdf_document(self)
+        ASSERT_PDF(pdf);
+        names = mupdf.pdf_dict_getl(
+                mupdf.pdf_trailer(pdf),
+                PDF_NAME('Root'),
+                PDF_NAME('Names'),
+                PDF_NAME('EmbeddedFiles'),
+                PDF_NAME('Names'),
+                )
+        if mupdf.pdf_is_array(names):
+            n = mupdf.pdf_array_len(names)
+            for i in range(0, n, 2):
+                val = JM_EscapeStrFromStr(
+                        mupdf.pdf_to_text_string(
+                            mupdf.pdf_array_get(names, i)
+                            )
+                        )
+                namelist.append(val)
+
     def _embfile_upd(self, idx, buffer_=None, filename=None, ufilename=None, desc=None):
         pdf = _as_pdf_document(self)
         xref = 0
@@ -2815,78 +2885,6 @@ class Document:
         if desc:
             mupdf.pdf_dict_put_text_string(entry, PDF_NAME('Desc'), desc)
         return xref
-
-    def _embeddedFileGet(self, idx):
-        pdf = _as_pdf_document(self)
-        names = mupdf.pdf_dict_getl(
-                mupdf.pdf_trailer(pdf),
-                PDF_NAME('Root'),
-                PDF_NAME('Names'),
-                PDF_NAME('EmbeddedFiles'),
-                PDF_NAME('Names'),
-                )
-        entry = mupdf.pdf_array_get(names, 2*idx+1)
-        filespec = mupdf.pdf_dict_getl(entry, PDF_NAME('EF'), PDF_NAME('F'));
-        buf = mupdf.pdf_load_stream(filespec);
-        cont = JM_BinFromBuffer(buf)
-        return cont
-
-    def _embfile_add(self, name, buffer_, filename=None, ufilename=None, desc=None):
-        doc = self.this
-        pdf = _as_pdf_document(self)
-        ASSERT_PDF(pdf);
-        data = JM_BufferFromBytes(buffer_)
-        if not data.m_internal:
-            raise TypeError( MSG_BAD_BUFFER)
-
-        names = mupdf.pdf_dict_getl(
-                mupdf.pdf_trailer(pdf),
-                PDF_NAME('Root'),
-                PDF_NAME('Names'),
-                PDF_NAME('EmbeddedFiles'),
-                PDF_NAME('Names'),
-                )
-        if not mupdf.pdf_is_array(names):
-            root = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('Root'))
-            names = mupdf.pdf_new_array(pdf, 6)    # an even number!
-            mupdf.pdf_dict_putl(
-                    root,
-                    names,
-                    PDF_NAME('Names'),
-                    PDF_NAME('EmbeddedFiles'),
-                    PDF_NAME('Names'),
-                    )
-        fileentry = JM_embed_file(pdf, data, filename, ufilename, desc, 1)
-        xref = mupdf.pdf_to_num(
-                mupdf.pdf_dict_getl(fileentry, PDF_NAME('EF'), PDF_NAME('F'))
-                )
-        mupdf.pdf_array_push(names, mupdf.pdf_new_text_string(name))
-        mupdf.pdf_array_push(names, fileentry)
-        return xref
-
-    def _embfile_names(self, namelist):
-        """Get list of embedded file names."""
-        if self.is_closed:
-            raise ValueError("document closed")
-        doc = self.this
-        pdf = _as_pdf_document(self)
-        ASSERT_PDF(pdf);
-        names = mupdf.pdf_dict_getl(
-                mupdf.pdf_trailer(pdf),
-                PDF_NAME('Root'),
-                PDF_NAME('Names'),
-                PDF_NAME('EmbeddedFiles'),
-                PDF_NAME('Names'),
-                )
-        if mupdf.pdf_is_array(names):
-            n = mupdf.pdf_array_len(names)
-            for i in range(0, n, 2):
-                val = JM_EscapeStrFromStr(
-                        mupdf.pdf_to_text_string(
-                            mupdf.pdf_array_get(names, i)
-                            )
-                        )
-                namelist.append(val)
 
     def _extend_toc_items(self, items):
         """Add color info to all items of an extended TOC list."""
@@ -3057,6 +3055,24 @@ class Document:
             olroot = mupdf.pdf_dict_get( root, PDF_NAME('Outlines'))
         return mupdf.pdf_to_num( olroot)
 
+    def _getPDFfileid(self):
+        """Get PDF file id."""
+        if self.is_closed:
+            raise ValueError("document closed")
+        pdf = _as_pdf_document(this)
+        if not pdf:
+            return
+        idlist = []
+        identity = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('ID'));
+        if identity.m_internal:
+            n = mupdf.pdf_array_len(identity)
+            for i in range(n):
+                o = mupdf.pdf_array_get(identity, i)
+                text = mupdf.pdf_to_text_string(o)
+                hex_ = binascii.hexlify(text)
+                idlist.append(hex_)
+        return idlist
+
     def _getPageInfo(self, pno, what):
         """List fonts, images, XObjects used on a page."""
         if self.is_closed or self.isEncrypted:
@@ -3076,24 +3092,6 @@ class Document:
         if rsrc.m_internal:
             JM_scan_resources(pdf, rsrc, liste, what, 0, tracer)
         return liste
-
-    def _getPDFfileid(self):
-        """Get PDF file id."""
-        if self.is_closed:
-            raise ValueError("document closed")
-        pdf = _as_pdf_document(this)
-        if not pdf:
-            return
-        idlist = []
-        identity = mupdf.pdf_dict_get(mupdf.pdf_trailer(pdf), PDF_NAME('ID'));
-        if identity.m_internal:
-            n = mupdf.pdf_array_len(identity)
-            for i in range(n):
-                o = mupdf.pdf_array_get(identity, i)
-                text = mupdf.pdf_to_text_string(o)
-                hex_ = binascii.hexlify(text)
-                idlist.append(hex_)
-        return idlist
 
     def _insert_font(self, fontfile=None, fontbuffer=None):
         '''
@@ -3182,6 +3180,31 @@ class Document:
             mupdf.ll_pdf_drop_page_tree( pdf.m_internal)
 
         self._reset_page_refs()
+
+    def _newPage(self, pno=-1, width=595, height=842):
+        """Make a new PDF page."""
+        if self.is_closed or self.is_encrypted:
+            raise ValueError("document closed or encrypted")
+        if g_use_extra:
+            extra._newPage( self.this, pno, width, height)
+        else:
+            pdf = _as_pdf_document(self)
+            assert isinstance(pdf, mupdf.PdfDocument)
+            mediabox = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
+            mediabox.x1 = width
+            mediabox.y1 = height
+            contents = mupdf.FzBuffer()
+            if pno < -1:
+                raise ValueError( MSG_BAD_PAGENO)
+            # create /Resources and /Contents objects
+            #resources = pdf.add_object(pdf.new_dict(1))
+            resources = mupdf.pdf_add_new_dict(pdf, 1)
+            page_obj = mupdf.pdf_add_page( pdf, mediabox, 0, resources, contents)
+            mupdf.pdf_insert_page( pdf, pno, page_obj)
+        # fixme: pdf->dirty = 1;
+
+        self._reset_page_refs()
+        return self[pno]
 
     def _remove_links_to(self, numbers):
         pdf = _as_pdf_document(self)
@@ -3411,8 +3434,6 @@ class Document:
         pages = mupdf.fz_count_chapter_pages( self.this, chapter)
         return pages
 
-    def close_internal(self):
-        self.this = None
     def close(self):
         """Close document."""
         if getattr(self, "is_closed", True):
@@ -3432,6 +3453,8 @@ class Document:
         #self.this = None
         self.close_internal()
 
+    def close_internal(self):
+        self.this = None
     def convert_to_pdf(self, from_page=0, to_page=-1, rotate=0):
         """Convert document to a PDF, selecting page range and optional rotation. Output bytes object."""
         if self.is_closed or self.isEncrypted:
@@ -4140,31 +4163,6 @@ class Document:
             rc = ''
         return rc
 
-    if mupdf_version_tuple < (1, 22):
-        @property
-        def has_old_style_xrefs(self):
-            '''
-            Check if xref table is old style.
-            '''
-            if self.is_closed:
-                raise ValueError("document closed")
-            pdf = _as_pdf_document(self)
-            if pdf.m_internal and pdf.m_internal.has_old_style_xrefs:
-                return True
-            return False
-
-        @property
-        def has_xref_streams(self):
-            '''
-            Check if xref table is a stream.
-            '''
-            if self.is_closed:
-                raise ValueError("document closed")
-            pdf = _as_pdf_document(self)
-            if pdf.m_internal and pdf.m_internal.has_xref_streams:
-                return True
-            return False
-
     def init_doc(self):
         if self.is_encrypted:
             raise ValueError("cannot initialize - document still encrypted")
@@ -4186,8 +4184,6 @@ class Document:
                     ]
                 )
         self.metadata['encryption'] = None if self._getMetadata('encryption')=='None' else self._getMetadata('encryption')
-
-    outline = property(lambda self: self._outline)
 
     def insert_file(self,
             infile,
@@ -4732,31 +4728,6 @@ class Document:
         ret = mupdf.fz_needs_password( document)
         return ret
 
-    def _newPage(self, pno=-1, width=595, height=842):
-        """Make a new PDF page."""
-        if self.is_closed or self.is_encrypted:
-            raise ValueError("document closed or encrypted")
-        if g_use_extra:
-            extra._newPage( self.this, pno, width, height)
-        else:
-            pdf = _as_pdf_document(self)
-            assert isinstance(pdf, mupdf.PdfDocument)
-            mediabox = mupdf.FzRect(mupdf.FzRect.Fixed_UNIT)
-            mediabox.x1 = width
-            mediabox.y1 = height
-            contents = mupdf.FzBuffer()
-            if pno < -1:
-                raise ValueError( MSG_BAD_PAGENO)
-            # create /Resources and /Contents objects
-            #resources = pdf.add_object(pdf.new_dict(1))
-            resources = mupdf.pdf_add_new_dict(pdf, 1)
-            page_obj = mupdf.pdf_add_page( pdf, mediabox, 0, resources, contents)
-            mupdf.pdf_insert_page( pdf, pno, page_obj)
-        # fixme: pdf->dirty = 1;
-
-        self._reset_page_refs()
-        return self[pno]
-
     def next_location(self, page_id):
         """Get (chapter, page) of next page."""
         if self.is_closed or self.isEncrypted:
@@ -5163,6 +5134,16 @@ class Document:
             mupdf.ll_pdf_drop_page_tree(pdf.m_internal)
         self._reset_page_refs()
 
+    def set_language(self, language=None):
+        pdf = _as_pdf_document(self)
+        ASSERT_PDF(pdf)
+        if not language:
+            lang = mupdf.FZ_LANG_UNSET
+        else:
+            lang = mupdf.fz_text_language_from_string(language)
+        mupdf.pdf_set_document_language(pdf, lang)
+        return True
+
     def set_layer(self, config, basestate=None, on=None, off=None, rbgroups=None):
         """Set the PDF keys /ON, /OFF, /RBGroups of an OC layer."""
         if self.is_closed:
@@ -5309,16 +5290,6 @@ class Document:
             mupdf.pdf_dict_put( root, PDF_NAME('Metadata'), xml)
         
 
-    def set_language(self, language=None):
-        pdf = _as_pdf_document(self)
-        ASSERT_PDF(pdf)
-        if not language:
-            lang = mupdf.FZ_LANG_UNSET
-        else:
-            lang = mupdf.fz_text_language_from_string(language)
-        mupdf.pdf_set_document_language(pdf, lang)
-        return True
-
     def switch_layer(self, config, as_default=0):
         """Activate an OC layer."""
         if self.is_closed:
@@ -5428,8 +5399,6 @@ class Document:
                 )
         return bio.getvalue()
 
-    tobytes = write
-
     @property
     def xref(self):
         """PDF xref number of page."""
@@ -5536,8 +5505,6 @@ class Document:
         if not pdf:
             return False    # not a PDF
         return bool(mupdf.pdf_obj_num_is_stream(pdf, xref))
-
-    is_stream = xref_is_stream
 
     def xref_is_xobject(self, xref):
         """Check if xref is a form xobject."""
@@ -5669,6 +5636,40 @@ class Document:
             xref = mupdf.pdf_to_num( xml)
         return xref
 
+    
+    __slots__ = ('this', 'page_count2', 'this_is_pdf', '__dict__')
+    
+    if mupdf_version_tuple < (1, 22):
+        @property
+        def has_old_style_xrefs(self):
+            '''
+            Check if xref table is old style.
+            '''
+            if self.is_closed:
+                raise ValueError("document closed")
+            pdf = _as_pdf_document(self)
+            if pdf.m_internal and pdf.m_internal.has_old_style_xrefs:
+                return True
+            return False
+
+        @property
+        def has_xref_streams(self):
+            '''
+            Check if xref table is a stream.
+            '''
+            if self.is_closed:
+                raise ValueError("document closed")
+            pdf = _as_pdf_document(self)
+            if pdf.m_internal and pdf.m_internal.has_xref_streams:
+                return True
+            return False
+
+    outline = property(lambda self: self._outline)
+
+    tobytes = write
+
+    is_stream = xref_is_stream
+
     outline = property(lambda self: self._outline)
 
 
@@ -5676,6 +5677,13 @@ open = Document
 
 
 class DocumentWriter:
+    def __enter__(self):
+        return self
+
+    def __exit__(self, *args):
+        self.close()
+
+
     def __init__(self, path, options=''):
         if isinstance( path, str):
             pass
@@ -5705,21 +5713,13 @@ class DocumentWriter:
         device_wrapper = DeviceWrapper( device)
         return device_wrapper
     
-    def end_page( self):
-        mupdf.fz_end_page( self.this)
-    
     def close( self):
         mupdf.fz_close_document_writer( self.this)
         
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *args):
-        self.close()
-
-
+    def end_page( self):
+        mupdf.fz_end_page( self.this)
+    
 class Font:
-
     def __del__(self):
         if type(self) is not Font:
             return None
@@ -5980,7 +5980,6 @@ class Font:
 
 
 class Graftmap:
-
     def __del__(self):
         if not type(self) is Graftmap:
             return
@@ -5995,7 +5994,6 @@ class Graftmap:
 
 
 class Link:
-
     def __del__(self):
         self._erase()
 
@@ -6171,8 +6169,6 @@ class Link:
             raise ValueError("bad 'flags' value")
         doc.xref_set_key(self.xref, "F", str(flags))
         return None
-    page = -1
-
     @property
     def uri(self):
         """Uri string."""
@@ -6182,9 +6178,10 @@ class Link:
             return this_link.m_internal.uri if this_link.m_internal else ''
         return this_link.uri() if this_link.m_internal else ''
 
+    page = -1
+
 
 class Matrix:
-
     def __abs__(self):
         return math.sqrt(sum([c*c for c in self]))
 
@@ -6254,8 +6251,6 @@ class Matrix:
         m1 = Matrix()
         m1.invert(self)
         return m1
-    __inv__ = __invert__
-
     def __len__(self):
         return 6
 
@@ -6308,10 +6303,6 @@ class Matrix:
             raise ZeroDivisionError("matrix not invertible")
         m2 = Matrix(1,1)
         return m2.concat(self, m1)
-    __div__ = __truediv__
-
-    norm = __abs__
-
     def concat(self, one, two):
         """Multiply two matrices and replace current one."""
         if not len(one) == len(two) == 6:
@@ -6410,10 +6401,13 @@ class Matrix:
         self.f += tx * self.b + ty * self.d
         return self
 
+    __inv__ = __invert__
+    __div__ = __truediv__
+    norm = __abs__
+
 
 class IdentityMatrix(Matrix):
     """Identity matrix [1, 0, 0, 1, 0, 0]"""
-
     def __hash__(self):
         return hash((1,0,0,1,0,0))
 
@@ -6440,7 +6434,6 @@ Identity = IdentityMatrix()
 
 class linkDest:
     """link or outline destination details"""
-
     def __init__(self, obj, rlink):
         isExt = obj.is_external
         isInt = not isExt
@@ -6712,6 +6705,26 @@ class Widget:
     def next(self):
         return self._annot.next
 
+    def on_state(self):
+        """Return the "On" value for button widgets.
+        
+        This is useful for radio buttons mainly. Checkboxes will always return
+        True. Radio buttons will return the string that is unequal to "Off"
+        as returned by method button_states().
+        """
+        if self.field_type not in (2, 5):
+            return None  # no checkbox or radio button
+        if self.field_type == 2:
+            return True
+        bstate = self.button_states()
+        for k in bstate.keys():
+            for v in bstate[k]:
+                if v != "Off":
+                    return v
+        print("warning: radio button has no 'On' value.")
+        return True
+
+
     def reset(self):
         """Reset the field value to its default.
         """
@@ -6746,30 +6759,11 @@ class Widget:
         # finally update the widget
         TOOLS._save_widget(self._annot, self)
         self._text_da = ""
-    def on_state(self):
-        """Return the "On" value for button widgets.
-        
-        This is useful for radio buttons mainly. Checkboxes will always return
-        True. Radio buttons will return the string that is unequal to "Off"
-        as returned by method button_states().
-        """
-        if self.field_type not in (2, 5):
-            return None  # no checkbox or radio button
-        if self.field_type == 2:
-            return True
-        bstate = self.button_states()
-        for k in bstate.keys():
-            for v in bstate[k]:
-                if v != "Off":
-                    return v
-        print("warning: radio button has no 'On' value.")
-        return True
 
 
 from . import _extra
 
 class Outline:
-    __slots__ = [ 'this']
     def __init__(self, ol):
         self.this = ol
 
@@ -6841,6 +6835,7 @@ class Outline:
         return self.this.m_internal.y
 
 
+    __slots__ = [ 'this']
 def _make_PdfFilterOptions(recurse, instance_forms, ascii, sanitize, sopts=None):
     '''
     Returns a mupdf.PdfFilterOptions instance.
@@ -6897,8 +6892,8 @@ def _make_PdfFilterOptions(recurse, instance_forms, ascii, sanitize, sopts=None)
         filter_.sanitize = sanitize
     return filter_
 
-class Page:
 
+class Page:
     def __init__(self, page, document):
         assert isinstance(page, (mupdf.FzPage, mupdf.PdfPage)), f'page is: {page}'
         self.this = page
@@ -6914,6 +6909,16 @@ class Page:
                 self.number = page.m_internal.number
         else:
             self.number = None
+
+    def __repr__(self):
+        return self.__str__()
+        CheckParent(self)
+        x = self.parent.name
+        if self.parent.stream is not None:
+            x = "<memory, doc# %i>" % (self.parent._graft_id,)
+        if x == "":
+            x = "<new PDF, doc# %i>" % self.parent._graft_id
+        return "page %s of %s" % (self.number, x)
 
     def __str__(self):
         #CheckParent(self)
@@ -6931,16 +6936,6 @@ class Page:
                 x = "<new PDF, doc# %i>" % self.parent._graft_id
             ret += f' of {x}'
         return ret
-
-    def __repr__(self):
-        return self.__str__()
-        CheckParent(self)
-        x = self.parent.name
-        if self.parent.stream is not None:
-            x = "<memory, doc# %i>" % (self.parent._graft_id,)
-        if x == "":
-            x = "<new PDF, doc# %i>" % self.parent._graft_id
-        return "page %s of %s" % (self.number, x)
 
     def _add_caret_annot(self, point):
         if g_use_extra:
@@ -7313,10 +7308,10 @@ class Page:
         #log( 'returning {mc=}')
         return mc
 
-    #----------------------------------------------------------------
-    # page list Resource/Properties
-    #----------------------------------------------------------------
     def _get_resource_properties(self):
+        '''
+        page list Resource/Properties
+        '''
         page = self._pdf_page()
         ASSERT_PDF(page);
         rc = JM_get_resource_properties(page.obj())
@@ -7342,26 +7337,6 @@ class Page:
         mupdf.fz_run_page(page, dev, ctm, mupdf.FzCookie())
         mupdf.fz_close_device(dev)
         return tpage
-
-    def _insertFont(self, fontname, bfname, fontfile, fontbuffer, set_simple, idx, wmode, serif, encoding, ordering):
-        page = self._pdf_page()
-        ASSERT_PDF(page);
-        pdf = page.doc()
-
-        value = JM_insert_font(pdf, bfname, fontfile,fontbuffer, set_simple, idx, wmode, serif, encoding, ordering)
-        # get the objects /Resources, /Resources/Font
-        resources = mupdf.pdf_dict_get_inheritable( page.obj(), PDF_NAME('Resources'))
-        fonts = mupdf.pdf_dict_get(resources, PDF_NAME('Font'))
-        if not fonts.m_internal:    # page has no fonts yet
-            fonts = mupdf.pdf_new_dict(pdf, 5)
-            mupdf.pdf_dict_putl(page.obj(), fonts, PDF_NAME('Resources'), PDF_NAME('Font'))
-        # store font in resources and fonts objects will contain named reference to font
-        _, xref = JM_INT_ITEM(value, 0)
-        if not xref:
-            raise RuntimeError( "cannot insert font")
-        font_obj = mupdf.pdf_new_indirect(pdf, xref, 0)
-        mupdf.pdf_dict_puts(fonts, fontname, font_obj)
-        return value
 
     def _insert_image(self,
             filename=None, pixmap=None, stream=None, imask=None, clip=None,
@@ -7532,6 +7507,26 @@ class Page:
         else:
             return img_xref, None
 
+    def _insertFont(self, fontname, bfname, fontfile, fontbuffer, set_simple, idx, wmode, serif, encoding, ordering):
+        page = self._pdf_page()
+        ASSERT_PDF(page);
+        pdf = page.doc()
+
+        value = JM_insert_font(pdf, bfname, fontfile,fontbuffer, set_simple, idx, wmode, serif, encoding, ordering)
+        # get the objects /Resources, /Resources/Font
+        resources = mupdf.pdf_dict_get_inheritable( page.obj(), PDF_NAME('Resources'))
+        fonts = mupdf.pdf_dict_get(resources, PDF_NAME('Font'))
+        if not fonts.m_internal:    # page has no fonts yet
+            fonts = mupdf.pdf_new_dict(pdf, 5)
+            mupdf.pdf_dict_putl(page.obj(), fonts, PDF_NAME('Resources'), PDF_NAME('Font'))
+        # store font in resources and fonts objects will contain named reference to font
+        _, xref = JM_INT_ITEM(value, 0)
+        if not xref:
+            raise RuntimeError( "cannot insert font")
+        font_obj = mupdf.pdf_new_indirect(pdf, xref, 0)
+        mupdf.pdf_dict_puts(fonts, fontname, font_obj)
+        return value
+
     def _load_annot(self, name, xref):
         page = self._pdf_page()
         ASSERT_PDF(page)
@@ -7544,6 +7539,17 @@ class Page:
     def _makePixmap(self, doc, ctm, cs, alpha=0, annots=1, clip=None):
         pix = JM_pixmap_from_page(doc, self.this, ctm, cs, alpha, annots, clip)
         return Pixmap(pix)
+
+    def _other_box(self, boxtype):
+        rect = mupdf.FzRect( mupdf.FzRect.Fixed_INFINITE)
+        page = mupdf.pdf_page_from_fz_page( self.this)
+        if page.m_internal:
+            obj = mupdf.pdf_dict_gets( page.obj(), boxtype)
+            if mupdf.pdf_is_array(obj):
+                rect = mupdf.pdf_to_rect(obj)
+        if mupdf.fz_is_infinite_rect( rect):
+            return
+        return JM_py_from_rect(rect)
 
     def _pdf_page(self):
         '''
@@ -7592,10 +7598,29 @@ class Page:
         mupdf.pdf_dict_puts(extg, gstate, opa)
         return gstate
 
-    #----------------------------------------------------------------
-    # page list Resource/Properties
-    #----------------------------------------------------------------
+    def _set_pagebox(self, boxtype, rect):
+        doc = self.parent
+        if doc == None:
+            raise ValueError("orphaned object: parent is None")
+        if not doc.is_pdf:
+            raise ValueError("is no PDF")
+        valid_boxes = ("CropBox", "BleedBox", "TrimBox", "ArtBox")
+        if boxtype not in valid_boxes:
+            raise ValueError("bad boxtype")
+        mb = Rect( self.mediabox)
+        rect = Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
+        rect = Rect(JM_TUPLE3(rect))
+        if rect.is_infinite or rect.is_empty:
+            raise ValueError("rect is infinite or empty")
+        #log( '{=mb rect type(mb) type(rect)}')
+        if rect not in mb:
+            raise ValueError("rect not in mediabox")
+        doc.xref_set_key(self.xref, boxtype, "[%g %g %g %g]" % tuple(rect))
+
     def _set_resource_property(self, name, xref):
+        '''
+        page list Resource/Properties
+        '''
         page = self._pdf_page()
         ASSERT_PDF(page);
         JM_set_resource_property(page.obj(), name, xref)
@@ -7935,10 +7960,10 @@ class Page:
         widget.update()
         return annot
 
-    #----------------------------------------------------------------
-    # page get list of annot names
-    #----------------------------------------------------------------
     def annot_names(self):
+        '''
+        page get list of annot names
+        '''
         """List of names of annotations, fields and links."""
         CheckParent(self)
         page = self._pdf_page()
@@ -7976,6 +8001,24 @@ class Page:
             annot._yielded=True
             yield annot
 
+    @property
+    def artbox(self):
+        """The ArtBox"""
+        rect = self._other_box("ArtBox")
+        if rect == None:
+            return self.cropbox
+        mb = self.mediabox
+        return Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
+
+    @property
+    def bleedbox(self):
+        """The BleedBox"""
+        rect = self._other_box("BleedBox")
+        if rect == None:
+            return self.cropbox
+        mb = self.mediabox
+        return Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
+
     def bound(self):
         """Get page rectangle."""
         CheckParent(self)
@@ -7996,8 +8039,6 @@ class Page:
             print(msg, file=sys.stderr)
         
         return val
-
-    rect = property(bound, doc="page rectangle")
 
     def clean_contents(self, sanitize=1):
         if not sanitize and not self.is_wrapped:
@@ -8021,82 +8062,9 @@ class Page:
 
         return val
 
-    def _other_box(self, boxtype):
-        rect = mupdf.FzRect( mupdf.FzRect.Fixed_INFINITE)
-        page = mupdf.pdf_page_from_fz_page( self.this)
-        if page.m_internal:
-            obj = mupdf.pdf_dict_gets( page.obj(), boxtype)
-            if mupdf.pdf_is_array(obj):
-                rect = mupdf.pdf_to_rect(obj)
-        if mupdf.fz_is_infinite_rect( rect):
-            return
-        return JM_py_from_rect(rect)
-
     @property
     def cropbox_position(self):
         return self.cropbox.tl
-
-    @property
-    def artbox(self):
-        """The ArtBox"""
-        rect = self._other_box("ArtBox")
-        if rect == None:
-            return self.cropbox
-        mb = self.mediabox
-        return Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
-
-    @property
-    def trimbox(self):
-        """The TrimBox"""
-        rect = self._other_box("TrimBox")
-        if rect == None:
-            return self.cropbox
-        mb = self.mediabox
-        return Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
-
-    @property
-    def bleedbox(self):
-        """The BleedBox"""
-        rect = self._other_box("BleedBox")
-        if rect == None:
-            return self.cropbox
-        mb = self.mediabox
-        return Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
-
-    def _set_pagebox(self, boxtype, rect):
-        doc = self.parent
-        if doc == None:
-            raise ValueError("orphaned object: parent is None")
-        if not doc.is_pdf:
-            raise ValueError("is no PDF")
-        valid_boxes = ("CropBox", "BleedBox", "TrimBox", "ArtBox")
-        if boxtype not in valid_boxes:
-            raise ValueError("bad boxtype")
-        mb = Rect( self.mediabox)
-        rect = Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
-        rect = Rect(JM_TUPLE3(rect))
-        if rect.is_infinite or rect.is_empty:
-            raise ValueError("rect is infinite or empty")
-        #log( '{=mb rect type(mb) type(rect)}')
-        if rect not in mb:
-            raise ValueError("rect not in mediabox")
-        doc.xref_set_key(self.xref, boxtype, "[%g %g %g %g]" % tuple(rect))
-
-    def set_cropbox(self, rect):
-        """Set the CropBox. Will also change Page.rect."""
-        return self._set_pagebox("CropBox", rect)
-
-    def set_artbox(self, rect):
-        """Set the ArtBox."""
-        return self._set_pagebox("ArtBox", rect)
-
-    def set_bleedbox(self, rect):
-        """Set the BleedBox."""
-        return self._set_pagebox("BleedBox", rect)
-
-    def set_trimbox(self, rect):
-        """Set the TrimBox."""
-        return self._set_pagebox("TrimBox", rect)
 
     def delete_annot(self, annot):
         """Delete annot and return next one."""
@@ -8356,12 +8324,14 @@ class Page:
         return val
 
         class Drawpath(object):
-            """Reflects a path dictionary from get_cdrawings()."""
             def __init__(self, **args):
                 self.__dict__.update(args)
         
+            """Reflects a path dictionary from get_cdrawings()."""
         class Drawpathlist(object):
-            """List of Path objects representing get_cdrawings() output."""
+            def __getitem__(self, item):
+                return self.paths.__getitem__(item)
+
             def __init__(self):
                 self.paths = []
                 self.path_count = 0
@@ -8370,6 +8340,10 @@ class Page:
                 self.fill_count = 0
                 self.stroke_count = 0
                 self.fillstroke_count = 0
+
+            def __len__(self):
+                return self.paths.__len__()
+
 
             def append(self, path):
                 self.paths.append(path)
@@ -8445,13 +8419,7 @@ class Page:
                     ngroups.append(p)
                 return ngroups
 
-            def __getitem__(self, item):
-                return self.paths.__getitem__(item)
-
-            def __len__(self):
-                return self.paths.__len__()
-
-
+            """List of Path objects representing get_cdrawings() output."""
         def get_lineart(self) -> object:
             """Get page drawings paths.
 
@@ -8870,14 +8838,14 @@ class Page:
         return rect
 
     @property
+    def mediabox_size(self):
+        return Point(self.mediabox.x1, self.mediabox.y1)
+
+    @property
     def parent( self):
         if self._parent:
             return self._parent
         return Document( self.this.document())
-
-    @property
-    def mediabox_size(self):
-        return Point(self.mediabox.x1, self.mediabox.y1)
 
     def read_contents(self):
         """All /Contents streams concatenated to one bytes object."""
@@ -8912,6 +8880,14 @@ class Page:
         CheckParent(self)
         mupdf.fz_run_page(self.this, dw.device, JM_matrix_from_py(m), mupdf.FzCookie());
 
+    def set_artbox(self, rect):
+        """Set the ArtBox."""
+        return self._set_pagebox("ArtBox", rect)
+
+    def set_bleedbox(self, rect):
+        """Set the BleedBox."""
+        return self._set_pagebox("BleedBox", rect)
+
     def set_contents(self, xref):
         """Set object at 'xref' as the page's /Contents."""
         CheckParent(self)
@@ -8926,6 +8902,10 @@ class Page:
             raise ValueError("xref is no stream")
         doc.xref_set_key(self.xref, "Contents", "%i 0 R" % xref)
 
+
+    def set_cropbox(self, rect):
+        """Set the CropBox. Will also change Page.rect."""
+        return self._set_pagebox("CropBox", rect)
 
     def set_language(self, language=None):
         """Set PDF page default language."""
@@ -8966,6 +8946,10 @@ class Page:
         rot = JM_norm_rotation(rotation)
         mupdf.pdf_dict_put_int( page.obj(), PDF_NAME('Rotate'), rot)
 
+    def set_trimbox(self, rect):
+        """Set the TrimBox."""
+        return self._set_pagebox("TrimBox", rect)
+
     @property
     def transformation_matrix(self):
         """Page transformation matrix."""
@@ -8984,6 +8968,15 @@ class Page:
         else:
             val = Matrix(1, 0, 0, -1, 0, self.cropbox.height)
         return val
+
+    @property
+    def trimbox(self):
+        """The TrimBox"""
+        rect = self._other_box("TrimBox")
+        if rect == None:
+            return self.cropbox
+        mb = self.mediabox
+        return Rect(rect[0], mb.y1 - rect[3], rect[2], mb.y1 - rect[1])
 
     def widgets(self, types=None):
         """ Generator over the widgets of a page.
@@ -9015,8 +9008,10 @@ class Page:
         CheckParent(self)
         return self.parent.page_xref(self.number)
 
-class Pixmap:
+    rect = property(bound, doc="page rectangle")
 
+
+class Pixmap:
     def __init__(self, *args):
         """
         Pixmap(colorspace, irect, alpha) - empty pixmap.
@@ -9284,17 +9279,6 @@ class Pixmap:
         else:
             return "Pixmap(%s, %s, %s)" % ('None', self.irect, self.alpha)
 
-    @property
-    def samples_mv(self):
-        '''
-        Pixmap samples memoryview.
-        '''
-        return self.this.fz_pixmap_samples_memoryview()
-
-    @property
-    def samples_ptr(self):
-        return self.this.fz_pixmap_samples_int()
-
     def _tobytes(self, format_, jpg_quality):
         '''
         Pixmap._tobytes
@@ -9395,36 +9379,6 @@ class Pixmap:
             JM_Warning("colorspace invalid for function");
             return
         mupdf.fz_gamma_pixmap( self.this, gamma)
-
-    def tobytes(self, output="png", jpg_quality=95):
-        '''
-        Convert to binary image stream of desired type.
-        '''
-        valid_formats = {
-                "png": 1,
-                "pnm": 2,
-                "pgm": 2,
-                "ppm": 2,
-                "pbm": 2,
-                "pam": 3,
-                "tga": 4,
-                "tpic": 4,
-                "psd": 5,
-                "ps": 6,
-                'jpg': 7,
-                'jpeg': 7,
-                }
-        idx = valid_formats.get(output.lower(), None)
-        if idx==None:
-            raise ValueError(f"Image format {output} not in {tuple(valid_formats.keys())}")
-        if self.alpha and idx in (2, 6, 7):
-            raise ValueError("'{output}' cannot have alpha")
-        if self.colorspace and self.colorspace.n > 3 and idx in (1, 2, 4):
-            raise ValueError("unsupported colorspace for '{output}'")
-        if idx == 7:
-            self.set_dpi(self.xres, self.yres)
-        barray = self._tobytes(idx, jpg_quality)
-        return barray
 
     @property
     def h(self):
@@ -9567,6 +9521,17 @@ class Pixmap:
         mv = self.samples_mv
         return bytes( mv)
 
+    @property
+    def samples_mv(self):
+        '''
+        Pixmap samples memoryview.
+        '''
+        return self.this.fz_pixmap_samples_memoryview()
+
+    @property
+    def samples_ptr(self):
+        return self.this.fz_pixmap_samples_int()
+
     def save(self, filename, output=None, jpg_quality=95):
         """Output as image in format determined by filename extension.
 
@@ -9704,6 +9669,37 @@ class Pixmap:
                     pixsamples_set(i+n, data_fix)
                 i += n+1
                 k += 1
+
+
+    def tobytes(self, output="png", jpg_quality=95):
+        '''
+        Convert to binary image stream of desired type.
+        '''
+        valid_formats = {
+                "png": 1,
+                "pnm": 2,
+                "pgm": 2,
+                "ppm": 2,
+                "pbm": 2,
+                "pam": 3,
+                "tga": 4,
+                "tpic": 4,
+                "psd": 5,
+                "ps": 6,
+                'jpg': 7,
+                'jpeg': 7,
+                }
+        idx = valid_formats.get(output.lower(), None)
+        if idx==None:
+            raise ValueError(f"Image format {output} not in {tuple(valid_formats.keys())}")
+        if self.alpha and idx in (2, 6, 7):
+            raise ValueError("'{output}' cannot have alpha")
+        if self.colorspace and self.colorspace.n > 3 and idx in (1, 2, 4):
+            raise ValueError("unsupported colorspace for '{output}'")
+        if idx == 7:
+            self.set_dpi(self.xres, self.yres)
+        barray = self._tobytes(idx, jpg_quality)
+        return barray
 
 
 #===========================
@@ -10001,7 +9997,12 @@ class Point:
 
 
 class Quad:
-    """Quad() - all zero points\nQuad(ul, ur, ll, lr)\nQuad(quad) - new copy\nQuad(sequence) - from 'sequence'"""
+    '''
+    Quad() - all zero points
+    Quad(ul, ur, ll, lr)
+    Quad(quad) - new copy
+    Quad(sequence) - from 'sequence'
+    '''
 
     def __abs__(self):
         if self.is_empty:
@@ -10126,8 +10127,6 @@ class Quad:
         q = q.transform(im)
         return q
 
-    __div__ = __truediv__
-
     @property
     def is_convex(self):
         """Check if quad is convex and not degenerate.
@@ -10235,6 +10234,7 @@ class Rect:
     Rect(Rect or IRect) - new copy
     Rect(sequence) - from 'sequence'
     """
+    
     def __abs__(self):
         if self.is_empty or self.is_infinite:
             return 0.0
@@ -10279,18 +10279,18 @@ class Rect:
             return False
         return len(rect) == 4 and bool(self - rect) is False
 
+    def __getitem__(self, i):
+        return (self.x0, self.y0, self.x1, self.y1)[i]
+
+    def __hash__(self):
+        return hash(tuple(self))
+
     def __init__(self, *args):
         x0, y0, x1, y1 = util_make_rect( *args)
         self.x0 = float( x0)
         self.y0 = float( y0)
         self.x1 = float( x1)
         self.y1 = float( y1)
-
-    def __getitem__(self, i):
-        return (self.x0, self.y0, self.x1, self.y1)[i]
-
-    def __hash__(self):
-        return hash(tuple(self))
 
     def __len__(self):
         return 4
@@ -10352,8 +10352,6 @@ class Rect:
         r = r.transform(im)
         return r
 
-    __div__ = __truediv__
-
     @property
     def bottom_left(self):
         """Bottom-left corner."""
@@ -10367,21 +10365,6 @@ class Rect:
     def contains(self, x):
         """Check if containing point-like or rect-like x."""
         return self.__contains__(x)
-
-    @property
-    def is_empty(self):
-        """True if rectangle area is empty."""
-        return self.x0 >= self.x1 or self.y0 >= self.y1
-
-    @property
-    def is_infinite(self):
-        """True if this is the infinite rectangle."""
-        return self.x0 == self.y0 == FZ_MIN_INF_RECT and self.x1 == self.y1 == FZ_MAX_INF_RECT
-
-    @property
-    def is_valid(self):
-        """True if rectangle is valid."""
-        return self.x0 <= self.x1 and self.y0 <= self.y1
 
     def include_point(self, p):
         """Extend to include point-like p."""
@@ -10431,6 +10414,21 @@ class Rect:
         if r.intersect(r1).is_empty:
             return False
         return True
+
+    @property
+    def is_empty(self):
+        """True if rectangle area is empty."""
+        return self.x0 >= self.x1 or self.y0 >= self.y1
+
+    @property
+    def is_infinite(self):
+        """True if this is the infinite rectangle."""
+        return self.x0 == self.y0 == FZ_MIN_INF_RECT and self.x1 == self.y1 == FZ_MAX_INF_RECT
+
+    @property
+    def is_valid(self):
+        """True if rectangle is valid."""
+        return self.x0 <= self.x1 and self.y0 <= self.y1
 
     def morph(self, p, m):
         """Morph with matrix-like m and point-like p.
@@ -10489,6 +10487,8 @@ class Rect:
         self.x0, self.y0, self.x1, self.y1 = util_transform_rect(self, m)
         return self
 
+    __div__ = __truediv__
+
     bl = bottom_left
     br = bottom_right
     height = property(lambda self: abs(self.y1 - self.y0))
@@ -10541,34 +10541,6 @@ class Shape:
         self.totalcont = ""  # re-use
         return
 
-    def draw_line(self, p1: point_like, p2: point_like):# -> Point:
-        """Draw a line between two points."""
-        p1 = Point(p1)
-        p2 = Point(p2)
-        if not (self.lastPoint == p1):
-            self.draw_cont += "%g %g m\n" % JM_TUPLE(p1 * self.ipctm)
-            self.lastPoint = p1
-            self.updateRect(p1)
-
-        self.draw_cont += "%g %g l\n" % JM_TUPLE(p2 * self.ipctm)
-        self.updateRect(p2)
-        self.lastPoint = p2
-        return self.lastPoint
-
-    def draw_polyline(self, points: list):# -> Point:
-        """Draw several connected line segments."""
-        for i, p in enumerate(points):
-            if i == 0:
-                if not (self.lastPoint == Point(p)):
-                    self.draw_cont += "%g %g m\n" % JM_TUPLE(Point(p) * self.ipctm)
-                    self.lastPoint = Point(p)
-            else:
-                self.draw_cont += "%g %g l\n" % JM_TUPLE(Point(p) * self.ipctm)
-            self.updateRect(p)
-
-        self.lastPoint = Point(points[-1])
-        return self.lastPoint
-
     def draw_bezier(
             self,
             p1: point_like,
@@ -10591,6 +10563,43 @@ class Shape:
         self.updateRect(p3)
         self.updateRect(p4)
         self.lastPoint = p4
+        return self.lastPoint
+
+    def draw_circle(self, center: point_like, radius: float):# -> Point:
+        """Draw a circle given its center and radius."""
+        if not radius > EPSILON:
+            raise ValueError("radius must be postive")
+        center = Point(center)
+        p1 = center - (radius, 0)
+        return self.draw_sector(center, p1, 360, fullSector=False)
+
+    def draw_curve(
+            self,
+            p1: point_like,
+            p2: point_like,
+            p3: point_like,
+            ):# -> Point:
+        """Draw a curve between points using one control point."""
+        kappa = 0.55228474983
+        p1 = Point(p1)
+        p2 = Point(p2)
+        p3 = Point(p3)
+        k1 = p1 + (p2 - p1) * kappa
+        k2 = p3 + (p2 - p3) * kappa
+        return self.draw_bezier(p1, k1, k2, p3)
+
+    def draw_line(self, p1: point_like, p2: point_like):# -> Point:
+        """Draw a line between two points."""
+        p1 = Point(p1)
+        p2 = Point(p2)
+        if not (self.lastPoint == p1):
+            self.draw_cont += "%g %g m\n" % JM_TUPLE(p1 * self.ipctm)
+            self.lastPoint = p1
+            self.updateRect(p1)
+
+        self.draw_cont += "%g %g l\n" % JM_TUPLE(p2 * self.ipctm)
+        self.updateRect(p2)
+        self.lastPoint = p2
         return self.lastPoint
 
     def draw_oval(self, tetra: typing.Union[quad_like, rect_like]):# -> Point:
@@ -10617,33 +10626,34 @@ class Shape:
         self.lastPoint = ml
         return self.lastPoint
 
-    def draw_circle(self, center: point_like, radius: float):# -> Point:
-        """Draw a circle given its center and radius."""
-        if not radius > EPSILON:
-            raise ValueError("radius must be postive")
-        center = Point(center)
-        p1 = center - (radius, 0)
-        return self.draw_sector(center, p1, 360, fullSector=False)
+    def draw_polyline(self, points: list):# -> Point:
+        """Draw several connected line segments."""
+        for i, p in enumerate(points):
+            if i == 0:
+                if not (self.lastPoint == Point(p)):
+                    self.draw_cont += "%g %g m\n" % JM_TUPLE(Point(p) * self.ipctm)
+                    self.lastPoint = Point(p)
+            else:
+                self.draw_cont += "%g %g l\n" % JM_TUPLE(Point(p) * self.ipctm)
+            self.updateRect(p)
 
-    def draw_curve(
-            self,
-            p1: point_like,
-            p2: point_like,
-            p3: point_like,
-            ):# -> Point:
-        """Draw a curve between points using one control point."""
-        kappa = 0.55228474983
-        p1 = Point(p1)
-        p2 = Point(p2)
-        p3 = Point(p3)
-        k1 = p1 + (p2 - p1) * kappa
-        k2 = p3 + (p2 - p3) * kappa
-        return self.draw_bezier(p1, k1, k2, p3)
+        self.lastPoint = Point(points[-1])
+        return self.lastPoint
 
     def draw_quad(self, quad: quad_like):# -> Point:
         """Draw a Quad."""
         q = Quad(quad)
         return self.draw_polyline([q.ul, q.ll, q.lr, q.ur, q.ul])
+
+    def draw_rect(self, rect: rect_like):# -> Point:
+        """Draw a rectangle."""
+        r = Rect(rect)
+        self.draw_cont += "%g %g %g %g re\n" % JM_TUPLE(
+            list(r.bl * self.ipctm) + [r.width, r.height]
+        )
+        self.updateRect(r)
+        self.lastPoint = r.tl
+        return self.lastPoint
 
     def draw_sector(
             self,
@@ -10717,16 +10727,6 @@ class Shape:
             self.draw_cont += l5 % JM_TUPLE(center * self.ipctm)
             self.draw_cont += l5 % JM_TUPLE(Q * self.ipctm)
         self.lastPoint = Q
-        return self.lastPoint
-
-    def draw_rect(self, rect: rect_like):# -> Point:
-        """Draw a rectangle."""
-        r = Rect(rect)
-        self.draw_cont += "%g %g %g %g re\n" % JM_TUPLE(
-            list(r.bl * self.ipctm) + [r.width, r.height]
-        )
-        self.updateRect(r)
-        self.lastPoint = r.tl
         return self.lastPoint
 
     def draw_squiggle(
@@ -11433,127 +11433,6 @@ class Story:
         else:
             self.this = mupdf.FzStory( buffer_, user_css, em, arch)
     
-    def reset( self):
-        mupdf.fz_reset_story( self.this)
-    
-    def place( self, where):
-        where = JM_rect_from_py( where)
-        filled = mupdf.FzRect()
-        more = mupdf.fz_place_story( self.this, where, filled)
-        return more, JM_py_from_rect( filled)
-
-    def draw( self, device, matrix=None):
-        ctm2 = JM_matrix_from_py( matrix)
-        dev = device.this if device else mupdf.FzDevice( None)
-        sys.stdout.flush()
-        mupdf.fz_draw_story( self.this, dev, ctm2)
-
-    def document( self):
-        dom = mupdf.fz_story_document( self.this)
-        return Xml( dom)
-
-    def element_positions( self, function, args=None):
-        '''
-        Trigger a callback function to record where items have been placed.
-        '''
-        if type(args) is dict:
-            for k in args.keys():
-                if not (type(k) is str and k.isidentifier()):
-                    raise ValueError(f"invalid key '{k}'")
-        else:
-            args = {}
-        if not callable(function) or function.__code__.co_argcount != 1:
-            raise ValueError("callback 'function' must be a callable with exactly one argument")
-        
-        def function2( position):
-            class Position2:
-                pass
-            position2 = Position2()
-            position2.depth = position.depth
-            position2.heading = position.heading
-            position2.id = position.id
-            position2.rect = JM_py_from_rect(position.rect)
-            position2.text = position.text
-            position2.open_close = position.open_close
-            position2.rect_num = position.rectangle_num
-            position2.href = position.href
-            if args:
-                for k, v in args.items():
-                    setattr( position2, k, v)
-            function( position2)
-        mupdf.fz_story_positions( self.this, function2)
-
-    def write(self, writer, rectfn, positionfn=None, pagefn=None):
-        dev = None
-        page_num = 0
-        rect_num = 0
-        filled = Rect(0, 0, 0, 0)
-        while 1:
-            mediabox, rect, ctm = rectfn(rect_num, filled)
-            rect_num += 1
-            if mediabox:
-                # new page.
-                page_num += 1
-            more, filled = self.place( rect)
-            if positionfn:
-                def positionfn2(position):
-                    # We add a `.page_num` member to the
-                    # `ElementPosition` instance.
-                    position.page_num = page_num
-                    positionfn(position)
-                self.element_positions(positionfn2)
-            if writer:
-                if mediabox:
-                    # new page.
-                    if dev:
-                        if pagefn:
-                            pagefn(page_num, medibox, dev, 1)
-                        writer.end_page()
-                    dev = writer.begin_page( mediabox)
-                    if pagefn:
-                        pagefn(page_num, mediabox, dev, 0)
-                self.draw( dev, ctm)
-                if not more:
-                    if pagefn:
-                        pagefn( page_num, mediabox, dev, 1)
-                    writer.end_page()
-            else:
-                self.draw(None, ctm)
-            if not more:
-                break
-
-    @staticmethod
-    def write_stabilized(writer, contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
-        positions = list()
-        content = None
-        # Iterate until stable.
-        while 1:
-            content_prev = content
-            content = contentfn( positions)
-            stable = False
-            if content == content_prev:
-                stable = True
-            content2 = content
-            story = Story(content2, user_css, em, archive)
-
-            if add_header_ids:
-                story.add_header_ids()
-
-            positions = list()
-            def positionfn2(position):
-                #log(f"write_stabilized(): stable={stable} positionfn={positionfn} position={position}")
-                positions.append(position)
-                if stable and positionfn:
-                    positionfn(position)
-            story.write(
-                    writer if stable else None,
-                    rectfn,
-                    positionfn2,
-                    pagefn,
-                    )
-            if stable:
-                break
-
     def add_header_ids(self):
         '''
         Look for `<h1..6>` items in `self` and adds unique `id`
@@ -11572,37 +11451,6 @@ class Story:
                     x.set_attribute("id", id_)
                     i += 1
             x = x.find_next(None, None, None)
-
-    def write_with_links(self, rectfn, positionfn=None, pagefn=None):
-        #log("write_with_links()")
-        stream = io.BytesIO()
-        writer = DocumentWriter(stream)
-        positions = []
-        def positionfn2(position):
-            #log(f"write_with_links(): position={position}")
-            positions.append(position)
-            if positionfn:
-                positionfn(position)
-        self.write(writer, rectfn, positionfn=positionfn2, pagefn=pagefn)
-        writer.close()
-        stream.seek(0)
-        return Story.add_pdf_links(stream, positions)
-
-    @staticmethod
-    def write_stabilized_with_links(contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
-        #log("write_stabilized_with_links()")
-        stream = io.BytesIO()
-        writer = DocumentWriter(stream)
-        positions = []
-        def positionfn2(position):
-            #log(f"write_stabilized_with_links(): position={position}")
-            positions.append(position)
-            if positionfn:
-                positionfn(position)
-        Story.write_stabilized(writer, contentfn, rectfn, user_css, em, positionfn2, pagefn, archive, add_header_ids)
-        writer.close()
-        stream.seek(0)
-        return Story.add_pdf_links(stream, positions)
 
     @staticmethod
     def add_pdf_links(document_or_stream, positions):
@@ -11682,8 +11530,159 @@ class Story:
         return dom.bodytag()
         
 
-class TextPage:
+    def document( self):
+        dom = mupdf.fz_story_document( self.this)
+        return Xml( dom)
 
+    def draw( self, device, matrix=None):
+        ctm2 = JM_matrix_from_py( matrix)
+        dev = device.this if device else mupdf.FzDevice( None)
+        sys.stdout.flush()
+        mupdf.fz_draw_story( self.this, dev, ctm2)
+
+    def element_positions( self, function, args=None):
+        '''
+        Trigger a callback function to record where items have been placed.
+        '''
+        if type(args) is dict:
+            for k in args.keys():
+                if not (type(k) is str and k.isidentifier()):
+                    raise ValueError(f"invalid key '{k}'")
+        else:
+            args = {}
+        if not callable(function) or function.__code__.co_argcount != 1:
+            raise ValueError("callback 'function' must be a callable with exactly one argument")
+        
+        def function2( position):
+            class Position2:
+                pass
+            position2 = Position2()
+            position2.depth = position.depth
+            position2.heading = position.heading
+            position2.id = position.id
+            position2.rect = JM_py_from_rect(position.rect)
+            position2.text = position.text
+            position2.open_close = position.open_close
+            position2.rect_num = position.rectangle_num
+            position2.href = position.href
+            if args:
+                for k, v in args.items():
+                    setattr( position2, k, v)
+            function( position2)
+        mupdf.fz_story_positions( self.this, function2)
+
+    def place( self, where):
+        where = JM_rect_from_py( where)
+        filled = mupdf.FzRect()
+        more = mupdf.fz_place_story( self.this, where, filled)
+        return more, JM_py_from_rect( filled)
+
+    def reset( self):
+        mupdf.fz_reset_story( self.this)
+    
+    def write(self, writer, rectfn, positionfn=None, pagefn=None):
+        dev = None
+        page_num = 0
+        rect_num = 0
+        filled = Rect(0, 0, 0, 0)
+        while 1:
+            mediabox, rect, ctm = rectfn(rect_num, filled)
+            rect_num += 1
+            if mediabox:
+                # new page.
+                page_num += 1
+            more, filled = self.place( rect)
+            if positionfn:
+                def positionfn2(position):
+                    # We add a `.page_num` member to the
+                    # `ElementPosition` instance.
+                    position.page_num = page_num
+                    positionfn(position)
+                self.element_positions(positionfn2)
+            if writer:
+                if mediabox:
+                    # new page.
+                    if dev:
+                        if pagefn:
+                            pagefn(page_num, medibox, dev, 1)
+                        writer.end_page()
+                    dev = writer.begin_page( mediabox)
+                    if pagefn:
+                        pagefn(page_num, mediabox, dev, 0)
+                self.draw( dev, ctm)
+                if not more:
+                    if pagefn:
+                        pagefn( page_num, mediabox, dev, 1)
+                    writer.end_page()
+            else:
+                self.draw(None, ctm)
+            if not more:
+                break
+
+    @staticmethod
+    def write_stabilized(writer, contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
+        positions = list()
+        content = None
+        # Iterate until stable.
+        while 1:
+            content_prev = content
+            content = contentfn( positions)
+            stable = False
+            if content == content_prev:
+                stable = True
+            content2 = content
+            story = Story(content2, user_css, em, archive)
+
+            if add_header_ids:
+                story.add_header_ids()
+
+            positions = list()
+            def positionfn2(position):
+                #log(f"write_stabilized(): stable={stable} positionfn={positionfn} position={position}")
+                positions.append(position)
+                if stable and positionfn:
+                    positionfn(position)
+            story.write(
+                    writer if stable else None,
+                    rectfn,
+                    positionfn2,
+                    pagefn,
+                    )
+            if stable:
+                break
+
+    @staticmethod
+    def write_stabilized_with_links(contentfn, rectfn, user_css=None, em=12, positionfn=None, pagefn=None, archive=None, add_header_ids=True):
+        #log("write_stabilized_with_links()")
+        stream = io.BytesIO()
+        writer = DocumentWriter(stream)
+        positions = []
+        def positionfn2(position):
+            #log(f"write_stabilized_with_links(): position={position}")
+            positions.append(position)
+            if positionfn:
+                positionfn(position)
+        Story.write_stabilized(writer, contentfn, rectfn, user_css, em, positionfn2, pagefn, archive, add_header_ids)
+        writer.close()
+        stream.seek(0)
+        return Story.add_pdf_links(stream, positions)
+
+    def write_with_links(self, rectfn, positionfn=None, pagefn=None):
+        #log("write_with_links()")
+        stream = io.BytesIO()
+        writer = DocumentWriter(stream)
+        positions = []
+        def positionfn2(position):
+            #log(f"write_with_links(): position={position}")
+            positions.append(position)
+            if positionfn:
+                positionfn(position)
+        self.write(writer, rectfn, positionfn=positionfn2, pagefn=pagefn)
+        writer.close()
+        stream.seek(0)
+        return Story.add_pdf_links(stream, positions)
+
+class TextPage:
     def __init__(self, *args):
         if args_match(args, mupdf.FzRect):
             mediabox = args[0]
@@ -11788,6 +11787,10 @@ class TextPage:
             val["blocks"] = blocks
         return val
 
+    def extractHTML(self) -> str:
+        """Return page content as a HTML string."""
+        return self._extractText(1)
+
     def extractIMGINFO(self, hashes=0):
         """Return a list with image meta information."""
         block_n = -1
@@ -11823,6 +11826,26 @@ class TextPage:
             rc.append(block_dict)
         return rc
 
+    def extractJSON(self, cb=None, sort=False) -> str:
+        """Return 'extractDICT' converted to JSON format."""
+        import base64, json
+        val = self._textpage_dict(raw=False)
+
+        class b64encode(json.JSONEncoder):
+            def default(self, s):
+                if type(s) in (bytes, bytearray):
+                    return base64.b64encode(s).decode()
+
+        if cb is not None:
+            val["width"] = cb.width
+            val["height"] = cb.height
+        if sort is True:
+            blocks = val["blocks"]
+            blocks.sort(key=lambda b: (b["bbox"][3], b["bbox"][0]))
+            val["blocks"] = blocks
+        val = json.dumps(val, separators=(",", ":"), cls=b64encode, indent=1)
+        return val
+
     def extractRAWDICT(self, cb=None, sort=False) -> dict:
         """Return page content as a Python dict of images and text characters."""
         val =  self._textpage_dict(raw=True)
@@ -11833,6 +11856,26 @@ class TextPage:
             blocks = val["blocks"]
             blocks.sort(key=lambda b: (b["bbox"][3], b["bbox"][0]))
             val["blocks"] = blocks
+        return val
+
+    def extractRAWJSON(self, cb=None, sort=False) -> str:
+        """Return 'extractRAWDICT' converted to JSON format."""
+        import base64, json
+        val = self._textpage_dict(raw=True)
+
+        class b64encode(json.JSONEncoder):
+            def default(self,s):
+                if type(s) in (bytes, bytearray):
+                    return base64.b64encode(s).decode()
+
+        if cb is not None:
+            val["width"] = cb.width
+            val["height"] = cb.height
+        if sort is True:
+            blocks = val["blocks"]
+            blocks.sort(key=lambda b: (b["bbox"][3], b["bbox"][0]))
+            val["blocks"] = blocks
+        val = json.dumps(val, separators=(",", ":"), cls=b64encode, indent=1)
         return val
 
     def extractSelection(self, pointa, pointb):
@@ -11861,8 +11904,6 @@ class TextPage:
         else:
             rc = ''
         return rc
-
-    extractTEXT = extractText
 
     def extractWORDS(self):
         """Return a list with text word information."""
@@ -11909,57 +11950,13 @@ class TextPage:
                 buflen = 0
         return lines
 
-    def extractHTML(self) -> str:
-        """Return page content as a HTML string."""
-        return self._extractText(1)
-
-    def extractJSON(self, cb=None, sort=False) -> str:
-        """Return 'extractDICT' converted to JSON format."""
-        import base64, json
-        val = self._textpage_dict(raw=False)
-
-        class b64encode(json.JSONEncoder):
-            def default(self, s):
-                if type(s) in (bytes, bytearray):
-                    return base64.b64encode(s).decode()
-
-        if cb is not None:
-            val["width"] = cb.width
-            val["height"] = cb.height
-        if sort is True:
-            blocks = val["blocks"]
-            blocks.sort(key=lambda b: (b["bbox"][3], b["bbox"][0]))
-            val["blocks"] = blocks
-        val = json.dumps(val, separators=(",", ":"), cls=b64encode, indent=1)
-        return val
-
-    def extractRAWJSON(self, cb=None, sort=False) -> str:
-        """Return 'extractRAWDICT' converted to JSON format."""
-        import base64, json
-        val = self._textpage_dict(raw=True)
-
-        class b64encode(json.JSONEncoder):
-            def default(self,s):
-                if type(s) in (bytes, bytearray):
-                    return base64.b64encode(s).decode()
-
-        if cb is not None:
-            val["width"] = cb.width
-            val["height"] = cb.height
-        if sort is True:
-            blocks = val["blocks"]
-            blocks.sort(key=lambda b: (b["bbox"][3], b["bbox"][0]))
-            val["blocks"] = blocks
-        val = json.dumps(val, separators=(",", ":"), cls=b64encode, indent=1)
-        return val
+    def extractXHTML(self) -> str:
+        """Return page content as a XHTML string."""
+        return self._extractText(4)
 
     def extractXML(self) -> str:
         """Return page content as a XML string."""
         return self._extractText(3)
-
-    def extractXHTML(self) -> str:
-        """Return page content as a XHTML string."""
-        return self._extractText(4)
 
     def poolsize(self):
         """TextPage current poolsize."""
@@ -12006,9 +12003,10 @@ class TextPage:
             items -= 1  # reduce item count
         return val
 
+    extractTEXT = extractText
+
 
 class TextWriter:
-
     def __init__(self, page_rect, opacity=1, color=None):
         """Stores text spans for later output on compatible PDF pages."""
         self.this = mupdf.fz_new_text()
@@ -12268,13 +12266,6 @@ class TextWriter:
 
 
 class IRect:
-    """IRect() - all zeros
-    IRect(x0, y0, x1, y1) - 4 coordinates
-    IRect(top-left, x1, y1) - point and 2 coordinates
-    IRect(x0, y0, bottom-right) - 2 coordinates and point
-    IRect(top-left, bottom-right) - 2 points
-    IRect(sequ) - new from sequence or rect-like
-    """
     def __add__(self, p):
         return Rect.__add__(self, p).round()
 
@@ -12289,15 +12280,15 @@ class IRect:
             return False
         return len(r) == 4 and self.x0 == r[0] and self.y0 == r[1] and self.x1 == r[2] and self.y1 == r[3]
 
+    def __getitem__(self, i):
+        return (self.x0, self.y0, self.x1, self.y1)[i]
+
     def __init__(self, *args):
         x0, y0, x1, y1 = util_make_irect( *args)
         self.x0 = int( x0)
         self.y0 = int( y0)
         self.x1 = int( x1)
         self.y1 = int( y1)
-
-    def __getitem__(self, i):
-        return (self.x0, self.y0, self.x1, self.y1)[i]
 
     def __len__(self):
         return 4
@@ -12343,9 +12334,6 @@ class IRect:
         """Bottom-right corner."""
         return Point(self.x1, self.y1)
 
-    br = bottom_right
-    bl = bottom_left
-
     @property
     def height(self):
         return max(0, self.y1 - self.y0)
@@ -12382,6 +12370,14 @@ class IRect:
         """True if rectangle is valid."""
         return self.x0 <= self.x1 and self.y0 <= self.y1
 
+    def morph(self, p, m):
+        """Morph with matrix-like m and point-like p.
+
+        Returns a new quad."""
+        if self.is_infinite:
+            return INFINITE_QUAD()
+        return self.quad.morph(p, m)
+
     def norm(self):
         return math.sqrt(sum([c*c for c in self]))
 
@@ -12398,14 +12394,6 @@ class IRect:
         """Return Quad version of rectangle."""
         return Quad(self.tl, self.tr, self.bl, self.br)
 
-    def morph(self, p, m):
-        """Morph with matrix-like m and point-like p.
-
-        Returns a new quad."""
-        if self.is_infinite:
-            return INFINITE_QUAD()
-        return self.quad.morph(p, m)
-
     @property
     def rect(self):
         return Rect(self)
@@ -12419,9 +12407,6 @@ class IRect:
     def top_right(self):
         """Top-right corner."""
         return Point(self.x1, self.y0)
-
-    tl = top_left
-    tr = top_right
 
     def torect(self, r):
         """Return matrix that converts to target rect."""
@@ -12441,6 +12426,19 @@ class IRect:
     def width(self):
         return max(0, self.x1 - self.x0)
 
+
+    """IRect() - all zeros
+    IRect(x0, y0, x1, y1) - 4 coordinates
+    IRect(top-left, x1, y1) - point and 2 coordinates
+    IRect(x0, y0, bottom-right) - 2 coordinates and point
+    IRect(top-left, bottom-right) - 2 points
+    IRect(sequ) - new from sequence or rect-like
+    """
+    br = bottom_right
+    bl = bottom_left
+
+    tl = top_left
+    tr = top_right
 
 # Data
 #
@@ -17776,7 +17774,6 @@ def jm_lineart_ignore_text(dev, text, ctm):
 
 
 class Walker(mupdf.FzPathWalker2):
-
     def __init__(self, dev):
         super().__init__()
         self.use_virtual_moveto()
@@ -17785,47 +17782,17 @@ class Walker(mupdf.FzPathWalker2):
         self.use_virtual_closepath()
         self.dev = dev
 
-    def moveto(self, ctx, x, y):   # trace_moveto().
-        if 0 and isinstance(self.dev.pathdict, dict):
-            log(f'self.dev.pathdict:')
-            for n, v in self.dev.pathdict.items():
-                log( '    {type(n)=} {len(n)=} {n!r} {n}: {v!r}: {v}')
-        #log(f'Walker(): {type(self.dev.pathdict)=} {self.dev.pathdict=}')
-        try:
-            #log( '{=dev.ctm type(dev.ctm)}')
-            self.dev.lastpoint = mupdf.fz_transform_point(
-                    mupdf.fz_make_point(x, y),
-                    self.dev.ctm,
-                    )
-            if mupdf.fz_is_infinite_rect( self.dev.pathrect):
-                self.dev.pathrect = mupdf.fz_make_rect(
-                        self.dev.lastpoint.x,
-                        self.dev.lastpoint.y,
-                        self.dev.lastpoint.x,
-                        self.dev.lastpoint.y,
-                        )
-            self.dev.linecount = 0  # reset # of consec. lines
-        except Exception as e:
-            if g_exceptions_verbose:    exception_info()
-            raise
-
-    def lineto(self, ctx, x, y):   # trace_lineto().
+    def closepath(self, ctx):    # trace_close().
         #log(f'Walker(): {self.dev.pathdict=}')
         try:
-            p1 = mupdf.fz_transform_point( mupdf.fz_make_point(x, y), self.dev.ctm)
-            self.dev.pathrect = mupdf.fz_include_point_in_rect( self.dev.pathrect, p1)
-            list_ = (
-                    'l',
-                    JM_py_from_point( self.dev.lastpoint),
-                    JM_py_from_point(p1),
-                    )
-            self.dev.lastpoint = p1
-            items = self.dev.pathdict[ dictkey_items]
-            items.append( list_)
-            self.dev.linecount += 1 # counts consecutive lines
-            if self.dev.linecount == 4 and self.dev.path_type != trace_device_FILL_PATH:
-                # shrink to "re" or "qu" item
-                jm_checkquad(self.dev)
+            if self.dev.linecount == 3:
+                if jm_checkrect(self.dev):
+                    #log(f'end1: {self.dev.pathdict=}')
+                    return
+            #log('setting self.dev.pathdict[ "closePath"] to true')
+            self.dev.pathdict[ "closePath"] = True
+            self.dev.linecount = 0   # reset # of consec. lines
+            #log(f'end2: {self.dev.pathdict=}')
         except Exception as e:
             if g_exceptions_verbose:    exception_info()
             raise
@@ -17857,20 +17824,51 @@ class Walker(mupdf.FzPathWalker2):
             if g_exceptions_verbose:    exception_info()
             raise
 
-    def closepath(self, ctx):    # trace_close().
+    def lineto(self, ctx, x, y):   # trace_lineto().
         #log(f'Walker(): {self.dev.pathdict=}')
         try:
-            if self.dev.linecount == 3:
-                if jm_checkrect(self.dev):
-                    #log(f'end1: {self.dev.pathdict=}')
-                    return
-            #log('setting self.dev.pathdict[ "closePath"] to true')
-            self.dev.pathdict[ "closePath"] = True
-            self.dev.linecount = 0   # reset # of consec. lines
-            #log(f'end2: {self.dev.pathdict=}')
+            p1 = mupdf.fz_transform_point( mupdf.fz_make_point(x, y), self.dev.ctm)
+            self.dev.pathrect = mupdf.fz_include_point_in_rect( self.dev.pathrect, p1)
+            list_ = (
+                    'l',
+                    JM_py_from_point( self.dev.lastpoint),
+                    JM_py_from_point(p1),
+                    )
+            self.dev.lastpoint = p1
+            items = self.dev.pathdict[ dictkey_items]
+            items.append( list_)
+            self.dev.linecount += 1 # counts consecutive lines
+            if self.dev.linecount == 4 and self.dev.path_type != trace_device_FILL_PATH:
+                # shrink to "re" or "qu" item
+                jm_checkquad(self.dev)
         except Exception as e:
             if g_exceptions_verbose:    exception_info()
             raise
+
+    def moveto(self, ctx, x, y):   # trace_moveto().
+        if 0 and isinstance(self.dev.pathdict, dict):
+            log(f'self.dev.pathdict:')
+            for n, v in self.dev.pathdict.items():
+                log( '    {type(n)=} {len(n)=} {n!r} {n}: {v!r}: {v}')
+        #log(f'Walker(): {type(self.dev.pathdict)=} {self.dev.pathdict=}')
+        try:
+            #log( '{=dev.ctm type(dev.ctm)}')
+            self.dev.lastpoint = mupdf.fz_transform_point(
+                    mupdf.fz_make_point(x, y),
+                    self.dev.ctm,
+                    )
+            if mupdf.fz_is_infinite_rect( self.dev.pathrect):
+                self.dev.pathrect = mupdf.fz_make_rect(
+                        self.dev.lastpoint.x,
+                        self.dev.lastpoint.y,
+                        self.dev.lastpoint.x,
+                        self.dev.lastpoint.y,
+                        )
+            self.dev.linecount = 0  # reset # of consec. lines
+        except Exception as e:
+            if g_exceptions_verbose:    exception_info()
+            raise
+
 
 def jm_lineart_path(dev, ctx, path):
     '''
@@ -18155,9 +18153,6 @@ def compute_scissor(dev):
     return scissor
 
 class JM_new_lineart_device_Device(mupdf.FzDevice2):
-    '''
-    LINEART device for Python method Page.get_cdrawings()
-    '''
     def __init__(self, out, clips, method):
         #log(f'JM_new_lineart_device_Device.__init__()')
         super().__init__()
@@ -18204,6 +18199,9 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
         self.linecount = 0
         self.path_type = 0
     
+    '''
+    LINEART device for Python method Page.get_cdrawings()
+    '''
     #drop_device = jm_lineart_drop_device
     
     fill_path           = jm_lineart_fill_path
@@ -18231,9 +18229,6 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
 
 
 class JM_new_texttrace_device(mupdf.FzDevice2):
-    '''
-    Trace TEXT device for Python method Page.get_texttrace()
-    '''
     def __init__(self, out):
         super().__init__()
         self.use_virtual_fill_path()
@@ -18271,6 +18266,9 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
         self.path_type = 0
         self.layer_name = None
     
+    '''
+    Trace TEXT device for Python method Page.get_texttrace()
+    '''
     fill_path = jm_increase_seqno;
     stroke_path = jm_dev_linewidth
     fill_text = jm_lineart_fill_text
@@ -19076,10 +19074,10 @@ def get_pdf_str(s: str) -> str:
 
 
 class ElementPosition(object):
-    """Convert a dictionary with element position information to an object."""
     def __init__(self):
         pass
 
+    """Convert a dictionary with element position information to an object."""
 def make_story_elpos():
     return ElementPosition()
 
@@ -20099,102 +20097,6 @@ def vdist(dir, a, b):
 
 
 class TOOLS:
-    '''
-    We use @staticmethod to avoid the need to create an instance of this class.
-    '''
-
-    @staticmethod
-    def _get_all_contents(page):
-        page = page.this.pdf_page_from_fz_page()
-        res = JM_read_contents(page.obj())
-        result = JM_BinFromBuffer( res)
-        return result
-
-    # fixme: also defined at top-level.
-    JM_annot_id_stem = 'fitz'
-
-    fitz_config = {
-                "plotter-g": True,
-                "plotter-rgb": True,
-                "plotter-cmyk": True,
-                "plotter-n": True,
-                "pdf": True,
-                "xps": True,
-                "svg": True,
-                "cbz": True,
-                "img": True,
-                "html": True,
-                "epub": True,
-                "jpx": True,
-                "js": True,
-                "tofu": True,
-                "tofu-cjk": True,
-                "tofu-cjk-ext": True,
-                "tofu-cjk-lang": True,
-                "tofu-emoji": True,
-                "tofu-historic": True,
-                "tofu-symbol": True,
-                "tofu-sil": True,
-                "icc": True,
-                "base14": True,
-                "py-memory": True,
-                }
-    """PyMuPDF configuration parameters."""
-
-    @staticmethod
-    def mupdf_display_errors(on=None):
-        '''
-        Set MuPDF error display to True or False.
-        '''
-        global JM_mupdf_show_errors
-        if on is not None:
-            JM_mupdf_show_errors = bool(on)
-        return JM_mupdf_show_errors
-
-    @staticmethod
-    def mupdf_display_warnings(on=None):
-        '''
-        Set MuPDF warnings display to True or False.
-        '''
-        global JM_mupdf_show_warnings
-        if on is not None:
-            JM_mupdf_show_warnings = bool(on)
-        return JM_mupdf_show_warnings
-
-    @staticmethod
-    def mupdf_warnings(reset=1):
-        if reset:
-            TOOLS.reset_mupdf_warnings()
-        return JM_mupdf_warnings_store
-
-    @staticmethod
-    def reset_mupdf_warnings():
-        global JM_mupdf_warnings_store
-        JM_mupdf_warnings_store = list()
-        
-
-    @staticmethod
-    def set_annot_stem( stem=None):
-        global JM_annot_id_stem
-        if stem is None:
-            return JM_annot_id_stem
-        len_ = len(stem) + 1
-        if len_ > 50:
-            len_ = 50
-        JM_annot_id_stem = stem[:50]
-        return JM_annot_id_stem
-
-    @staticmethod
-    def set_icc( on=0):
-        """Set ICC color handling on or off."""
-        if on:
-            if FZ_ENABLE_ICC:
-                mupdf.fz_enable_icc()
-            else:
-                RAISEPY( "MuPDF built w/o ICC support",PyExc_ValueError);
-        elif FZ_ENABLE_ICC:
-            fz_disable_icc()
- 
     def _derotate_matrix(page):
         if isinstance(page, mupdf.PdfPage):
             return JM_py_from_matrix(JM_derotate_page_matrix(page))
@@ -20220,6 +20122,13 @@ class TOOLS:
         if not widget.script_calc:
             widget.script_calc = None
         return val
+
+    @staticmethod
+    def _get_all_contents(page):
+        page = page.this.pdf_page_from_fz_page()
+        res = JM_read_contents(page.obj())
+        result = JM_BinFromBuffer( res)
+        return result
 
     @staticmethod
     def _insert_contents(page, newcont, overlay=1):
@@ -20270,6 +20179,56 @@ class TOOLS:
         return m, im, L, R, w, scol, fcol, opacity
 
     @staticmethod
+    def _le_butt(annot, p1, p2, lr, fill_color):
+        """Make stream commands for butt line end symbol. "lr" denotes left (False) or right point.
+        """
+        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
+        shift = 3
+        d = shift * max(1, w)
+        M = R if lr else L
+        top = (M + (0, -d/2.)) * im
+        bot = (M + (0, d/2.)) * im
+        ap = "\nq\n%s%f %f m\n" % (opacity, top.x, top.y)
+        ap += "%f %f l\n" % (bot.x, bot.y)
+        ap += "%g w\n" % w
+        ap += scol + "s\nQ\n"
+        return ap
+
+    @staticmethod
+    def _le_circle(annot, p1, p2, lr, fill_color):
+        """Make stream commands for circle line end symbol. "lr" denotes left (False) or right point.
+        """
+        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
+        shift = 2.5             # 2*shift*width = length of square edge
+        d = shift * max(1, w)
+        M = R - (d/2., 0) if lr else L + (d/2., 0)
+        r = Rect(M, M) + (-d, -d, d, d)         # the square
+        ap = "q\n" + opacity + TOOLS._oval_string(r.tl * im, r.tr * im, r.br * im, r.bl * im)
+        ap += "%g w\n" % w
+        ap += scol + fcol + "b\nQ\n"
+        return ap
+
+    @staticmethod
+    def _le_closedarrow(annot, p1, p2, lr, fill_color):
+        """Make stream commands for closed arrow line end symbol. "lr" denotes left (False) or right point.
+        """
+        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
+        shift = 2.5
+        d = shift * max(1, w)
+        p2 = R + (d/2., 0) if lr else L - (d/2., 0)
+        p1 = p2 + (-2*d, -d) if lr else p2 + (2*d, -d)
+        p3 = p2 + (-2*d, d) if lr else p2 + (2*d, d)
+        p1 *= im
+        p2 *= im
+        p3 *= im
+        ap = "\nq\n%s%f %f m\n" % (opacity, p1.x, p1.y)
+        ap += "%f %f l\n" % (p2.x, p2.y)
+        ap += "%f %f l\n" % (p3.x, p3.y)
+        ap += "%g w\n" % w
+        ap += scol + fcol + "b\nQ\n"
+        return ap
+
+    @staticmethod
     def _le_diamond(annot, p1, p2, lr, fill_color):
         """Make stream commands for diamond line end symbol. "lr" denotes left (False) or right point.
         """
@@ -20289,74 +20248,6 @@ class TOOLS:
         ap += "%f %f l\n"   % (p.x, p.y)
         ap += "%g w\n" % w
         ap += scol + fcol + "b\nQ\n"
-        return ap
-
-    @staticmethod
-    def _le_square(annot, p1, p2, lr, fill_color):
-        """Make stream commands for square line end symbol. "lr" denotes left (False) or right point.
-        """
-        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
-        shift = 2.5             # 2*shift*width = length of square edge
-        d = shift * max(1, w)
-        M = R - (d/2., 0) if lr else L + (d/2., 0)
-        r = Rect(M, M) + (-d, -d, d, d)         # the square
-        # the square makes line longer by (2*shift - 1)*width
-        p = r.tl * im
-        ap = "q\n%s%f %f m\n" % (opacity, p.x, p.y)
-        p = r.tr * im
-        ap += "%f %f l\n"   % (p.x, p.y)
-        p = r.br * im
-        ap += "%f %f l\n"   % (p.x, p.y)
-        p = r.bl * im
-        ap += "%f %f l\n"   % (p.x, p.y)
-        ap += "%g w\n" % w
-        ap += scol + fcol + "b\nQ\n"
-        return ap
-
-    @staticmethod
-    def _le_circle(annot, p1, p2, lr, fill_color):
-        """Make stream commands for circle line end symbol. "lr" denotes left (False) or right point.
-        """
-        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
-        shift = 2.5             # 2*shift*width = length of square edge
-        d = shift * max(1, w)
-        M = R - (d/2., 0) if lr else L + (d/2., 0)
-        r = Rect(M, M) + (-d, -d, d, d)         # the square
-        ap = "q\n" + opacity + TOOLS._oval_string(r.tl * im, r.tr * im, r.br * im, r.bl * im)
-        ap += "%g w\n" % w
-        ap += scol + fcol + "b\nQ\n"
-        return ap
-
-    @staticmethod
-    def _le_butt(annot, p1, p2, lr, fill_color):
-        """Make stream commands for butt line end symbol. "lr" denotes left (False) or right point.
-        """
-        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
-        shift = 3
-        d = shift * max(1, w)
-        M = R if lr else L
-        top = (M + (0, -d/2.)) * im
-        bot = (M + (0, d/2.)) * im
-        ap = "\nq\n%s%f %f m\n" % (opacity, top.x, top.y)
-        ap += "%f %f l\n" % (bot.x, bot.y)
-        ap += "%g w\n" % w
-        ap += scol + "s\nQ\n"
-        return ap
-
-    @staticmethod
-    def _le_slash(annot, p1, p2, lr, fill_color):
-        """Make stream commands for slash line end symbol. "lr" denotes left (False) or right point.
-        """
-        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
-        rw = 1.1547 * max(1, w) * 1.0         # makes rect diagonal a 30 deg inclination
-        M = R if lr else L
-        r = Rect(M.x - rw, M.y - 2 * w, M.x + rw, M.y + 2 * w)
-        top = r.tl * im
-        bot = r.br * im
-        ap = "\nq\n%s%f %f m\n" % (opacity, top.x, top.y)
-        ap += "%f %f l\n" % (bot.x, bot.y)
-        ap += "%g w\n" % w
-        ap += scol + "s\nQ\n"
         return ap
 
     @staticmethod
@@ -20380,15 +20271,15 @@ class TOOLS:
         return ap
 
     @staticmethod
-    def _le_closedarrow(annot, p1, p2, lr, fill_color):
-        """Make stream commands for closed arrow line end symbol. "lr" denotes left (False) or right point.
+    def _le_rclosedarrow(annot, p1, p2, lr, fill_color):
+        """Make stream commands for right closed arrow line end symbol. "lr" denotes left (False) or right point.
         """
         m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
         shift = 2.5
         d = shift * max(1, w)
-        p2 = R + (d/2., 0) if lr else L - (d/2., 0)
-        p1 = p2 + (-2*d, -d) if lr else p2 + (2*d, -d)
-        p3 = p2 + (-2*d, d) if lr else p2 + (2*d, d)
+        p2 = R - (2*d, 0) if lr else L + (2*d, 0)
+        p1 = p2 + (2*d, -d) if lr else p2 + (-2*d, -d)
+        p3 = p2 + (2*d, d) if lr else p2 + (-2*d, d)
         p1 *= im
         p2 *= im
         p3 *= im
@@ -20420,21 +20311,39 @@ class TOOLS:
         return ap
 
     @staticmethod
-    def _le_rclosedarrow(annot, p1, p2, lr, fill_color):
-        """Make stream commands for right closed arrow line end symbol. "lr" denotes left (False) or right point.
+    def _le_slash(annot, p1, p2, lr, fill_color):
+        """Make stream commands for slash line end symbol. "lr" denotes left (False) or right point.
         """
         m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
-        shift = 2.5
+        rw = 1.1547 * max(1, w) * 1.0         # makes rect diagonal a 30 deg inclination
+        M = R if lr else L
+        r = Rect(M.x - rw, M.y - 2 * w, M.x + rw, M.y + 2 * w)
+        top = r.tl * im
+        bot = r.br * im
+        ap = "\nq\n%s%f %f m\n" % (opacity, top.x, top.y)
+        ap += "%f %f l\n" % (bot.x, bot.y)
+        ap += "%g w\n" % w
+        ap += scol + "s\nQ\n"
+        return ap
+
+    @staticmethod
+    def _le_square(annot, p1, p2, lr, fill_color):
+        """Make stream commands for square line end symbol. "lr" denotes left (False) or right point.
+        """
+        m, im, L, R, w, scol, fcol, opacity = TOOLS._le_annot_parms(annot, p1, p2, fill_color)
+        shift = 2.5             # 2*shift*width = length of square edge
         d = shift * max(1, w)
-        p2 = R - (2*d, 0) if lr else L + (2*d, 0)
-        p1 = p2 + (2*d, -d) if lr else p2 + (-2*d, -d)
-        p3 = p2 + (2*d, d) if lr else p2 + (-2*d, d)
-        p1 *= im
-        p2 *= im
-        p3 *= im
-        ap = "\nq\n%s%f %f m\n" % (opacity, p1.x, p1.y)
-        ap += "%f %f l\n" % (p2.x, p2.y)
-        ap += "%f %f l\n" % (p3.x, p3.y)
+        M = R - (d/2., 0) if lr else L + (d/2., 0)
+        r = Rect(M, M) + (-d, -d, d, d)         # the square
+        # the square makes line longer by (2*shift - 1)*width
+        p = r.tl * im
+        ap = "q\n%s%f %f m\n" % (opacity, p.x, p.y)
+        p = r.tr * im
+        ap += "%f %f l\n"   % (p.x, p.y)
+        p = r.br * im
+        ap += "%f %f l\n"   % (p.x, p.y)
+        p = r.bl * im
+        ap += "%f %f l\n"   % (p.x, p.y)
         ap += "%g w\n" % w
         ap += scol + fcol + "b\nQ\n"
         return ap
@@ -20557,13 +20466,6 @@ class TOOLS:
             return
 
     @staticmethod
-    def glyph_cache_empty():
-        '''
-        Empty the glyph cache.
-        '''
-        mupdf.fz_purge_glyph_cache()
-
-    @staticmethod
     def fitz_config_():
         '''
         Was previously hidden by Tools.fitz_config list?
@@ -20577,6 +20479,13 @@ class TOOLS:
         return TOOLS_JM_UNIQUE_ID
 
     @staticmethod
+    def glyph_cache_empty():
+        '''
+        Empty the glyph cache.
+        '''
+        mupdf.fz_purge_glyph_cache()
+
+    @staticmethod
     def image_profile(stream, keep_image=0):
         '''
         Metadata of an image binary stream.
@@ -20584,9 +20493,59 @@ class TOOLS:
         return JM_image_profile(stream, keep_image)
     
     @staticmethod
+    def mupdf_display_errors(on=None):
+        '''
+        Set MuPDF error display to True or False.
+        '''
+        global JM_mupdf_show_errors
+        if on is not None:
+            JM_mupdf_show_errors = bool(on)
+        return JM_mupdf_show_errors
+
+    @staticmethod
+    def mupdf_display_warnings(on=None):
+        '''
+        Set MuPDF warnings display to True or False.
+        '''
+        global JM_mupdf_show_warnings
+        if on is not None:
+            JM_mupdf_show_warnings = bool(on)
+        return JM_mupdf_show_warnings
+
+    @staticmethod
     def mupdf_version():
         '''Get version of MuPDF binary build.'''
         return mupdf.FZ_VERSION
+
+    @staticmethod
+    def mupdf_warnings(reset=1):
+        if reset:
+            TOOLS.reset_mupdf_warnings()
+        return JM_mupdf_warnings_store
+
+    @staticmethod
+    def reset_mupdf_warnings():
+        global JM_mupdf_warnings_store
+        JM_mupdf_warnings_store = list()
+        
+
+    @staticmethod
+    def set_aa_level(level):
+        '''
+        Set anti-aliasing level.
+        '''
+        mupdf.fz_set_aa_level(level)
+    
+    @staticmethod
+    def set_annot_stem( stem=None):
+        global JM_annot_id_stem
+        if stem is None:
+            return JM_annot_id_stem
+        len_ = len(stem) + 1
+        if len_ > 50:
+            len_ = 50
+        JM_annot_id_stem = stem[:50]
+        return JM_annot_id_stem
 
     @staticmethod
     def set_font_width(doc, xref, width):
@@ -20606,6 +20565,24 @@ class TOOLS:
                 mupdf.pdf_dict_put(dfont, PDF_NAME('W'), warray)
         return True
 
+    @staticmethod
+    def set_graphics_min_line_width(min_line_width):
+        '''
+        Set the graphics minimum line width.
+        '''
+        mupdf.fz_set_graphics_min_line_width(min_line_width)
+
+    @staticmethod
+    def set_icc( on=0):
+        """Set ICC color handling on or off."""
+        if on:
+            if FZ_ENABLE_ICC:
+                mupdf.fz_enable_icc()
+            else:
+                RAISEPY( "MuPDF built w/o ICC support",PyExc_ValueError);
+        elif FZ_ENABLE_ICC:
+            fz_disable_icc()
+ 
     @staticmethod
     def set_low_memory( on=None):
         """Set / unset MuPDF device caching."""
@@ -20633,20 +20610,6 @@ class TOOLS:
             g_subset_fontnames = bool(on)
         return g_subset_fontnames
     
-    @staticmethod
-    def set_aa_level(level):
-        '''
-        Set anti-aliasing level.
-        '''
-        mupdf.fz_set_aa_level(level)
-    
-    @staticmethod
-    def set_graphics_min_line_width(min_line_width):
-        '''
-        Set the graphics minimum line width.
-        '''
-        mupdf.fz_set_graphics_min_line_width(min_line_width)
-
     @staticmethod
     def show_aa_level():
         '''
@@ -20696,6 +20659,41 @@ class TOOLS:
             g_skip_quad_corrections = bool(on)
         return g_skip_quad_corrections
 
+
+    '''
+    We use @staticmethod to avoid the need to create an instance of this class.
+    '''
+
+    # fixme: also defined at top-level.
+    JM_annot_id_stem = 'fitz'
+
+    fitz_config = {
+                "plotter-g": True,
+                "plotter-rgb": True,
+                "plotter-cmyk": True,
+                "plotter-n": True,
+                "pdf": True,
+                "xps": True,
+                "svg": True,
+                "cbz": True,
+                "img": True,
+                "html": True,
+                "epub": True,
+                "jpx": True,
+                "js": True,
+                "tofu": True,
+                "tofu-cjk": True,
+                "tofu-cjk-ext": True,
+                "tofu-cjk-lang": True,
+                "tofu-emoji": True,
+                "tofu-historic": True,
+                "tofu-symbol": True,
+                "tofu-sil": True,
+                "icc": True,
+                "base14": True,
+                "py-memory": True,
+                }
+    """PyMuPDF configuration parameters."""
 
 # We cannot import utils earlier because it imports this fitz.py file itself
 # and uses some fitz.* types in function typing.
