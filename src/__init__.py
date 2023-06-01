@@ -4286,8 +4286,8 @@ class Document:
                     );
         else:
             pdfout = _as_pdf_document(self)
-            pdfsrc = docsrc._this_as_pdf_document()
-            outCount = mupdf.fz_count_pages(doc)
+            pdfsrc = _as_pdf_document(docsrc)
+            outCount = mupdf.fz_count_pages(self)
             srcCount = mupdf.fz_count_pages(docsrc.this)
 
             # local copies of page numbers
