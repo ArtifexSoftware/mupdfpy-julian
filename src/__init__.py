@@ -2693,8 +2693,7 @@ class Document:
         mupdf.pdf_delete_object(pdf, xref)
 
     def _embeddedFileGet(self, idx):
-        doc = self.this
-        pdf = mupdf.pdf_document_from_fz_document(doc)
+        pdf = _as_pdf_document(self)
         names = mupdf.pdf_dict_getl(
                 mupdf.pdf_trailer(pdf),
                 PDF_NAME('Root'),
@@ -2705,21 +2704,6 @@ class Document:
         entry = mupdf.pdf_array_get(names, 2*idx+1)
         filespec = mupdf.pdf_dict_getl(entry, PDF_NAME('EF'), PDF_NAME('F'))
         buf = mupdf.pdf_load_stream(filespec)
-        cont = JM_BinFromBuffer(buf)
-        return cont
-
-    def _embeddedFileGet(self, idx):
-        pdf = _as_pdf_document(self)
-        names = mupdf.pdf_dict_getl(
-                mupdf.pdf_trailer(pdf),
-                PDF_NAME('Root'),
-                PDF_NAME('Names'),
-                PDF_NAME('EmbeddedFiles'),
-                PDF_NAME('Names'),
-                )
-        entry = mupdf.pdf_array_get(names, 2*idx+1)
-        filespec = mupdf.pdf_dict_getl(entry, PDF_NAME('EF'), PDF_NAME('F'));
-        buf = mupdf.pdf_load_stream(filespec);
         cont = JM_BinFromBuffer(buf)
         return cont
 
@@ -3455,6 +3439,7 @@ class Document:
 
     def close_internal(self):
         self.this = None
+
     def convert_to_pdf(self, from_page=0, to_page=-1, rotate=0):
         """Convert document to a PDF, selecting page range and optional rotation. Output bytes object."""
         if self.is_closed or self.isEncrypted:
@@ -5665,24 +5650,20 @@ class Document:
             return False
 
     outline = property(lambda self: self._outline)
-
     tobytes = write
-
     is_stream = xref_is_stream
-
-    outline = property(lambda self: self._outline)
 
 
 open = Document
 
 
 class DocumentWriter:
+
     def __enter__(self):
         return self
 
     def __exit__(self, *args):
         self.close()
-
 
     def __init__(self, path, options=''):
         if isinstance( path, str):
@@ -5718,8 +5699,10 @@ class DocumentWriter:
         
     def end_page( self):
         mupdf.fz_end_page( self.this)
-    
+
+
 class Font:
+
     def __del__(self):
         if type(self) is not Font:
             return None
@@ -5980,6 +5963,7 @@ class Font:
 
 
 class Graftmap:
+
     def __del__(self):
         if not type(self) is Graftmap:
             return
@@ -6182,6 +6166,7 @@ class Link:
 
 
 class Matrix:
+
     def __abs__(self):
         return math.sqrt(sum([c*c for c in self]))
 
@@ -6408,6 +6393,7 @@ class Matrix:
 
 class IdentityMatrix(Matrix):
     """Identity matrix [1, 0, 0, 1, 0, 0]"""
+
     def __hash__(self):
         return hash((1,0,0,1,0,0))
 
@@ -6434,6 +6420,7 @@ Identity = IdentityMatrix()
 
 class linkDest:
     """link or outline destination details"""
+
     def __init__(self, obj, rlink):
         isExt = obj.is_external
         isInt = not isExt
@@ -6763,7 +6750,9 @@ class Widget:
 
 from . import _extra
 
+
 class Outline:
+
     def __init__(self, ol):
         self.this = ol
 
@@ -6834,8 +6823,9 @@ class Outline:
     def y(self):
         return self.this.m_internal.y
 
-
     __slots__ = [ 'this']
+
+
 def _make_PdfFilterOptions(recurse, instance_forms, ascii, sanitize, sopts=None):
     '''
     Returns a mupdf.PdfFilterOptions instance.
@@ -7618,9 +7608,6 @@ class Page:
         doc.xref_set_key(self.xref, boxtype, "[%g %g %g %g]" % tuple(rect))
 
     def _set_resource_property(self, name, xref):
-        '''
-        page list Resource/Properties
-        '''
         page = self._pdf_page()
         ASSERT_PDF(page);
         JM_set_resource_property(page.obj(), name, xref)
@@ -8324,11 +8311,12 @@ class Page:
         return val
 
         class Drawpath(object):
+            """Reflects a path dictionary from get_cdrawings()."""
             def __init__(self, **args):
                 self.__dict__.update(args)
         
-            """Reflects a path dictionary from get_cdrawings()."""
         class Drawpathlist(object):
+            """List of Path objects representing get_cdrawings() output."""
             def __getitem__(self, item):
                 return self.paths.__getitem__(item)
 
@@ -8343,7 +8331,6 @@ class Page:
 
             def __len__(self):
                 return self.paths.__len__()
-
 
             def append(self, path):
                 self.paths.append(path)
@@ -8419,7 +8406,6 @@ class Page:
                     ngroups.append(p)
                 return ngroups
 
-            """List of Path objects representing get_cdrawings() output."""
         def get_lineart(self) -> object:
             """Get page drawings paths.
 
@@ -9012,6 +8998,7 @@ class Page:
 
 
 class Pixmap:
+
     def __init__(self, *args):
         """
         Pixmap(colorspace, irect, alpha) - empty pixmap.
@@ -10226,7 +10213,8 @@ class Quad:
 
 
 class Rect:
-    """Rect() - all zeros
+    """
+    Rect() - all zeros
     Rect(x0, y0, x1, y1)
     Rect(top-left, x1, y1)
     Rect(x0, y0, bottom-right)
@@ -11529,7 +11517,6 @@ class Story:
         dom = self.document()
         return dom.bodytag()
         
-
     def document( self):
         dom = mupdf.fz_story_document( self.this)
         return Xml( dom)
@@ -11681,6 +11668,7 @@ class Story:
         writer.close()
         stream.seek(0)
         return Story.add_pdf_links(stream, positions)
+
 
 class TextPage:
     def __init__(self, *args):
@@ -12007,6 +11995,7 @@ class TextPage:
 
 
 class TextWriter:
+
     def __init__(self, page_rect, opacity=1, color=None):
         """Stores text spans for later output on compatible PDF pages."""
         self.this = mupdf.fz_new_text()
@@ -12266,6 +12255,15 @@ class TextWriter:
 
 
 class IRect:
+    """
+    IRect() - all zeros
+    IRect(x0, y0, x1, y1) - 4 coordinates
+    IRect(top-left, x1, y1) - point and 2 coordinates
+    IRect(x0, y0, bottom-right) - 2 coordinates and point
+    IRect(top-left, bottom-right) - 2 points
+    IRect(sequ) - new from sequence or rect-like
+    """
+
     def __add__(self, p):
         return Rect.__add__(self, p).round()
 
@@ -12427,16 +12425,8 @@ class IRect:
         return max(0, self.x1 - self.x0)
 
 
-    """IRect() - all zeros
-    IRect(x0, y0, x1, y1) - 4 coordinates
-    IRect(top-left, x1, y1) - point and 2 coordinates
-    IRect(x0, y0, bottom-right) - 2 coordinates and point
-    IRect(top-left, bottom-right) - 2 points
-    IRect(sequ) - new from sequence or rect-like
-    """
     br = bottom_right
     bl = bottom_left
-
     tl = top_left
     tr = top_right
 
@@ -17774,6 +17764,7 @@ def jm_lineart_ignore_text(dev, text, ctm):
 
 
 class Walker(mupdf.FzPathWalker2):
+
     def __init__(self, dev):
         super().__init__()
         self.use_virtual_moveto()
@@ -18153,6 +18144,10 @@ def compute_scissor(dev):
     return scissor
 
 class JM_new_lineart_device_Device(mupdf.FzDevice2):
+    '''
+    LINEART device for Python method Page.get_cdrawings()
+    '''
+
     def __init__(self, out, clips, method):
         #log(f'JM_new_lineart_device_Device.__init__()')
         super().__init__()
@@ -18199,9 +18194,6 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
         self.linecount = 0
         self.path_type = 0
     
-    '''
-    LINEART device for Python method Page.get_cdrawings()
-    '''
     #drop_device = jm_lineart_drop_device
     
     fill_path           = jm_lineart_fill_path
@@ -18229,6 +18221,10 @@ class JM_new_lineart_device_Device(mupdf.FzDevice2):
 
 
 class JM_new_texttrace_device(mupdf.FzDevice2):
+    '''
+    Trace TEXT device for Python method Page.get_texttrace()
+    '''
+
     def __init__(self, out):
         super().__init__()
         self.use_virtual_fill_path()
@@ -18266,9 +18262,6 @@ class JM_new_texttrace_device(mupdf.FzDevice2):
         self.path_type = 0
         self.layer_name = None
     
-    '''
-    Trace TEXT device for Python method Page.get_texttrace()
-    '''
     fill_path = jm_increase_seqno;
     stroke_path = jm_dev_linewidth
     fill_text = jm_lineart_fill_text
@@ -19074,10 +19067,11 @@ def get_pdf_str(s: str) -> str:
 
 
 class ElementPosition(object):
+    """Convert a dictionary with element position information to an object."""
+
     def __init__(self):
         pass
 
-    """Convert a dictionary with element position information to an object."""
 def make_story_elpos():
     return ElementPosition()
 
@@ -20097,6 +20091,10 @@ def vdist(dir, a, b):
 
 
 class TOOLS:
+    '''
+    We use @staticmethod to avoid the need to create an instance of this class.
+    '''
+
     def _derotate_matrix(page):
         if isinstance(page, mupdf.PdfPage):
             return JM_py_from_matrix(JM_derotate_page_matrix(page))
@@ -20659,10 +20657,6 @@ class TOOLS:
             g_skip_quad_corrections = bool(on)
         return g_skip_quad_corrections
 
-
-    '''
-    We use @staticmethod to avoid the need to create an instance of this class.
-    '''
 
     # fixme: also defined at top-level.
     JM_annot_id_stem = 'fitz'
